@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Gamer's Remorse</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation"></script>
+    <style>
+        body { font-family: sans-serif; max-width: 900px; margin: 0 auto; padding: 20px; background: #1a1a1a; color: #fff; }
+        input { padding: 10px; font-size: 16px; width: 300px; }
+        button { padding: 10px 20px; font-size: 16px; cursor: pointer; }
+        #stats { margin: 20px 0; }
+        #chart-container { position: relative; height: 400px; }
+        #labels-container {
+            position: absolute;
+            bottom: -1.5em;
+            left: 0;
+            right: 0;
+            height: 25px;
+        }
+        .x-label {
+            position: absolute;
+            transform: translateX(-50%);
+            color: #666666;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Gamer's Remorse</h1>
+    <div>
+        <input type="text" id="appId" placeholder="Steam App ID or URL">
+        <button onclick="analyze()">Analyze</button>
+    </div>
+    <div id="stats"></div>
+    <div id="chart-container">
+        <canvas id="chart"></canvas>
+        <div id="labels-container"></div>
+    </div>
+    <script src="app.js"></script>
+</body>
+</html>

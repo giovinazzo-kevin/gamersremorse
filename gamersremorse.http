@@ -1,0 +1,6 @@
+@gamersremorse_HostAddress = http://localhost:5221
+
+GET {{gamersremorse_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

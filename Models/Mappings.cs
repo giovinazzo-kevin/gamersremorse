@@ -1,0 +1,20 @@
+﻿using gamersremorse.Entities;
+
+namespace gamersremorse.Models;
+
+public static class Mappings
+{
+    public static SteamAppInfo? MapToDomain(this SteamAppIdsDTO dto) => dto
+        .Where(kv => kv.Value.Success)
+        .Select(kv => new SteamAppInfo { AppId = kv.Key, Name = kv.Value.Data.Name })
+        .SingleOrDefault();
+    public static SteamReview MapToDomain(this SteamReviewDTO dto, AppId appId) => new SteamReview {
+        AppId = appId,
+        AuthorId = dto.Author.SteamId,
+        PostedOn = DateTimeOffset.FromUnixTimeSeconds(dto.CreatedAt),
+        EditedOn = DateTimeOffset.FromUnixTimeSeconds(dto.UpdatedAt),
+        TimePlayedAtReview = TimeSpan.FromMinutes(dto.Author.PlaytimeAtReview),
+        TimePlayedInTotal = TimeSpan.FromMinutes(dto.Author.PlaytimeForever),
+        Verdict = dto.VotedUp ? 1 : -1
+    };
+}
