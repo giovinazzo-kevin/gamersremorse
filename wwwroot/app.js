@@ -1,6 +1,13 @@
 let chart = null;
 let currentSnapshot = null;
 
+document.getElementById('hideAnomalies')?.addEventListener('change', () => {
+    if (currentSnapshot) updateChart(currentSnapshot);
+});
+document.getElementById('hideAnnotations')?.addEventListener('change', () => {
+    if (currentSnapshot) updateChart(currentSnapshot);
+});
+
 async function analyze() {
     const input = document.getElementById('appId').value;
     const appId = extractAppId(input);
@@ -34,9 +41,23 @@ function updateChart(snapshot) {
     currentSnapshot = snapshot;
 
     const labels = snapshot.buckets.map(() => '');
-    const positive = snapshot.buckets.map(b => b.positiveCount);
-    const negative = snapshot.buckets.map(b => -b.negativeCount);
-    
+    const hideAnomalies = document.getElementById('hideAnomalies').checked;
+    const hideAnnotations = document.getElementById('hideAnnotations').checked;
+    const anomalySet = new Set(snapshot.anomalyIndices);
+
+    const positive = snapshot.buckets.map((b, i) =>
+        hideAnomalies && anomalySet.has(i) ? 0 : b.positiveCount
+    );
+    const negative = snapshot.buckets.map((b, i) =>
+        hideAnomalies && anomalySet.has(i) ? 0 : -b.negativeCount
+    );
+
+    const positiveColors = snapshot.buckets.map((_, i) =>
+        anomalySet.has(i) ? 'rgba(59, 130, 246, 0.3)' : 'rgba(59, 130, 246, 0.7)'
+    );
+    const negativeColors = snapshot.buckets.map((_, i) =>
+        anomalySet.has(i) ? 'rgba(249, 115, 22, 0.3)' : 'rgba(249, 115, 22, 0.7)'
+    );
     const annotations = buildMedianAnnotations(snapshot);
     annotations.refundLine = {
         type: 'line',
@@ -59,8 +80,8 @@ function updateChart(snapshot) {
             data: {
                 labels,
                 datasets: [
-                    { label: 'Positive', data: positive, backgroundColor: 'rgba(59, 130, 246, 0.7)' },  // blue
-                    { label: 'Negative', data: negative, backgroundColor: 'rgba(249, 115, 22, 0.7)' }   // orange
+                    { label: 'Positive', data: positive, backgroundColor: positiveColors },
+                    { label: 'Negative', data: negative, backgroundColor: negativeColors }
                 ]
             },
             options: {
@@ -75,7 +96,6 @@ function updateChart(snapshot) {
                     y: { stacked: true }
                 },
                 plugins: {
-                    annotation: { annotations },
                     tooltip: {
                         callbacks: {
                             title: function(context) {
@@ -96,11 +116,13 @@ function updateChart(snapshot) {
     } else {
         chart.data.labels = labels;
         chart.data.datasets[0].data = positive;
+        chart.data.datasets[0].backgroundColor = positiveColors; 
         chart.data.datasets[1].data = negative;
-        chart.options.plugins.annotation.annotations = annotations;
+        chart.data.datasets[1].backgroundColor = negativeColors; 
         chart.update();
     }
-    
+    chart.options.plugins.annotation.annotations = hideAnnotations ? {} : annotations;
+    chart.update();
     addCustomLabels(snapshot);
 }
 
