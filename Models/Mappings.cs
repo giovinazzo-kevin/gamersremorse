@@ -13,8 +13,10 @@ public static class Mappings
         AuthorId = dto.Author.SteamId,
         PostedOn = DateTimeOffset.FromUnixTimeSeconds(dto.CreatedAt),
         EditedOn = DateTimeOffset.FromUnixTimeSeconds(dto.UpdatedAt),
+        LastPlayed = DateTimeOffset.FromUnixTimeSeconds(dto.Author.LastPlayed),
         TimePlayedAtReview = TimeSpan.FromMinutes(dto.Author.PlaytimeAtReview),
         TimePlayedInTotal = TimeSpan.FromMinutes(dto.Author.PlaytimeForever),
+        GamesOwned = dto.Author.NumGamesOwned,
         Verdict = dto.VotedUp ? 1 : -1
     };
 }
