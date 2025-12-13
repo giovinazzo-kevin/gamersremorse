@@ -120,10 +120,10 @@ function updateChart(snapshot) {
             data: {
                 labels,
                 datasets: [
-                    { label: 'Positive', data: positive, backgroundColor: positiveColors, stack: 'pos' },
-                    { label: 'Uncertain (Positive)', data: uncertainPos, backgroundColor: uncertainPosColors, stack: 'pos' },
-                    { label: 'Negative', data: negative, backgroundColor: negativeColors, stack: 'neg' },
-                    { label: 'Uncertain (Negative)', data: uncertainNeg, backgroundColor: uncertainNegColors, stack: 'neg' }
+                    { label: 'Positive', data: positive, backgroundColor: positiveColors, stack: 'stack' },
+                    { label: 'Uncertain (Positive)', data: uncertainPos, backgroundColor: uncertainPosColors, stack: 'stack' },
+                    { label: 'Negative', data: negative, backgroundColor: negativeColors, stack: 'stack' },
+                    { label: 'Uncertain (Negative)', data: uncertainNeg, backgroundColor: uncertainNegColors, stack: 'stack' }
                 ]
             },
             options: {
@@ -200,10 +200,10 @@ function updateVelocityChart(snapshot) {
             data: {
                 labels,
                 datasets: [
-                    { label: 'Positive', data: positive, backgroundColor: 'rgba(59, 130, 246, 0.7)', stack: 'pos' },
-                    { label: 'Uncertain (Positive)', data: uncertainPos, backgroundColor: 'rgba(120, 120, 120, 0.7)', stack: 'pos' },
-                    { label: 'Negative', data: negative, backgroundColor: 'rgba(249, 115, 22, 0.7)', stack: 'neg' },
-                    { label: 'Uncertain (Negative)', data: uncertainNeg, backgroundColor: 'rgba(120, 120, 120, 0.7)', stack: 'neg' }
+                    { label: 'Positive', data: positive, backgroundColor: 'rgba(59, 130, 246, 0.7)', stack: 'stack' },
+                    { label: 'Uncertain (Positive)', data: uncertainPos, backgroundColor: 'rgba(120, 120, 120, 0.7)', stack: 'stack' },
+                    { label: 'Negative', data: negative, backgroundColor: 'rgba(249, 115, 22, 0.7)', stack: 'stack' },
+                    { label: 'Uncertain (Negative)', data: uncertainNeg, backgroundColor: 'rgba(120, 120, 120, 0.7)', stack: 'stack' }
                 ]
             },
             options: {
@@ -326,8 +326,16 @@ function updateStats(snapshot) {
     const posMedian = showTotal ? snapshot.positiveMedianTotal : snapshot.positiveMedianReview;
     const negMedian = showTotal ? snapshot.negativeMedianTotal : snapshot.negativeMedianReview;
 
+    const buckets = showTotal ? snapshot.bucketsByTotalTime : snapshot.bucketsByReviewTime;
+    let totalPos = 0, totalNeg = 0;
+    for (const bucket of buckets) {
+        const filtered = filterBucketByTime(bucket);
+        totalPos += filtered.pos + filtered.uncPos;
+        totalNeg += filtered.neg + filtered.uncNeg;
+    }
+
     document.getElementById('stats').innerHTML = `
-        <strong>Total:</strong> ${snapshot.totalPositive + snapshot.totalNegative} reviews |
+        <strong>Total:</strong> ${totalPos + totalNeg} reviews |
         <strong>Positive median:</strong> ${formatPlaytime(posMedian)} |
         <strong>Negative median:</strong> ${formatPlaytime(negMedian)}
     `;
