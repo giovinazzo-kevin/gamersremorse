@@ -140,13 +140,17 @@
         #game-title:empty {
             display: none;
         }
-        #chart-container {
+        .chart-container {
             position: relative;
             height: 350px;
             background: #fafafa;
             border: 1px solid #ddd;
             padding-bottom: 30px;
         }
+            .chart-container.velocity {
+                height: 250px;
+                padding-bottom: 0;
+            }
         #labels-container {
             position: absolute;
             bottom: 5px;
@@ -224,9 +228,13 @@
                         <label><input type="checkbox" id="hideAnomalies"> Hide anomalies</label>
                         <label><input type="checkbox" id="hideAnnotations"> Hide annotations</label>
                     </div>
-                    <div id="chart-container">
+                    <div class="chart-container">
                         <canvas id="chart"></canvas>
                         <div id="labels-container"></div>
+                    </div>
+                    <h3 class="chart-title">Post-Review Velocity (Excludes Anomalies)</h3>
+                    <div class="chart-container velocity">
+                        <canvas id="velocity-chart"></canvas>
                     </div>
                 </div>
             </div>

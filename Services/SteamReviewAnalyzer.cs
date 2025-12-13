@@ -10,7 +10,7 @@ public record SteamReviewAnalyzer(IOptions<SteamReviewAnalyzer.Configuration> Op
 {
     public class Configuration
     {
-        public int SnapshotEvery { get; set; } = 20;
+        public int SnapshotEvery { get; set; } = 100;
         public int MaxBuckets = 50;
     }
 
@@ -33,7 +33,7 @@ public record SteamReviewAnalyzer(IOptions<SteamReviewAnalyzer.Configuration> Op
             yield return BuildSnapshot(all);
     }
 
-    private int[] DetectAnomalies(HistogramBucket[] buckets, int windowSize = 3, double threshold = 2.0)
+    private static int[] DetectAnomalies(HistogramBucket[] buckets, int windowSize = 3, double threshold = 3)
     {
         var anomalies = new List<int>();
 
@@ -57,10 +57,33 @@ public record SteamReviewAnalyzer(IOptions<SteamReviewAnalyzer.Configuration> Op
             var z = (total - median) / (mad * 1.4826); // 1.4826 scales MAD to stddev-equivalent
             if (z > threshold)
                 anomalies.Add(i);
-            Console.WriteLine($"Bucket {i}: total={total}, median={median:F1}, mad={mad:F1}, z={z:F2}");
         }
 
         return anomalies.ToArray();
+    }
+
+    private static VelocityBucket[] BuildVelocityBuckets(List<SteamReview> reviews)
+    {
+        var bands = new[] { 0.0, 0.25, 0.5, 1, 2, double.MaxValue };
+        var result = new VelocityBucket[bands.Length - 1];
+
+        for (int i = 0; i < bands.Length - 1; i++) {
+            var min = bands[i];
+            var max = bands[i + 1];
+            result[i] = new VelocityBucket(
+                min, max,
+                reviews.Count(r => r.Verdict > 0 && GetVelocity(r) >= min && GetVelocity(r) < max),
+                reviews.Count(r => r.Verdict < 0 && GetVelocity(r) >= min && GetVelocity(r) < max)
+            );
+        }
+        return result;
+    }
+
+    private static double GetVelocity(SteamReview r)
+    {
+        var atReview = r.TimePlayedAtReview.TotalMinutes;
+        if (atReview == 0) return 0;
+        return (r.TimePlayedInTotal.TotalMinutes - atReview) / atReview;
     }
 
     private AnalysisSnapshot BuildSnapshot(List<SteamReview> reviews)
@@ -70,7 +93,7 @@ public record SteamReviewAnalyzer(IOptions<SteamReviewAnalyzer.Configuration> Op
 
         var allPlaytimes = reviews.Select(r => r.TimePlayedAtReview.TotalMinutes).Where(m => m > 0).ToList();
         if (allPlaytimes.Count == 0)
-            return new AnalysisSnapshot([], [], 0, 0, 0, 0);
+            return new AnalysisSnapshot([], [], [], 0, 0, 0, 0);
 
         var maxMinutes = allPlaytimes.Max();
         var minLog = 0.0;
@@ -92,11 +115,13 @@ public record SteamReviewAnalyzer(IOptions<SteamReviewAnalyzer.Configuration> Op
             );
         }).ToArray();
 
+        var velocityBuckets = BuildVelocityBuckets(reviews);
         var anomalies = DetectAnomalies(buckets);
 
         return new AnalysisSnapshot(
             buckets,
             anomalies,
+            velocityBuckets,
             positive.Count > 0 ? positive.OrderBy(x => x).ElementAt(positive.Count / 2) : 0,
             negative.Count > 0 ? negative.OrderBy(x => x).ElementAt(negative.Count / 2) : 0,
             positive.Count,

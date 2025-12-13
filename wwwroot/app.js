@@ -1,5 +1,7 @@
 let chart = null;
+let velocityChart = null;
 let currentSnapshot = null;
+let currentGameInfo = null;
 
 document.getElementById('hideAnomalies')?.addEventListener('change', () => {
     if (currentSnapshot) updateChart(currentSnapshot);
@@ -16,8 +18,8 @@ async function analyze() {
     // fetch game info
     const infoRes = await fetch(`/game/${appId}`);
     if (infoRes.ok) {
-        const info = await infoRes.json();
-        document.getElementById('game-title').textContent = info.name;
+        currentGameInfo = await infoRes.json();
+        document.getElementById('game-title').textContent = currentGameInfo.name;
     }
     
     const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -26,6 +28,7 @@ async function analyze() {
     ws.onmessage = (e) => {
         const snapshot = JSON.parse(e.data);
         updateChart(snapshot);
+        updateVelocityChart(snapshot);
         updateStats(snapshot);
     };
     
@@ -59,20 +62,22 @@ function updateChart(snapshot) {
         anomalySet.has(i) ? 'rgba(249, 115, 22, 0.3)' : 'rgba(249, 115, 22, 0.7)'
     );
     const annotations = buildMedianAnnotations(snapshot);
-    annotations.refundLine = {
-        type: 'line',
-        xMin: findExactPosition(snapshot.buckets, 120),
-        xMax: findExactPosition(snapshot.buckets, 120),
-        borderColor: 'rgba(128, 128, 128, 0.9)',
-        borderWidth: 2,
-        label: {
-            display: true,
-            content: 'Refund Threshold',
-            position: 'middle',
-            backgroundColor: 'rgba(0,0,0,0.7)',
-            color: 'white'
-        }
-    };
+    if (!currentGameInfo?.isFree) {
+        annotations.refundLine = {
+            type: 'line',
+            xMin: findExactPosition(snapshot.buckets, 120),
+            xMax: findExactPosition(snapshot.buckets, 120),
+            borderColor: 'rgba(128, 128, 128, 0.9)',
+            borderWidth: 2,
+            label: {
+                display: true,
+                content: 'Refund Threshold',
+                position: 'middle',
+                backgroundColor: 'rgba(0,0,0,0.7)',
+                color: 'white'
+            }
+        };
+    }
 
     if (!chart) {
         chart = new Chart(document.getElementById('chart'), {
@@ -124,6 +129,37 @@ function updateChart(snapshot) {
     chart.options.plugins.annotation.annotations = hideAnnotations ? {} : annotations;
     chart.update();
     addCustomLabels(snapshot);
+}
+
+function updateVelocityChart(snapshot) {
+    const labels = ['Quit', '<25%', '25-50%', '50-100%', '2x', '3x+'];
+    const positive = snapshot.velocityBuckets.map(b => b.positiveCount);
+    const negative = snapshot.velocityBuckets.map(b => -b.negativeCount);
+
+    if (!velocityChart) {
+        velocityChart = new Chart(document.getElementById('velocity-chart'), {
+            type: 'bar',
+            data: {
+                labels,
+                datasets: [
+                    { label: 'Positive', data: positive, backgroundColor: 'rgba(59, 130, 246, 0.7)' },
+                    { label: 'Negative', data: negative, backgroundColor: 'rgba(249, 115, 22, 0.7)' }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: { stacked: true },
+                    y: { stacked: true }
+                }
+            }
+        });
+    } else {
+        velocityChart.data.datasets[0].data = positive;
+        velocityChart.data.datasets[1].data = negative;
+        velocityChart.update();
+    }
 }
 
 function addCustomLabels(snapshot) {

@@ -40,7 +40,7 @@ public record SteamReviewRepository(IOptions<SteamReviewRepository.Configuration
         using var db = await DbContextFactory.CreateDbContextAsync(cancellationToken);
         var info = await db.SteamAppInfos.SingleOrDefaultAsync(x => x.AppId == appId, cancellationToken)
             ?? await Scraper.FetchAppInfo(appId, cancellationToken)
-            ?? new SteamAppInfo() { AppId = appId, Name = "Unknown Game" };
+            ?? new SteamAppInfo() { AppId = appId, Name = "Unknown Game", IsFree = false };
         db.Upsert(info);
         await db.SaveChangesAsync(cancellationToken);
         return info;

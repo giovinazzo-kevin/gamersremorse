@@ -12,7 +12,7 @@ public record SteamScraper(IOptions<SteamScraper.Configuration> Options, IHttpCl
 
     public class Configuration
     {
-        public string Filter { get; set; } = "recent";
+        public string Filter { get; set; } = "all";
         public string PurchaseType { get; set; } = "all";
         public string ReviewType { get; set; } = "all";
         public string Language { get; set; } = "all";
