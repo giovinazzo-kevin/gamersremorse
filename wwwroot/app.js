@@ -9,6 +9,9 @@ document.getElementById('hideAnomalies')?.addEventListener('change', () => {
 document.getElementById('hideAnnotations')?.addEventListener('change', () => {
     if (currentSnapshot) updateChart(currentSnapshot);
 });
+document.getElementById('showTotalTime')?.addEventListener('change', () => {
+    if (currentSnapshot) updateChart(currentSnapshot);
+});
 
 async function analyze() {
     const input = document.getElementById('appId').value;
@@ -43,30 +46,35 @@ function extractAppId(input) {
 function updateChart(snapshot) {
     currentSnapshot = snapshot;
 
-    const labels = snapshot.buckets.map(() => '');
+    const showTotal = document.getElementById('showTotalTime').checked;
+    const buckets = showTotal ? snapshot.bucketsByTotalTime : snapshot.bucketsByReviewTime;
+    const posMedian = showTotal ? snapshot.positiveMedianTotal : snapshot.positiveMedianReview;
+    const negMedian = showTotal ? snapshot.negativeMedianTotal : snapshot.negativeMedianReview;
+
+    const labels = buckets.map(() => '');
     const hideAnomalies = document.getElementById('hideAnomalies').checked;
     const hideAnnotations = document.getElementById('hideAnnotations').checked;
     const anomalySet = new Set(snapshot.anomalyIndices);
 
-    const positive = snapshot.buckets.map((b, i) =>
+    const positive = buckets.map((b, i) =>
         hideAnomalies && anomalySet.has(i) ? 0 : b.positiveCount
     );
-    const negative = snapshot.buckets.map((b, i) =>
+    const negative = buckets.map((b, i) =>
         hideAnomalies && anomalySet.has(i) ? 0 : -b.negativeCount
     );
 
-    const positiveColors = snapshot.buckets.map((_, i) =>
+    const positiveColors = buckets.map((_, i) =>
         anomalySet.has(i) ? 'rgba(59, 130, 246, 0.3)' : 'rgba(59, 130, 246, 0.7)'
     );
-    const negativeColors = snapshot.buckets.map((_, i) =>
+    const negativeColors = buckets.map((_, i) =>
         anomalySet.has(i) ? 'rgba(249, 115, 22, 0.3)' : 'rgba(249, 115, 22, 0.7)'
     );
-    const annotations = buildMedianAnnotations(snapshot);
+    const annotations = buildMedianAnnotations(posMedian, negMedian, buckets);
     if (!currentGameInfo?.isFree) {
         annotations.refundLine = {
             type: 'line',
-            xMin: findExactPosition(snapshot.buckets, 120),
-            xMax: findExactPosition(snapshot.buckets, 120),
+            xMin: findExactPosition(buckets, 120),
+            xMax: findExactPosition(buckets, 120),
             borderColor: 'rgba(128, 128, 128, 0.9)',
             borderWidth: 2,
             label: {
@@ -103,9 +111,11 @@ function updateChart(snapshot) {
                 plugins: {
                     tooltip: {
                         callbacks: {
-                            title: function(context) {
+                            title: function (context) {
                                 const idx = context[0].dataIndex;
-                                const bucket = currentSnapshot.buckets[idx];
+                                const showTotal = document.getElementById('showTotalTime').checked;
+                                const buckets = showTotal ? currentSnapshot.bucketsByTotalTime : currentSnapshot.bucketsByReviewTime;
+                                const bucket = buckets[idx];
                                 return `${formatPlaytime(bucket.minPlaytime)} - ${formatPlaytime(bucket.maxPlaytime)}`;
                             },
                             label: function(context) {
@@ -126,9 +136,9 @@ function updateChart(snapshot) {
         chart.data.datasets[1].backgroundColor = negativeColors; 
         chart.update();
     }
+    addCustomLabels(snapshot, buckets);
     chart.options.plugins.annotation.annotations = hideAnnotations ? {} : annotations;
     chart.update();
-    addCustomLabels(snapshot);
 }
 
 function updateVelocityChart(snapshot) {
@@ -162,11 +172,10 @@ function updateVelocityChart(snapshot) {
     }
 }
 
-function addCustomLabels(snapshot) {
+function addCustomLabels(snapshot, buckets) {
     const container = document.getElementById('labels-container');
     container.innerHTML = '';
     
-    const buckets = snapshot.buckets;
     const maxMins = buckets[buckets.length - 1].maxPlaytime;
     const niceValues = getNiceLabels(maxMins);
     const chartArea = chart.chartArea;
@@ -185,18 +194,18 @@ function addCustomLabels(snapshot) {
     }
 }
 
-function buildMedianAnnotations(snapshot) {
+function buildMedianAnnotations(posMedian, negMedian, buckets) {
     return {
         posMedian: {
             type: 'line',
-            xMin: findExactPosition(snapshot.buckets, snapshot.positiveMedian),
-            xMax: findExactPosition(snapshot.buckets, snapshot.positiveMedian),
+            xMin: findExactPosition(buckets, posMedian),
+            xMax: findExactPosition(buckets, posMedian),
             borderColor: 'rgba(59, 130, 246, 0.9)',  // blue
             borderWidth: 2,
             borderDash: [6, 4],
             label: {
                 display: true,
-                content: `Positive: ${formatPlaytime(snapshot.positiveMedian)}`,
+                content: `Positive: ${formatPlaytime(posMedian)}`,
                 position: 'end',
                 yAdjust: 30,
                 backgroundColor: 'rgba(30, 64, 175, 0.7)',  // darker blue
@@ -205,14 +214,14 @@ function buildMedianAnnotations(snapshot) {
         },
         negMedian: {
             type: 'line',
-            xMin: findExactPosition(snapshot.buckets, snapshot.negativeMedian),
-            xMax: findExactPosition(snapshot.buckets, snapshot.negativeMedian),
+            xMin: findExactPosition(buckets, negMedian),
+            xMax: findExactPosition(buckets, negMedian),
             borderColor: 'rgba(249, 115, 22, 0.9)',  // orange
             borderWidth: 2,
             borderDash: [6, 4],
             label: {
                 display: true,
-                content: `Negative: ${formatPlaytime(snapshot.negativeMedian)}`,
+                content: `Negative: ${formatPlaytime(negMedian)}`,
                 position: 'start',
                 yAdjust: -30,
                 backgroundColor: 'rgba(154, 52, 18, 0.7)',  // darker orange
@@ -266,9 +275,13 @@ function formatPlaytime(minutes) {
 }
 
 function updateStats(snapshot) {
+    const showTotal = document.getElementById('showTotalTime').checked;
+    const posMedian = showTotal ? snapshot.positiveMedianTotal : snapshot.positiveMedianReview;
+    const negMedian = showTotal ? snapshot.negativeMedianTotal : snapshot.negativeMedianReview;
+
     document.getElementById('stats').innerHTML = `
         <strong>Total:</strong> ${snapshot.totalPositive + snapshot.totalNegative} reviews |
-        <strong>Positive median:</strong> ${formatPlaytime(snapshot.positiveMedian)} |
-        <strong>Negative median:</strong> ${formatPlaytime(snapshot.negativeMedian)}
+        <strong>Positive median:</strong> ${formatPlaytime(posMedian)} |
+        <strong>Negative median:</strong> ${formatPlaytime(negMedian)}
     `;
 }

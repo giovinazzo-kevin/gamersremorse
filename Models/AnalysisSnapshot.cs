@@ -2,11 +2,14 @@
 namespace gamersremorse.Models;
 
 public record struct AnalysisSnapshot(
-    HistogramBucket[] Buckets,
-    int[] AnomalyIndices,
+    HistogramBucket[] BucketsByReviewTime,
+    HistogramBucket[] BucketsByTotalTime,
     VelocityBucket[] VelocityBuckets,
-    double PositiveMedian,
-    double NegativeMedian,
+    int[] AnomalyIndices,
+    double PositiveMedianReview,
+    double NegativeMedianReview,
+    double PositiveMedianTotal,
+    double NegativeMedianTotal,
     int TotalPositive,
     int TotalNegative
 );

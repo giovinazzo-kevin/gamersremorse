@@ -29,7 +29,7 @@ app.Map("/ws/game/{appId}", async (HttpContext ctx, AppId appId, SteamReviewAnal
 
     var count = 0;
     await foreach (var snapshot in analyzer.VerdictByPlaytime(reviews, ctx.RequestAborted)) {
-        Console.WriteLine($"Sending snapshot with {snapshot.Buckets.Length} buckets");
+        Console.WriteLine($"Sending snapshot with {snapshot.BucketsByTotalTime.Length} buckets");
         var json = JsonSerializer.SerializeToUtf8Bytes(snapshot, options);
         await ws.SendAsync(json, WebSocketMessageType.Text, true, ctx.RequestAborted);
         count++;

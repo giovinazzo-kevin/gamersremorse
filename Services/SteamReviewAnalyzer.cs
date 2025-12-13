@@ -79,6 +79,16 @@ public record SteamReviewAnalyzer(IOptions<SteamReviewAnalyzer.Configuration> Op
         return result;
     }
 
+    private bool IsInAnomalousBucket(SteamReview review, HistogramBucket[] buckets, int[] anomalies)
+    {
+        var minutes = review.TimePlayedAtReview.TotalMinutes;
+        for (int i = 0; i < buckets.Length; i++) {
+            if (minutes >= buckets[i].MinPlaytime && minutes < buckets[i].MaxPlaytime)
+                return anomalies.Contains(i);
+        }
+        return false;
+    }
+
     private static double GetVelocity(SteamReview r)
     {
         var atReview = r.TimePlayedAtReview.TotalMinutes;
@@ -88,12 +98,43 @@ public record SteamReviewAnalyzer(IOptions<SteamReviewAnalyzer.Configuration> Op
 
     private AnalysisSnapshot BuildSnapshot(List<SteamReview> reviews)
     {
-        var positive = reviews.Where(r => r.Verdict > 0).Select(r => r.TimePlayedAtReview.TotalMinutes).ToList();
-        var negative = reviews.Where(r => r.Verdict < 0).Select(r => r.TimePlayedAtReview.TotalMinutes).ToList();
+        var bucketsByReview = BuildHistogram(reviews, r => r.TimePlayedAtReview.TotalMinutes);
+        var bucketsByTotal = BuildHistogram(reviews, r => r.TimePlayedInTotal.TotalMinutes);
 
-        var allPlaytimes = reviews.Select(r => r.TimePlayedAtReview.TotalMinutes).Where(m => m > 0).ToList();
+        var anomalies = DetectAnomalies(bucketsByReview);
+        var cleanReviews = reviews.Where(r => !IsInAnomalousBucket(r, bucketsByReview, anomalies)).ToList();
+        var velocityBuckets = BuildVelocityBuckets(cleanReviews);
+
+        var positiveReview = reviews.Where(r => r.Verdict > 0).Select(r => r.TimePlayedAtReview.TotalMinutes).ToList();
+        var negativeReview = reviews.Where(r => r.Verdict < 0).Select(r => r.TimePlayedAtReview.TotalMinutes).ToList();
+        var positiveTotal = reviews.Where(r => r.Verdict > 0).Select(r => r.TimePlayedInTotal.TotalMinutes).ToList();
+        var negativeTotal = reviews.Where(r => r.Verdict < 0).Select(r => r.TimePlayedInTotal.TotalMinutes).ToList();
+
+        return new AnalysisSnapshot(
+            bucketsByReview,
+            bucketsByTotal,
+            velocityBuckets,
+            anomalies,
+            Median(positiveReview),
+            Median(negativeReview),
+            Median(positiveTotal),
+            Median(negativeTotal),
+            positiveReview.Count,
+            negativeReview.Count
+        );
+    }
+
+    private double Median(List<double> values) =>
+        values.Count > 0 ? values.OrderBy(x => x).ElementAt(values.Count / 2) : 0;
+
+    private HistogramBucket[] BuildHistogram(List<SteamReview> reviews, Func<SteamReview, double> getMinutes)
+    {
+        var positive = reviews.Where(r => r.Verdict > 0).Select(getMinutes).ToList();
+        var negative = reviews.Where(r => r.Verdict < 0).Select(getMinutes).ToList();
+        var allPlaytimes = reviews.Select(getMinutes).Where(m => m > 0).ToList();
+
         if (allPlaytimes.Count == 0)
-            return new AnalysisSnapshot([], [], [], 0, 0, 0, 0);
+            return [];
 
         var maxMinutes = allPlaytimes.Max();
         var minLog = 0.0;
@@ -103,7 +144,7 @@ public record SteamReviewAnalyzer(IOptions<SteamReviewAnalyzer.Configuration> Op
             .Select(i => Math.Pow(10, minLog + i * maxLog / Options.Value.MaxBuckets))
             .ToArray();
 
-        var buckets = Enumerable.Range(0, boundaries.Length - 1).Select(i =>
+        return Enumerable.Range(0, boundaries.Length - 1).Select(i =>
         {
             var minPt = boundaries[i];
             var maxPt = boundaries[i + 1];
@@ -114,18 +155,5 @@ public record SteamReviewAnalyzer(IOptions<SteamReviewAnalyzer.Configuration> Op
                 negative.Count(p => p >= minPt && p < maxPt)
             );
         }).ToArray();
-
-        var velocityBuckets = BuildVelocityBuckets(reviews);
-        var anomalies = DetectAnomalies(buckets);
-
-        return new AnalysisSnapshot(
-            buckets,
-            anomalies,
-            velocityBuckets,
-            positive.Count > 0 ? positive.OrderBy(x => x).ElementAt(positive.Count / 2) : 0,
-            negative.Count > 0 ? negative.OrderBy(x => x).ElementAt(negative.Count / 2) : 0,
-            positive.Count,
-            negative.Count
-        );
     }
 }
