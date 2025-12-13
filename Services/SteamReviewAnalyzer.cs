@@ -10,7 +10,7 @@ public record SteamReviewAnalyzer(IOptions<SteamReviewAnalyzer.Configuration> Op
 {
     public class Configuration
     {
-        public int SnapshotEvery { get; set; } = 100;
+        public int SnapshotEvery { get; set; } = 20;
         public int MaxBuckets = 50;
     }
 

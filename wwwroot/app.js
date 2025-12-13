@@ -1,10 +1,17 @@
 let chart = null;
 let currentSnapshot = null;
 
-function analyze() {
+async function analyze() {
     const input = document.getElementById('appId').value;
     const appId = extractAppId(input);
     if (!appId) return alert('Invalid App ID');
+    
+    // fetch game info
+    const infoRes = await fetch(`/game/${appId}`);
+    if (infoRes.ok) {
+        const info = await infoRes.json();
+        document.getElementById('game-title').textContent = info.name;
+    }
     
     const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
     const ws = new WebSocket(`${protocol}//${location.host}/ws/game/${appId}`);
@@ -35,12 +42,12 @@ function updateChart(snapshot) {
         type: 'line',
         xMin: findExactPosition(snapshot.buckets, 120),
         xMax: findExactPosition(snapshot.buckets, 120),
-        borderColor: 'rgba(255, 255, 255, 0.9)',
+        borderColor: 'rgba(128, 128, 128, 0.9)',
         borderWidth: 2,
         label: {
             display: true,
-            content: '2h refund',
-            position: 'end',
+            content: 'Refund Threshold',
+            position: 'middle',
             backgroundColor: 'rgba(0,0,0,0.7)',
             color: 'white'
         }
@@ -109,7 +116,7 @@ function addCustomLabels(snapshot) {
     
     for (const nice of niceValues) {
         const exactPos = findExactPosition(buckets, nice);
-        const pct = (exactPos + 0.5) / buckets.length;  // +0.5 for bar center
+        const pct = (exactPos + 0.5) / buckets.length;
         const x = chartArea.left + (pct * totalWidth);
         
         const label = document.createElement('div');
@@ -131,7 +138,7 @@ function buildMedianAnnotations(snapshot) {
             borderDash: [6, 4],
             label: {
                 display: true,
-                content: `Pos: ${formatPlaytime(snapshot.positiveMedian)}`,
+                content: `Positive: ${formatPlaytime(snapshot.positiveMedian)}`,
                 position: 'end',
                 yAdjust: 30,
                 backgroundColor: 'rgba(30, 64, 175, 0.7)',  // darker blue
@@ -147,9 +154,9 @@ function buildMedianAnnotations(snapshot) {
             borderDash: [6, 4],
             label: {
                 display: true,
-                content: `Neg: ${formatPlaytime(snapshot.negativeMedian)}`,
-                position: 'end',
-                yAdjust: 60,
+                content: `Negative: ${formatPlaytime(snapshot.negativeMedian)}`,
+                position: 'start',
+                yAdjust: -30,
                 backgroundColor: 'rgba(154, 52, 18, 0.7)',  // darker orange
                 color: 'white'
             }

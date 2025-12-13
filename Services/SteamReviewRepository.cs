@@ -35,15 +35,23 @@ public record SteamReviewRepository(IOptions<SteamReviewRepository.Configuration
         };
     }
 
+    public async Task<SteamAppInfo> GetInfo(AppId appId, CancellationToken cancellationToken = default)
+    {
+        using var db = await DbContextFactory.CreateDbContextAsync(cancellationToken);
+        var info = await db.SteamAppInfos.SingleOrDefaultAsync(x => x.AppId == appId, cancellationToken)
+            ?? await Scraper.FetchAppInfo(appId, cancellationToken)
+            ?? new SteamAppInfo() { AppId = appId, Name = "Unknown Game" };
+        db.Upsert(info);
+        await db.SaveChangesAsync(cancellationToken);
+        return info;
+    }
+
     public async IAsyncEnumerable<SteamReview> CacheAll(AppId appId, [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         var count = 0;
         using var db = await DbContextFactory.CreateDbContextAsync(cancellationToken);
         var meta = await db.Metadatas.SingleOrDefaultAsync(x => x.AppId == appId, cancellationToken) 
             ?? new Metadata() { AppId = appId };
-        var info = await db.SteamAppInfos.SingleOrDefaultAsync(x => x.AppId == appId, cancellationToken) 
-            ?? await Scraper.FetchAppInfo(appId, cancellationToken) 
-            ?? new SteamAppInfo() { AppId = appId, Name = "Unknown Game" };
         var batch = new List<SteamReview>();
         await foreach (var next in Scraper.FetchReviews(appId, cancellationToken)) {
             batch.Add(next);
@@ -63,7 +71,6 @@ public record SteamReviewRepository(IOptions<SteamReviewRepository.Configuration
             db.UpsertRange(batch);
             db.Upsert(meta with { UpdatedOn = EventDate.UtcNow });
         }
-        db.Upsert(info);
         await db.SaveChangesAsync(cancellationToken);
     }
 

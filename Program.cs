@@ -15,6 +15,9 @@ builder.Services.AddTransient<SteamReviewAnalyzer>();
 var app = builder.Build();
 app.UseWebSockets();
 app.UseHttpsRedirection();
+app.MapGet("/game/{appId}", async (HttpContext ctx, AppId appId, SteamReviewRepository repo) => {
+    return await repo.GetInfo(appId);
+});
 app.Map("/ws/game/{appId}", async (HttpContext ctx, AppId appId, SteamReviewAnalyzer analyzer, SteamReviewRepository repo) => {
     if (!ctx.WebSockets.IsWebSocketRequest)
         return Results.BadRequest();
