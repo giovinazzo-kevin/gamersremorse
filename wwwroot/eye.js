@@ -136,6 +136,9 @@ const state = {
     exprProgress: 1,
     // Cached lerped values for smooth transitions
     lerpedExpr: null,
+    // Dilation state (0-1, 0=normal, 1=dilated)
+    dilation: 0,
+    targetDilation: 0,
 };
 
 const savedThreshold = localStorage.getItem('eyeThreshold');
@@ -151,6 +154,10 @@ function setExpression(name) {
     }
 }
 
+function setDilation(value) {
+    state.targetDilation = Math.max(0, Math.min(1, value));
+}
+
 function lerp(a, b, t) {
     return a + (b - a) * t;
 }
@@ -163,6 +170,9 @@ function updateExpression(dt) {
     if (state.exprProgress < 1) {
         state.exprProgress = Math.min(1, state.exprProgress + config.expressionSpeed * dt);
     }
+    // Smooth dilation
+    const dilationSpeed = 2;
+    state.dilation += (state.targetDilation - state.dilation) * dilationSpeed * dt;
 }
 
 function clamp(val, min, max) {
@@ -309,7 +319,9 @@ function draw() {
     const t = easeInOut(state.exprProgress);
 
     // Lerp scalar values
-    const irisRadius = lerp(currentExpr.irisRadius, targetExpr.irisRadius, t);
+    const baseIrisRadius = lerp(currentExpr.irisRadius, targetExpr.irisRadius, t);
+    const dilationBonus = state.dilation * 0.08; // up to 0.08 extra radius when dilated
+    const irisRadius = baseIrisRadius + dilationBonus;
     const irisYOffset = lerp(currentExpr.irisYOffset, targetExpr.irisYOffset, t);
     const lashMultiplier = lerp(currentExpr.lashMultiplier, targetExpr.lashMultiplier, t);
     const topMaxHeight = lerp(currentExpr.top.maxHeight, targetExpr.top.maxHeight, t);
@@ -504,4 +516,5 @@ scheduleNextBlink();
 
 // Expose for other modules
 window.setEyeExpression = setExpression;
+window.setEyeDilation = setDilation;
 window.setEyeLoading = setLoading;

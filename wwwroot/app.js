@@ -13,6 +13,13 @@ let currentMetrics = null;
 document.getElementById('hideAnomalies')?.addEventListener('change', () => {
     if (currentSnapshot) updateChart(currentSnapshot);
 });
+document.getElementById('hideSpikes')?.addEventListener('change', () => {
+    if (currentSnapshot) {
+        updateChart(currentSnapshot);
+        updateVelocityChart(currentSnapshot);
+        updateStats(currentSnapshot);
+    }
+});
 document.getElementById('hideAnnotations')?.addEventListener('change', () => {
     if (currentSnapshot) updateChart(currentSnapshot);
 });
@@ -672,7 +679,10 @@ function getSelectedMonths() {
 
 function filterBucketByTime(bucket) {
     const range = getSelectedMonths();
-    if (!range) return {
+    const hideSpikes = document.getElementById('hideSpikes')?.checked;
+    const excludeMonths = hideSpikes && currentMetrics?.excludedMonths ? new Set(currentMetrics.excludedMonths) : new Set();
+    
+    if (!range && excludeMonths.size === 0) return {
         pos: bucket.positiveCount,
         neg: bucket.negativeCount,
         uncPos: bucket.uncertainPositiveCount,
@@ -681,16 +691,16 @@ function filterBucketByTime(bucket) {
 
     let pos = 0, neg = 0, uncPos = 0, uncNeg = 0;
     for (const [month, count] of Object.entries(bucket.positiveByMonth)) {
-        if (month >= range.from && month <= range.to) pos += count;
+        if ((!range || (month >= range.from && month <= range.to)) && !excludeMonths.has(month)) pos += count;
     }
     for (const [month, count] of Object.entries(bucket.negativeByMonth)) {
-        if (month >= range.from && month <= range.to) neg += count;
+        if ((!range || (month >= range.from && month <= range.to)) && !excludeMonths.has(month)) neg += count;
     }
     for (const [month, count] of Object.entries(bucket.uncertainPositiveByMonth)) {
-        if (month >= range.from && month <= range.to) uncPos += count;
+        if ((!range || (month >= range.from && month <= range.to)) && !excludeMonths.has(month)) uncPos += count;
     }
     for (const [month, count] of Object.entries(bucket.uncertainNegativeByMonth)) {
-        if (month >= range.from && month <= range.to) uncNeg += count;
+        if ((!range || (month >= range.from && month <= range.to)) && !excludeMonths.has(month)) uncNeg += count;
     }
     return { pos, neg, uncPos, uncNeg };
 }
@@ -726,6 +736,8 @@ function updateMetrics(snapshot) {
                 Confidence: ${Math.round(currentMetrics.confidence * 100)}%
                 <br>
                 <small style="color:#aaa">Ratios: median=${currentMetrics.medianRatio?.toFixed(2)}x, stockholm=${currentMetrics.stockholmIndex?.toFixed(2)}x | Stddev: drift=${currentMetrics.temporalDriftZ?.toFixed(1)}σ, endAct=${currentMetrics.windowEndActivityZ?.toFixed(1)}σ</small>
+                <br>
+                <small style="color:#aaa">Spikes: negZ=${currentMetrics.negativeBombZ?.toFixed(1)}σ negCount=${currentMetrics.negativeBombCount} negPct=${Math.round((currentMetrics.negativeBombCount / currentMetrics.total) * 100)}% | posZ=${currentMetrics.positiveBombZ?.toFixed(1)}σ posCount=${currentMetrics.positiveBombCount} posPct=${Math.round((currentMetrics.positiveBombCount / currentMetrics.total) * 100)}%</small>
             </div>
         `;
     }
@@ -735,6 +747,11 @@ function updateEyeFromMetrics(metrics) {
     if (!window.setEyeExpression) return;
     
     const tags = metrics.verdict.tags.map(t => t.id);
+    
+    // Pupil dilation for addictive games
+    if (window.setEyeDilation) {
+        window.setEyeDilation(tags.includes('ADDICTIVE') ? 1 : 0);
+    }
     
     // Priority-based expression
     if (tags.includes('PREDATORY') || tags.includes('REFUND_TRAP')) {
@@ -752,7 +769,10 @@ function updateEyeFromMetrics(metrics) {
 
 function filterVelocityBucketByTime(bucket) {
     const range = getSelectedMonths();
-    if (!range) return {
+    const hideSpikes = document.getElementById('hideSpikes')?.checked;
+    const excludeMonths = hideSpikes && currentMetrics?.excludedMonths ? new Set(currentMetrics.excludedMonths) : new Set();
+    
+    if (!range && excludeMonths.size === 0) return {
         pos: bucket.positiveCount,
         neg: bucket.negativeCount,
         uncPos: bucket.uncertainPositiveCount,
@@ -761,16 +781,16 @@ function filterVelocityBucketByTime(bucket) {
 
     let pos = 0, neg = 0, uncPos = 0, uncNeg = 0;
     for (const [month, count] of Object.entries(bucket.positiveByMonth)) {
-        if (month >= range.from && month <= range.to) pos += count;
+        if ((!range || (month >= range.from && month <= range.to)) && !excludeMonths.has(month)) pos += count;
     }
     for (const [month, count] of Object.entries(bucket.negativeByMonth)) {
-        if (month >= range.from && month <= range.to) neg += count;
+        if ((!range || (month >= range.from && month <= range.to)) && !excludeMonths.has(month)) neg += count;
     }
     for (const [month, count] of Object.entries(bucket.uncertainPositiveByMonth)) {
-        if (month >= range.from && month <= range.to) uncPos += count;
+        if ((!range || (month >= range.from && month <= range.to)) && !excludeMonths.has(month)) uncPos += count;
     }
     for (const [month, count] of Object.entries(bucket.uncertainNegativeByMonth)) {
-        if (month >= range.from && month <= range.to) uncNeg += count;
+        if ((!range || (month >= range.from && month <= range.to)) && !excludeMonths.has(month)) uncNeg += count;
     }
     return { pos, neg, uncPos, uncNeg };
 }

@@ -120,16 +120,87 @@ const Metrics = {
         },
         {
             id: 'REDEMPTION',
-            // Sentiment got better: second half 1+ stddev less negative than first half  
-            condition: (m) => m.temporalDriftZ < -1,
+            // Sentiment got better: second half 1+ stddev less negative than first half (no revival)
+            condition: (m) => m.temporalDriftZ < -1 && !m.hasRevival,
             reason: (m) => `Sentiment improved: ${Math.round(m.firstHalfNegRatio * 100)}% → ${Math.round(m.secondHalfNegRatio * 100)}% negative`,
             severity: -0.1,
             color: '#228B22'
         },
+        
+        // ============================================================
+        // REVIVAL TAGS (requires death gap + comeback)
+        // 2x2x2 matrix: startedGood × endedGood × stillAlive
+        // ============================================================
+        
+        {
+            id: 'PHOENIX',
+            // Good → died → came back good → still alive
+            condition: (m) => m.hasRevival && m.firstWaveNegRatio < 0.5 && m.lastWaveNegRatio < 0.5 && m.isStillAlive,
+            reason: (m) => `Rose from ashes: ${Math.round((1 - m.firstWaveNegRatio) * 100)}% → ${Math.round((1 - m.lastWaveNegRatio) * 100)}% positive, still flying`,
+            severity: -0.1,
+            color: '#FF4500'
+        },
+        {
+            id: 'PRESS_F',
+            // Good → died → came back good → died again
+            condition: (m) => m.hasRevival && m.firstWaveNegRatio < 0.5 && m.lastWaveNegRatio < 0.5 && !m.isStillAlive,
+            reason: (m) => `Had a good run: ${Math.round((1 - m.firstWaveNegRatio) * 100)}% → ${Math.round((1 - m.lastWaveNegRatio) * 100)}% positive, died with honor`,
+            severity: 0,
+            color: '#666'
+        },
+        {
+            id: 'ZOMBIE',
+            // Good → died → came back bad → still shambling
+            condition: (m) => m.hasRevival && m.firstWaveNegRatio < 0.5 && m.lastWaveNegRatio >= 0.5 && m.isStillAlive,
+            reason: (m) => `Came back wrong: ${Math.round((1 - m.firstWaveNegRatio) * 100)}% → ${Math.round((1 - m.lastWaveNegRatio) * 100)}% positive, still shambling`,
+            severity: 0.2,
+            color: '#2d5a27'
+        },
+        {
+            id: 'RUGPULL',
+            // Good → died → came back bad → died again
+            condition: (m) => m.hasRevival && m.firstWaveNegRatio < 0.5 && m.lastWaveNegRatio >= 0.5 && !m.isStillAlive,
+            reason: (m) => `Came back wrong: ${Math.round((1 - m.firstWaveNegRatio) * 100)}% → ${Math.round((1 - m.lastWaveNegRatio) * 100)}% positive, died again`,
+            severity: 0.2,
+            color: '#8B0000'
+        },
+        {
+            id: '180',
+            // Bad → died → came back good → still alive
+            condition: (m) => m.hasRevival && m.firstWaveNegRatio >= 0.5 && m.lastWaveNegRatio < 0.5 && m.isStillAlive,
+            reason: (m) => `Turned it around: ${Math.round(m.firstWaveNegRatio * 100)}% → ${Math.round(m.lastWaveNegRatio * 100)}% negative, redemption arc`,
+            severity: -0.15,
+            color: '#228B22'
+        },
+        {
+            id: 'HOPELESS',
+            // Bad → died → came back good → died anyway
+            condition: (m) => m.hasRevival && m.firstWaveNegRatio >= 0.5 && m.lastWaveNegRatio < 0.5 && !m.isStillAlive,
+            reason: (m) => `Fixed it too late: ${Math.round(m.firstWaveNegRatio * 100)}% → ${Math.round(m.lastWaveNegRatio * 100)}% negative, nobody came back`,
+            severity: 0.05,
+            color: '#708090'
+        },
+        {
+            id: 'PLAGUE',
+            // Bad → died → came back bad → still alive
+            condition: (m) => m.hasRevival && m.firstWaveNegRatio >= 0.5 && m.lastWaveNegRatio >= 0.5 && m.isStillAlive,
+            reason: (m) => `Won't die, won't improve: ${Math.round(m.firstWaveNegRatio * 100)}% → ${Math.round(m.lastWaveNegRatio * 100)}% negative`,
+            severity: 0.15,
+            color: '#556B2F'
+        },
+        {
+            id: 'CURSED',
+            // Bad → died → came back bad → died again
+            condition: (m) => m.hasRevival && m.firstWaveNegRatio >= 0.5 && m.lastWaveNegRatio >= 0.5 && !m.isStillAlive,
+            reason: (m) => `Born bad, died bad, twice: ${Math.round(m.firstWaveNegRatio * 100)}% → ${Math.round(m.lastWaveNegRatio * 100)}% negative`,
+            severity: 0.1,
+            color: '#1a0d00'
+        },
         {
             id: 'ADDICTIVE',
-            // Fat upper tail: 95th percentile is 5x+ the median (people get HOOKED)
-            condition: (m) => m.p95Playtime > m.posMedianReview * 5 && m.positiveRatio > 0.5,
+            // Fat upper tail: 95th percentile is 5x+ the median AND 500h+ absolute
+            // This is a red flag - people are playing way more than the content justifies
+            condition: (m) => m.p95Playtime > m.posMedianReview * 5 && m.p95Playtime > 500 * 60 && m.positiveRatio > 0.5,
             reason: (m) => `Top players at ${Math.round(m.p95Playtime / 60)}h vs ${Math.round(m.posMedianReview / 60)}h median (${Math.round(m.p95Playtime / m.posMedianReview)}x)`,
             severity: 0,
             color: '#e67e22'
@@ -156,16 +227,18 @@ const Metrics = {
         {
             id: 'REVIEW_BOMBED',
             // Massive negative spike AND it's bigger than any positive spike
-            condition: (m) => m.negativeBombZ > 3 && m.negativeBombZ >= m.positiveBombZ,
-            reason: (m) => `Negative surge in ${m.negativeBombMonth}: ${m.negativeBombMultiple.toFixed(1)}x normal volume`,
+            // Z-score already weighted by launch decay (early spikes discounted)
+            condition: (m) => m.negativeBombZ > 3 && m.negativeBombZ >= m.positiveBombZ && (m.negativeBombCount / m.total) >= 0.10 && m.negativeBombCount >= 100,
+            reason: (m) => `Negative surge in ${m.negativeBombMonth}: ${Math.round(m.negativeBombCount / m.total * 100)}% of reviews (${m.negativeBombMultiple.toFixed(1)}x normal)`,
             severity: 0,
             color: '#ff6600'
         },
         {
             id: 'REVIEW_BRIGADED',
             // Massive positive spike AND it's bigger than any negative spike
-            condition: (m) => m.positiveBombZ > 3 && m.positiveBombZ > m.negativeBombZ,
-            reason: (m) => `Positive surge in ${m.positiveBombMonth}: ${m.positiveBombMultiple.toFixed(1)}x normal volume`,
+            // Z-score already weighted by launch decay (early spikes discounted)
+            condition: (m) => m.positiveBombZ > 3 && m.positiveBombZ > m.negativeBombZ && (m.positiveBombCount / m.total) >= 0.10 && m.positiveBombCount >= 100,
+            reason: (m) => `Positive surge in ${m.positiveBombMonth}: ${Math.round(m.positiveBombCount / m.total * 100)}% of reviews (${m.positiveBombMultiple.toFixed(1)}x normal)`,
             severity: 0,
             color: '#00cc66'
         }
@@ -180,17 +253,40 @@ const Metrics = {
         const filter = options.timelineFilter || null;
         const isFree = options.isFree || false;
 
-        // Review counts
-        const counts = this.computeCounts(buckets, filter);
+        // Detect spikes FIRST (on unfiltered data within timeline)
+        const spikeData = this.detectSpikes(buckets, filter);
+        
+        // Build list of months to exclude (significant spikes)
+        const excludeMonths = [];
+        if (spikeData.negativeBombZ > 3 && spikeData.negativeBombCount > 0) {
+            const total = this.computeCounts(buckets, filter).total;
+            if (spikeData.negativeBombCount / total >= 0.10) {
+                excludeMonths.push(spikeData.negativeBombMonth);
+            }
+        }
+        if (spikeData.positiveBombZ > 3 && spikeData.positiveBombCount > 0) {
+            const total = this.computeCounts(buckets, filter).total;
+            if (spikeData.positiveBombCount / total >= 0.10) {
+                excludeMonths.push(spikeData.positiveBombMonth);
+            }
+        }
+        
+        // Create organic filter that excludes spike months
+        const organicFilter = excludeMonths.length > 0 
+            ? { ...filter, excludeMonths } 
+            : filter;
+
+        // Review counts (organic)
+        const counts = this.computeCounts(buckets, organicFilter);
         const total = Math.max(1, counts.total);
         
         // Mass ratios
         const positiveRatio = (counts.positive + counts.uncertainPositive) / total;
         const negativeRatio = (counts.negative + counts.uncertainNegative) / total;
 
-        // Playtime distributions
-        const posPlaytimes = this.getPlaytimeArray(buckets, 'positive', filter);
-        const negPlaytimes = this.getPlaytimeArray(buckets, 'negative', filter);
+        // Playtime distributions (organic)
+        const posPlaytimes = this.getPlaytimeArray(buckets, 'positive', organicFilter);
+        const negPlaytimes = this.getPlaytimeArray(buckets, 'negative', organicFilter);
         const allPlaytimes = [...posPlaytimes, ...negPlaytimes];
         
         const posStats = this.computeStats(posPlaytimes);
@@ -201,15 +297,15 @@ const Metrics = {
         const posMedianReview = posStats.median;
         const negMedianReview = negStats.median;
         
-        // Total playtime for stockholm
-        const negTotalPlaytimes = this.getPlaytimeArray(totalBuckets, 'negative', filter);
+        // Total playtime for stockholm (organic)
+        const negTotalPlaytimes = this.getPlaytimeArray(totalBuckets, 'negative', organicFilter);
         const negTotalStats = this.computeStats(negTotalPlaytimes);
         const negMedianTotal = negTotalStats.median;
 
         // === RATIO-BASED METRICS ===
         const medianRatio = posMedianReview > 0 ? negMedianReview / posMedianReview : 1;
         const stockholmIndex = negMedianReview > 0 ? negMedianTotal / negMedianReview : 1;
-        const refundHonesty = isFree ? null : this.computeRefundHonesty(buckets, filter);
+        const refundHonesty = isFree ? null : this.computeRefundHonesty(buckets, organicFilter);
 
         // === STDDEV-BASED METRICS ===
         
@@ -222,7 +318,7 @@ const Metrics = {
         // p95 for addictive check
         const p95Playtime = posStats.p95;
         
-        // Temporal drift (with stddev context)
+        // Temporal drift (with stddev context) - use original filter, drift IS about the bomb
         const temporalData = this.computeTemporalDrift(buckets, filter);
         const temporalDriftZ = temporalData.stddev > 0 
             ? (temporalData.secondHalfNegRatio - temporalData.firstHalfNegRatio) / temporalData.stddev 
@@ -234,8 +330,8 @@ const Metrics = {
             ? (activityData.endActivity - activityData.meanActivity) / activityData.stddev 
             : 0;
         
-        // Spike detection (review bombs / botting)
-        const spikeData = this.detectSpikes(buckets, filter);
+        // Revival detection (180/360)
+        const revivalData = this.detectRevival(buckets, filter);
 
         // Confidence
         const confidence = this.computeConfidence(counts.total);
@@ -270,13 +366,23 @@ const Metrics = {
             temporalDriftZ,
             windowEndActivityZ,
             
-            // Spikes
+            // Revival (180/360)
+            hasRevival: revivalData.hasRevival,
+            firstWaveNegRatio: revivalData.firstWaveNegRatio,
+            lastWaveNegRatio: revivalData.lastWaveNegRatio,
+            revivalSentimentChange: revivalData.revivalSentimentChange,
+            isStillAlive: revivalData.isStillAlive,
+            
+            // Spikes (z-scores already launch-weighted)
             negativeBombZ: spikeData.negativeBombZ,
             negativeBombMonth: spikeData.negativeBombMonth,
             negativeBombMultiple: spikeData.negativeBombMultiple,
+            negativeBombCount: spikeData.negativeBombCount,
             positiveBombZ: spikeData.positiveBombZ,
             positiveBombMonth: spikeData.positiveBombMonth,
-            positiveBombMultiple: spikeData.positiveBombMultiple
+            positiveBombMultiple: spikeData.positiveBombMultiple,
+            positiveBombCount: spikeData.positiveBombCount,
+            excludedMonths: excludeMonths
         };
 
         // Derive tags
@@ -437,6 +543,129 @@ const Metrics = {
     },
 
     /**
+     * Detect revival pattern - game died, came back
+     * Returns { hasRevival, firstWaveNegRatio, lastWaveNegRatio, revivalSentimentChange }
+     */
+    detectRevival(buckets, filter) {
+        // Get monthly activity
+        const allMonths = new Set();
+        for (const bucket of buckets) {
+            for (const month of Object.keys(bucket.positiveByMonth || {})) allMonths.add(month);
+            for (const month of Object.keys(bucket.negativeByMonth || {})) allMonths.add(month);
+        }
+        
+        let sortedMonths = [...allMonths].sort();
+        if (filter && filter.from) {
+            sortedMonths = sortedMonths.filter(m => m >= filter.from && m <= filter.to);
+        }
+        
+        if (sortedMonths.length < 6) {
+            return { hasRevival: false };
+        }
+        
+        // Calculate monthly totals
+        const monthlyData = sortedMonths.map(month => {
+            let pos = 0, neg = 0;
+            for (const bucket of buckets) {
+                pos += (bucket.positiveByMonth?.[month] || 0) + (bucket.uncertainPositiveByMonth?.[month] || 0);
+                neg += (bucket.negativeByMonth?.[month] || 0) + (bucket.uncertainNegativeByMonth?.[month] || 0);
+            }
+            return { month, pos, neg, total: pos + neg };
+        });
+        
+        // Find average activity
+        const avgActivity = monthlyData.reduce((sum, m) => sum + m.total, 0) / monthlyData.length;
+        
+        // Identify waves (contiguous periods above 50% of average)
+        const threshold = avgActivity * 0.5;
+        const deathThreshold = avgActivity * 0.15; // Must drop to 15% of average to count as "dead"
+        const waves = [];
+        let currentWave = null;
+        
+        for (const data of monthlyData) {
+            if (data.total >= threshold) {
+                if (!currentWave) {
+                    currentWave = { months: [], pos: 0, neg: 0 };
+                }
+                currentWave.months.push(data.month);
+                currentWave.pos += data.pos;
+                currentWave.neg += data.neg;
+            } else {
+                if (currentWave && currentWave.months.length >= 2) {
+                    waves.push(currentWave);
+                }
+                currentWave = null;
+            }
+        }
+        if (currentWave && currentWave.months.length >= 2) {
+            waves.push(currentWave);
+        }
+        
+        // Need at least 2 waves separated by gap
+        if (waves.length < 2) {
+            return { hasRevival: false };
+        }
+        
+        // Check for meaningful death gap between waves:
+        // - At least 3 months gap
+        // - Activity during gap must be below death threshold
+        let hasDeathGap = false;
+        for (let i = 0; i < waves.length - 1; i++) {
+            const lastMonthOfWave = waves[i].months[waves[i].months.length - 1];
+            const firstMonthOfNext = waves[i + 1].months[0];
+            const lastIdx = sortedMonths.indexOf(lastMonthOfWave);
+            const nextIdx = sortedMonths.indexOf(firstMonthOfNext);
+            
+            if (nextIdx - lastIdx >= 3) {
+                // Check that gap months are actually dead (below death threshold)
+                const gapMonths = monthlyData.slice(lastIdx + 1, nextIdx);
+                const allDead = gapMonths.every(m => m.total < deathThreshold);
+                if (allDead && gapMonths.length >= 3) {
+                    hasDeathGap = true;
+                    break;
+                }
+            }
+        }
+        
+        if (!hasDeathGap) {
+            return { hasRevival: false };
+        }
+        
+        const firstWave = waves[0];
+        const lastWave = waves[waves.length - 1];
+        
+        const firstWaveNegRatio = firstWave.neg / Math.max(1, firstWave.pos + firstWave.neg);
+        const lastWaveNegRatio = lastWave.neg / Math.max(1, lastWave.pos + lastWave.neg);
+        const revivalSentimentChange = lastWaveNegRatio - firstWaveNegRatio;
+        
+        // Is the game still alive? Use same logic as DEAD tag
+        // Check if last 20% of months have activity 1+ stddev below average
+        const activityValues = monthlyData.map(d => d.total);
+        const meanActivity = activityValues.reduce((a, b) => a + b, 0) / activityValues.length;
+        const stddevActivity = Math.sqrt(
+            activityValues.reduce((sum, v) => sum + (v - meanActivity) ** 2, 0) / activityValues.length
+        );
+        
+        const cutoffIdx = Math.floor(monthlyData.length * 0.8);
+        const endMonths = monthlyData.slice(cutoffIdx);
+        const endActivity = endMonths.reduce((sum, d) => sum + d.total, 0) / Math.max(1, endMonths.length);
+        
+        // Alive if end activity is NOT 1+ stddev below average
+        const isStillAlive = stddevActivity > 0 
+            ? (endActivity - meanActivity) / stddevActivity > -1
+            : endActivity > 0;
+        
+        return {
+            hasRevival: true,
+            firstWaveNegRatio,
+            lastWaveNegRatio,
+            revivalSentimentChange,
+            waveCount: waves.length,
+            isStillAlive
+        };
+    },
+
+    /**
      * Detect review spikes (bombs or botting)
      * A spike is a month with volume 3σ+ above the mean
      */
@@ -481,19 +710,28 @@ const Metrics = {
             let maxZ = 0;
             let spikeMonth = null;
             let spikeMultiple = 0;
+            let spikeCount = 0;
+            let spikeLaunchWeight = 0;
             
-            for (const m of monthlyData) {
+            for (let i = 0; i < monthlyData.length; i++) {
+                const m = monthlyData[i];
                 if (stats.stddev > 0 && stats.mean > 0) {
                     const z = (m.count - stats.mean) / stats.stddev;
-                    if (z > maxZ) {
-                        maxZ = z;
+                    // Exponential decay: month 0 = 0% weight, month 6 = 63%, month 12 = 86%, month 24 = 98%
+                    const launchWeight = 1 - Math.exp(-i / 6);
+                    const effectiveZ = z * launchWeight;
+                    
+                    if (effectiveZ > maxZ) {
+                        maxZ = effectiveZ;
                         spikeMonth = m.month;
                         spikeMultiple = m.count / stats.mean;
+                        spikeCount = m.count;
+                        spikeLaunchWeight = launchWeight;
                     }
                 }
             }
             
-            return { z: maxZ, month: spikeMonth, multiple: spikeMultiple };
+            return { z: maxZ, month: spikeMonth, multiple: spikeMultiple, count: spikeCount, launchWeight: spikeLaunchWeight };
         };
         
         const negSpike = findSpike(monthlyNeg);
@@ -503,9 +741,11 @@ const Metrics = {
             negativeBombZ: negSpike.z,
             negativeBombMonth: negSpike.month,
             negativeBombMultiple: negSpike.multiple,
+            negativeBombCount: negSpike.count,
             positiveBombZ: posSpike.z,
             positiveBombMonth: posSpike.month,
-            positiveBombMultiple: posSpike.multiple
+            positiveBombMultiple: posSpike.multiple,
+            positiveBombCount: posSpike.count
         };
     },
 
@@ -613,7 +853,7 @@ const Metrics = {
     },
 
     /**
-     * Filter bucket counts by timeline range
+     * Filter bucket counts by timeline range and excluded months
      */
     filterBucket(bucket, filter) {
         if (!filter) {
@@ -625,22 +865,33 @@ const Metrics = {
             };
         }
 
+        const excludeSet = new Set(filter.excludeMonths || []);
         let pos = 0, neg = 0, uncPos = 0, uncNeg = 0;
 
         for (const [month, count] of Object.entries(bucket.positiveByMonth || {})) {
-            if (month >= filter.from && month <= filter.to) pos += count;
+            if (this.monthInRange(month, filter) && !excludeSet.has(month)) pos += count;
         }
         for (const [month, count] of Object.entries(bucket.negativeByMonth || {})) {
-            if (month >= filter.from && month <= filter.to) neg += count;
+            if (this.monthInRange(month, filter) && !excludeSet.has(month)) neg += count;
         }
         for (const [month, count] of Object.entries(bucket.uncertainPositiveByMonth || {})) {
-            if (month >= filter.from && month <= filter.to) uncPos += count;
+            if (this.monthInRange(month, filter) && !excludeSet.has(month)) uncPos += count;
         }
         for (const [month, count] of Object.entries(bucket.uncertainNegativeByMonth || {})) {
-            if (month >= filter.from && month <= filter.to) uncNeg += count;
+            if (this.monthInRange(month, filter) && !excludeSet.has(month)) uncNeg += count;
         }
 
         return { pos, neg, uncPos, uncNeg };
+    },
+    
+    /**
+     * Check if month is in filter range (or no range specified)
+     */
+    monthInRange(month, filter) {
+        if (!filter || (!filter.from && !filter.to)) return true;
+        if (filter.from && month < filter.from) return false;
+        if (filter.to && month > filter.to) return false;
+        return true;
     }
 };
 
