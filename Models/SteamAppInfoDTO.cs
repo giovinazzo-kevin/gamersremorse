@@ -26,7 +26,7 @@ public record SteamAppInfoDTO
             if (cats.Any(c => c.Id == 2)) flags |= GameFlags.SinglePlayer;
             if (cats.Any(c => c.Id == 1)) flags |= GameFlags.MultiPlayer;
             if (cats.Any(c => c.Id == 62)) flags |= GameFlags.FamilyShare;
-            if (descs.Any(d => d is 1 or 3 or 4)) flags |= GameFlags.SexualContent;
+            if (descs.Any(d => d is 4)) flags |= GameFlags.SexualContent;
             
             return flags;
         }
