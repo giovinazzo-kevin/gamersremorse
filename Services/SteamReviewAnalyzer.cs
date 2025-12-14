@@ -1,4 +1,4 @@
-﻿using gamersremorse.Entities;
+using gamersremorse.Entities;
 using gamersremorse.Models;
 using Microsoft.Extensions.Options;
 using System.Runtime.CompilerServices;
@@ -15,6 +15,7 @@ public record SteamReviewAnalyzer(IOptions<SteamReviewAnalyzer.Configuration> Op
 
     public async IAsyncEnumerable<AnalysisSnapshot> VerdictByPlaytime(
         IAsyncEnumerable<SteamReview> source,
+        bool streamSnapshots,
         [EnumeratorCancellation] CancellationToken stoppingToken)
     {
         var all = new List<SteamReview>();
@@ -24,7 +25,7 @@ public record SteamReviewAnalyzer(IOptions<SteamReviewAnalyzer.Configuration> Op
             if (stoppingToken.IsCancellationRequested) break;
             all.Add(review);
 
-            if (++count % Options.Value.SnapshotEvery == 0)
+            if (streamSnapshots && ++count % Options.Value.SnapshotEvery == 0)
                 yield return BuildSnapshot(all);
         }
 

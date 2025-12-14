@@ -1,4 +1,4 @@
-﻿using gamersremorse.Entities;
+using gamersremorse.Entities;
 using gamersremorse.Models;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.Options;
@@ -30,16 +30,38 @@ public record SteamScraper(IOptions<SteamScraper.Configuration> Options, IHttpCl
         return res!.MapToDomain();
     }
 
-    public async IAsyncEnumerable<SteamReview> FetchReviews(AppId appId, [EnumeratorCancellation] CancellationToken stoppingToken = default)
+    public async Task<(int TotalPositive, int TotalNegative)> FetchTotalReviewCount(AppId appId, CancellationToken cancellationToken = default)
+    {
+        const string URL = "https://store.steampowered.com/appreviews/";
+        var query = $"{URL}/{appId}";
+        query = QueryHelpers.AddQueryString(query, "filter", "all");
+        query = QueryHelpers.AddQueryString(query, "review_type", "all");
+        query = QueryHelpers.AddQueryString(query, "purchase_type", "all");
+        query = QueryHelpers.AddQueryString(query, "num_per_page", "1");
+        query = QueryHelpers.AddQueryString(query, "json", "1");
+        
+        var res = await HttpClient.GetFromJsonAsync<SteamReviewsResponseDTO>(query, cancellationToken);
+        if (res?.QuerySummary == null) return (0, 0);
+        return (res.QuerySummary.TotalPositive, res.QuerySummary.TotalNegative);
+    }
+
+    public async IAsyncEnumerable<SteamReview> FetchReviews(
+        AppId appId, 
+        string? filter = null, 
+        string? reviewType = null,
+        int? dayRange = null,
+        string? language = null,
+        [EnumeratorCancellation] CancellationToken stoppingToken = default)
     {
         const string URL = "https://store.steampowered.com/appreviews/";
 
         var query = $"{URL}/{appId}";
-        query = QueryHelpers.AddQueryString(query, "day_range", Options.Value.MaxDayRange.ToString());
-        query = QueryHelpers.AddQueryString(query, "filter", Options.Value.Filter);
+        query = QueryHelpers.AddQueryString(query, "day_range", (dayRange ?? Options.Value.MaxDayRange).ToString());
+        query = QueryHelpers.AddQueryString(query, "filter", filter ?? Options.Value.Filter);
         query = QueryHelpers.AddQueryString(query, "filter_offtopic_activity", Options.Value.FilterOffTopicActivity ? "1" : "0");
         query = QueryHelpers.AddQueryString(query, "purchase_type", Options.Value.PurchaseType);
-        query = QueryHelpers.AddQueryString(query, "review_type", Options.Value.ReviewType);
+        query = QueryHelpers.AddQueryString(query, "review_type", reviewType ?? Options.Value.ReviewType ?? "all");
+        query = QueryHelpers.AddQueryString(query, "language", language ?? Options.Value.Language);
         query = QueryHelpers.AddQueryString(query, "num_per_page", Options.Value.NumPerPage.ToString());
         query = QueryHelpers.AddQueryString(query, "json", "1");
 

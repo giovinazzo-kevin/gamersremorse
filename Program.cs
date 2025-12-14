@@ -12,6 +12,7 @@ builder.Services.AddOptions<SteamReviewRepository.Configuration>();
 builder.Services.AddTransient<SteamReviewRepository>();
 builder.Services.AddOptions<SteamReviewAnalyzer.Configuration>();
 builder.Services.AddTransient<SteamReviewAnalyzer>();
+builder.Logging.AddFilter("System.Net.Http.HttpClient", LogLevel.None);
 var app = builder.Build();
 app.UseWebSockets();
 app.UseHttpsRedirection();
@@ -25,10 +26,10 @@ app.Map("/ws/game/{appId}", async (HttpContext ctx, AppId appId, SteamReviewAnal
     Console.WriteLine($"WS connected for {appId}");
 
     using var ws = await ctx.WebSockets.AcceptWebSocketAsync();
-    var reviews = repo.GetAll(appId, ctx.RequestAborted);
+    var (reviews, isStreaming) = await repo.GetAll(appId, ctx.RequestAborted);
 
     var count = 0;
-    await foreach (var snapshot in analyzer.VerdictByPlaytime(reviews, ctx.RequestAborted)) {
+    await foreach (var snapshot in analyzer.VerdictByPlaytime(reviews, isStreaming, ctx.RequestAborted)) {
         Console.WriteLine($"Sending snapshot with {snapshot.BucketsByTotalTime.Length} buckets");
         var json = JsonSerializer.SerializeToUtf8Bytes(snapshot, options);
         await ws.SendAsync(json, WebSocketMessageType.Text, true, ctx.RequestAborted);
