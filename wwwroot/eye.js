@@ -7,15 +7,13 @@ const frameInterval = 1000 / 15;
 let lastFrame = 0;
 
 const config = {
-    // normalized 0-1 values (relative to height unless noted)
     barCount: 51,
-    barWidthMin: 0.01,      // relative to width
-    barWidthMax: 0.02,      // relative to width
-    gapRatio: 0.8,          // gap = barWidth * gapRatio
-    sigma: 1,
+    barWidthMin: 0.01,
+    barWidthMax: 0.02,
+    gapRatio: 0.8,
     maxLashLength: 0.04,
-    maxIrisOffsetX: 0.26,   // relative to width
-    maxIrisOffsetY: 0.12,   // relative to height
+    maxIrisOffsetX: 0.26,
+    maxIrisOffsetY: 0.12,
     irisDilation: 0.03,
     driftStrength: 0.0005,
     damping: 0.01,
@@ -25,63 +23,91 @@ const config = {
     attentionThreshold: 300,
     patience: 0.9,
     boredThreshold: 0.5,
-    blinkSpeed: 30,         // how fast blink opens/closes
-    openSpeed: 3,           // how fast eye opens on wake
-    sleepTimeout: 10,       // seconds of inactivity before sleeping
-    dozeSpeed: 0.5,         // how slow it closes when falling asleep
-    blinkInterval: 4,       // average seconds between blinks
-    blinkVariance: 2,       // randomness in timing
-    doubleBlinkChance: 0.2, // 20% chance of double blink
-    expressionSpeed: 3,     // how fast expressions lerp
+    blinkSpeed: 30,
+    openSpeed: 3,
+    sleepTimeout: 10,
+    dozeSpeed: 0.5,
+    blinkInterval: 4,
+    blinkVariance: 2,
+    doubleBlinkChance: 0.2,
+    expressionSpeed: 2,
+};
+
+// Shape functions - each returns 0-1 for a given normalized x position
+const shapeFunctions = {
+    gaussian: (x, params) => {
+        const sigma = params.sigma ?? 1;
+        return Math.exp(-(x * x) / (2 * sigma * sigma));
+    },
+    flat: (x, params) => {
+        const falloff = params.falloff ?? 0.3;
+        const abs = Math.abs(x);
+        return abs < 2 ? 1 : Math.max(0, 1 - (abs - 2) * falloff);
+    },
+    raised: (x, params) => {
+        const sigma = params.sigma ?? 1.2;
+        const base = params.base ?? 0.3;
+        return base + (1 - base) * Math.exp(-(x * x) / (2 * sigma * sigma));
+    },
+    skewedLeft: (x, params) => {
+        const sigma = params.sigma ?? 1;
+        const skew = params.skew ?? 0.3;
+        return Math.exp(-((x + skew) * (x + skew)) / (2 * sigma * sigma));
+    },
+    skewedRight: (x, params) => {
+        const sigma = params.sigma ?? 1;
+        const skew = params.skew ?? 0.3;
+        return Math.exp(-((x - skew) * (x - skew)) / (2 * sigma * sigma));
+    },
+    vShape: (x, params) => {
+        const intensity = params.intensity ?? 0.3;
+        const base = params.base ?? 0.7;
+        const gaussian = Math.exp(-(x * x) / 2);
+        return base + (1 - gaussian) * intensity;
+    },
 };
 
 const expressions = {
     neutral: {
-        splitRatio: 0.5,
-        maxHeight: 0.6,
+        top: { shape: 'gaussian', params: { sigma: 1 }, maxHeight: 0.3 },
+        bottom: { shape: 'gaussian', params: { sigma: 1 }, maxHeight: 0.3 },
         irisRadius: 0.15,
         irisYOffset: 0,
-        squint: 0,
         lashMultiplier: 1,
     },
     suspicious: {
-        splitRatio: 0.5,
-        maxHeight: 0.4,
-        irisRadius: 0.12,
-        irisYOffset: 0,
-        squint: 0.3,
-        lashMultiplier: 1.5,
-    },
-    sad: {
-        splitRatio: 0.35,
-        maxHeight: 0.5,
-        irisRadius: 0.18,
-        irisYOffset: 0.2,
-        squint: 0.1,
-        lashMultiplier: 1,
-    },
-    angry: {
-        splitRatio: 0.65,
-        maxHeight: 0.5,
-        irisRadius: 0.1,
-        irisYOffset: -0.1,
-        squint: 0.4,
-        lashMultiplier: 1.2,
+        top: { shape: 'flat', params: { falloff: 0.2 }, maxHeight: 0.12 },
+        bottom: { shape: 'raised', params: { sigma: 1.2, base: 0.6 }, maxHeight: 0.32 },
+        irisRadius: 0.11,
+        irisYOffset: 0.05,
+        lashMultiplier: 1.3,
     },
     shocked: {
-        splitRatio: 0.5,
-        maxHeight: 0.8,
-        irisRadius: 0.2,
+        top: { shape: 'gaussian', params: { sigma: 1.3 }, maxHeight: 0.45 },
+        bottom: { shape: 'gaussian', params: { sigma: 1.3 }, maxHeight: 0.45 },
+        irisRadius: 0.22,
         irisYOffset: 0,
-        squint: -0.2,
         lashMultiplier: 0.5,
     },
+    angry: {
+        top: { shape: 'vShape', params: { intensity: 0.5, base: 0.5 }, maxHeight: 0.22 },
+        bottom: { shape: 'flat', params: { falloff: 0.3 }, maxHeight: 0.18 },
+        irisRadius: 0.1,
+        irisYOffset: -0.05,
+        lashMultiplier: 1.2,
+    },
+    sad: {
+        top: { shape: 'skewedRight', params: { sigma: 0.8, skew: 0.6 }, maxHeight: 0.22 },
+        bottom: { shape: 'gaussian', params: { sigma: 1.4 }, maxHeight: 0.35 },
+        irisRadius: 0.18,
+        irisYOffset: 0.12,
+        lashMultiplier: 1,
+    },
     mocking: {
-        splitRatio: 0.6,
-        maxHeight: 0.55,
-        irisRadius: 0.13,
-        irisYOffset: -0.15,
-        squint: 0.2,
+        top: { shape: 'skewedLeft', params: { sigma: 0.9, skew: 0.5 }, maxHeight: 0.2 },
+        bottom: { shape: 'skewedRight', params: { sigma: 1.1, skew: 0.4 }, maxHeight: 0.26 },
+        irisRadius: 0.12,
+        irisYOffset: -0.08,
         lashMultiplier: 1.3,
     },
 };
@@ -104,9 +130,12 @@ const state = {
     pendingDoubleBlink: false,
     busy: false,
     poked: false,
-    expressionTarget: 'neutral',
-    // current expression values (lerped)
-    expr: { ...expressions.neutral },
+    // Expression state
+    currentExpr: 'neutral',
+    targetExpr: 'neutral',
+    exprProgress: 1,
+    // Cached lerped values for smooth transitions
+    lerpedExpr: null,
 };
 
 const savedThreshold = localStorage.getItem('eyeThreshold');
@@ -115,22 +144,25 @@ if (savedThreshold) {
 }
 
 function setExpression(name) {
-    if (expressions[name]) {
-        state.expressionTarget = name;
+    if (expressions[name] && name !== state.targetExpr) {
+        state.currentExpr = state.targetExpr;
+        state.targetExpr = name;
+        state.exprProgress = 0;
     }
+}
+
+function lerp(a, b, t) {
+    return a + (b - a) * t;
+}
+
+function easeInOut(t) {
+    return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
 }
 
 function updateExpression(dt) {
-    const target = expressions[state.expressionTarget];
-    const speed = config.expressionSpeed;
-
-    for (const key in target) {
-        state.expr[key] += (target[key] - state.expr[key]) * speed * dt;
+    if (state.exprProgress < 1) {
+        state.exprProgress = Math.min(1, state.exprProgress + config.expressionSpeed * dt);
     }
-}
-
-function gaussian(x, sigma = 1) {
-    return Math.exp(-(x * x) / (2 * sigma * sigma));
 }
 
 function clamp(val, min, max) {
@@ -144,6 +176,11 @@ function distance(x1, y1, x2, y2) {
 function setLoading(loading) {
     state.busy = loading;
     config.driftStrength = loading ? 0.2 : 0.0005;
+    if (loading) {
+        setExpression('shocked');
+    } else {
+        setExpression('neutral');
+    }
 }
 
 function wake() {
@@ -265,16 +302,25 @@ function lerpColor(color1, color2, t) {
 function draw() {
     svg.innerHTML = '';
 
-    const { barCount, barWidthMin, barWidthMax, gapRatio, sigma, maxLashLength, irisDilation } = config;
-    const { splitRatio, maxHeight, irisRadius, irisYOffset, squint, lashMultiplier } = state.expr;
+    const { barCount, barWidthMin, barWidthMax, gapRatio, maxLashLength, irisDilation } = config;
+    
+    const currentExpr = expressions[state.currentExpr];
+    const targetExpr = expressions[state.targetExpr];
+    const t = easeInOut(state.exprProgress);
 
-    // blink affects scale and lash length
-    const scaleY = (1 - state.blink) * (1 - squint);
+    // Lerp scalar values
+    const irisRadius = lerp(currentExpr.irisRadius, targetExpr.irisRadius, t);
+    const irisYOffset = lerp(currentExpr.irisYOffset, targetExpr.irisYOffset, t);
+    const lashMultiplier = lerp(currentExpr.lashMultiplier, targetExpr.lashMultiplier, t);
+    const topMaxHeight = lerp(currentExpr.top.maxHeight, targetExpr.top.maxHeight, t);
+    const bottomMaxHeight = lerp(currentExpr.bottom.maxHeight, targetExpr.bottom.maxHeight, t);
+
+    // Blink affects scale
+    const scaleY = 1 - state.blink;
     const blinkLashMult = 1 + state.blink * 2 * scaleY + 0.5;
 
-    // convert normalized to pixels
+    // Convert to pixels
     const irisRadiusPx = (irisRadius + state.attention * irisDilation) * height;
-    const maxHeightPx = maxHeight * height * scaleY;
     const maxLashPx = maxLashLength * height * blinkLashMult * lashMultiplier;
     const maxIrisOffsetXPx = config.maxIrisOffsetX * width;
     const maxIrisOffsetYPx = config.maxIrisOffsetY * height;
@@ -282,7 +328,7 @@ function draw() {
     const irisXPx = centerX + state.irisX * maxIrisOffsetXPx;
     const irisYPx = centerY + (state.irisY + irisYOffset) * maxIrisOffsetYPx * scaleY;
 
-    // calculate bar spacing to fill width
+    // Bar spacing
     const minBarPx = barWidthMin * width;
     const maxBarPx = barWidthMax * width;
     const avgBarWidth = (minBarPx + maxBarPx) / 2;
@@ -301,17 +347,29 @@ function draw() {
         const x = startX + i * spacing + spacing / 2;
         const normalizedX = (i - barCount / 2) / (barCount / 6);
 
-        const barWidthPx = minBarPx + gaussian(normalizedX, sigma) * (maxBarPx - minBarPx);
-        const coloredHeight = gaussian(normalizedX, sigma) * maxHeightPx;
-        const lashLength = gaussian(normalizedX, sigma) * maxLashPx;
+        // Bar width still uses gaussian for thickness variation
+        const barWidthPx = minBarPx + Math.exp(-(normalizedX * normalizedX) / 2) * (maxBarPx - minBarPx);
 
-        const posHeight = coloredHeight * splitRatio;
-        const negHeight = coloredHeight * (1 - splitRatio);
+        // Get shape values from current and target expressions, then lerp
+        const currentTopShape = shapeFunctions[currentExpr.top.shape](normalizedX, currentExpr.top.params);
+        const targetTopShape = shapeFunctions[targetExpr.top.shape](normalizedX, targetExpr.top.params);
+        const topShape = lerp(currentTopShape, targetTopShape, t);
 
-        drawBar(x, posHeight, 'up', colorPositive, barWidthPx, irisXPx, irisYPx, irisRadiusPx);
-        drawBar(x, negHeight, 'down', colorNegative, barWidthPx, irisXPx, irisYPx, irisRadiusPx);
-        drawLashTip(x, posHeight, lashLength, 'up', currentLashColor, barWidthPx);
-        drawLashTip(x, negHeight, lashLength, 'down', currentLashColor, barWidthPx);
+        const currentBottomShape = shapeFunctions[currentExpr.bottom.shape](normalizedX, currentExpr.bottom.params);
+        const targetBottomShape = shapeFunctions[targetExpr.bottom.shape](normalizedX, targetExpr.bottom.params);
+        const bottomShape = lerp(currentBottomShape, targetBottomShape, t);
+
+        const topHeight = topShape * topMaxHeight * height * scaleY;
+        const bottomHeight = bottomShape * bottomMaxHeight * height * scaleY;
+
+        // Lash length based on shape
+        const lashLengthTop = topShape * maxLashPx;
+        const lashLengthBottom = bottomShape * maxLashPx;
+
+        drawBar(x, topHeight, 'up', colorPositive, barWidthPx, irisXPx, irisYPx, irisRadiusPx);
+        drawBar(x, bottomHeight, 'down', colorNegative, barWidthPx, irisXPx, irisYPx, irisRadiusPx);
+        drawLashTip(x, topHeight, lashLengthTop, 'up', currentLashColor, barWidthPx);
+        drawLashTip(x, bottomHeight, lashLengthBottom, 'down', currentLashColor, barWidthPx);
     }
 }
 
@@ -395,6 +453,7 @@ function tick(timestamp) {
     if (state.awake && idleTime > config.sleepTimeout) {
         state.awake = false;
         state.blinkTarget = 1;
+        setExpression('neutral');
     }
 
     if (dt >= frameInterval / 1000) {
@@ -426,6 +485,13 @@ svg.addEventListener('click', () => {
         state.poked = true;
         config.attentionThreshold *= config.patience;
         localStorage.setItem('eyeThreshold', config.attentionThreshold);
+        
+        // Get progressively more suspicious/angry as you poke
+        if (config.attentionThreshold < 10) {
+            setExpression('angry');
+        } else if (config.attentionThreshold < 50) {
+            setExpression('suspicious');
+        }
     }
 });
 document.addEventListener('click', () => {
