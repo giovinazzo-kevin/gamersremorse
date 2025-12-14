@@ -702,16 +702,19 @@ function updateMetrics(snapshot) {
     const isFree = currentGameInfo?.isFree || false;
     currentMetrics = Metrics.compute(snapshot, { timelineFilter: filter, isFree });
     
-    // Update metrics display
     const metricsEl = document.getElementById('metrics-detail');
     if (metricsEl && currentMetrics) {
         const v = currentMetrics.verdict;
-        const severityPct = Math.round(currentMetrics.verdict.severity * 100);
+        const severityPct = Math.round(v.severity * 100);
+        
+        // Build tag pills
+        const tagPills = v.tags.map(t => 
+            `<span class="tag-pill" style="background:${t.color}">${t.id}</span>`
+        ).join(' ');
         
         metricsEl.innerHTML = `
-            <div class="verdict verdict-${v.category}">
-                <strong>${v.category.toUpperCase()}</strong>
-                <span class="severity">(${severityPct}% severity)</span>
+            <div class="verdict-tags">
+                ${tagPills || '<span class="tag-pill" style="background:#666">NEUTRAL</span>'}
             </div>
             <ul class="reasons">
                 ${v.reasons.map(r => `<li>${r}</li>`).join('')}
@@ -722,7 +725,7 @@ function updateMetrics(snapshot) {
                 Stockholm: ${currentMetrics.stockholmIndex.toFixed(2)}x |
                 Confidence: ${Math.round(currentMetrics.confidence * 100)}%
                 <br>
-                <small style="color:#aaa">Debug: negRatio=${currentMetrics.negativeRatio.toFixed(2)}, wMD=${currentMetrics.weightedMedianDelta.toFixed(3)}, wS=${currentMetrics.weightedStockholm.toFixed(3)}, raw=${currentMetrics.verdict.rawSeverity?.toFixed(3)}</small>
+                <small style="color:#aaa">Ratios: median=${currentMetrics.medianRatio?.toFixed(2)}x, stockholm=${currentMetrics.stockholmIndex?.toFixed(2)}x | Stddev: drift=${currentMetrics.temporalDriftZ?.toFixed(1)}σ, endAct=${currentMetrics.windowEndActivityZ?.toFixed(1)}σ</small>
             </div>
         `;
     }
@@ -731,22 +734,20 @@ function updateMetrics(snapshot) {
 function updateEyeFromMetrics(metrics) {
     if (!window.setEyeExpression) return;
     
-    const category = metrics.verdict.category;
+    const tags = metrics.verdict.tags.map(t => t.id);
     
-    // Map verdict category to eye expression
-    const expressionMap = {
-        'healthy': 'neutral',      // could add 'happy' expression
-        'neutral': 'neutral',
-        'insufficient': 'neutral',
-        'suspicious': 'suspicious',
-        'extractive': 'suspicious',
-        'predatory': 'angry',
-        'stockholm': 'angry',
-        'corrupted': 'mocking'
-    };
-    
-    const expression = expressionMap[category] || 'neutral';
-    window.setEyeExpression(expression);
+    // Priority-based expression
+    if (tags.includes('PREDATORY') || tags.includes('REFUND_TRAP')) {
+        window.setEyeExpression('angry');
+    } else if (tags.includes('EXTRACTIVE') || tags.includes('STOCKHOLM')) {
+        window.setEyeExpression('suspicious');
+    } else if (tags.includes('FLOP') || tags.includes('DEAD')) {
+        window.setEyeExpression('mocking');
+    } else if (tags.includes('HEALTHY') || tags.includes('HONEST')) {
+        window.setEyeExpression('neutral');
+    } else {
+        window.setEyeExpression('neutral');
+    }
 }
 
 function filterVelocityBucketByTime(bucket) {
