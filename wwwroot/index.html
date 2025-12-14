@@ -6,6 +6,13 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation"></script>
     <style>
+        :root {
+            --color-positive: #54bebe;
+            --color-negative: #c80064;
+            --color-uncertain: #666666;
+            --color-accent: #333333;
+        }
+
         * {
             box-sizing: border-box;
             margin: 0;
@@ -20,7 +27,7 @@
         }
 
         .header {
-            background: #8b0000;
+            background: var(--color-accent);
             padding: 10px 20px;
             display: flex;
             align-items: center;
@@ -34,13 +41,13 @@
             }
 
             .header .tagline {
-                color: #ffcccc;
+                color: var(--color-positive);
                 font-size: 9px;
             }
 
         .nav {
             background: #fff;
-            border-bottom: 2px solid #8b0000;
+            border-bottom: 2px solid var(--color-accent);
             padding: 0 20px;
         }
 
@@ -92,7 +99,7 @@
         }
 
         .sidebar-header {
-            background: #8b0000;
+            background: var(--color-accent);
             color: #fff;
             padding: 8px 12px;
             font-weight: bold;
@@ -125,7 +132,7 @@
         }
 
         button {
-            background: #8b0000;
+            background: var(--color-accent);
             color: #fff;
             border: none;
             padding: 6px 15px;
@@ -175,6 +182,11 @@
         #chart {
             width: 100%;
             height: 100%;
+        }
+
+        #eye {
+            width: 120px;
+            height: 80px;
         }
 
         #labels-container {
@@ -227,7 +239,7 @@
         }
 
         .methodology strong {
-            color: #8b0000;
+            color: var(--color-accent);
         }
 
         .methodology em {
@@ -242,18 +254,19 @@
         }
 
             .footer a {
-                color: #8b0000;
+                color: var(--color-accent);
             }
     </style>
 </head>
 <body>
     <div class="header">
+        <svg id="eye"></svg>
         <div>
             <h1>Gamer's Remorse</h1>
             <div class="tagline">Redefining The Metrics</div>
         </div>
     </div>
-    
+
     <div class="nav">
         <a href="#">Analyze</a>
         <a href="#">Leaderboards</a>
@@ -261,7 +274,7 @@
         <a href="#">Healthy Games</a>
         <a href="#">About</a>
     </div>
-    
+
     <div class="main">
         <div class="content-area">
             <div class="content">
@@ -292,92 +305,99 @@
                     </div>
                 </div>
             </div>
-            
+
             <div class="content" style="margin-top: 15px;">
                 <div class="content-body methodology">
                     <h2>What am I looking at?</h2>
                     <p>
-                        This chart shows when players leave reviews. The x-axis is playtime on a log scale, 
-                        the y-axis is review count. Blue bars are positive reviews, orange bars are negative.
+                        This chart shows when players leave reviews. The x-axis is playtime on a log scale, the y-axis is review count.<br />
+                        <strong>Blue bars</strong> are positive reviews.
+                        <strong>Orange bars</strong> are negative. <br />
+                        <strong>Gray bars</strong> are reviews edited more than a week after posting
+                        (players came back to change their verdict, marking them as fence-sitters whose original opinion shifted).
+                        They're still binned by current sentiment, but treat them as uncertainty margins. <br />
                     </p>
                     <p>
-                        <strong>Healthy games</strong> have negative reviews clustered early. People who don't 
+                        <strong>Healthy games</strong> have negative reviews clustered early. People who don't
                         like it figure that out fast. Positive reviews spread across longer playtimes.
                     </p>
                     <p>
-                        <strong>Extractive games</strong> show the opposite. Negative reviews come <em>after</em> 
+                        <strong>Extractive games</strong> show the opposite. Negative reviews come <em>after</em>
                         positive ones. Players feel burned after investing significant time.
                     </p>
                     <p>
-                        The dashed lines show median playtime for positive and negative reviews. 
-                        When the negative median exceeds the positive median, something is wrong.
+                        The dashed lines show <strong>median playtime</strong> for positive and negative reviews. <br />
+
+                        Half of positive reviews came before the blue line, half after. Same for orange.
+                        In a healthy game, the negative median sits LEFT of the positive median: the game is being honest about the audience it's for.
+                        When negative sits far to the RIGHT of positive, that's extraction.
+                        People played for hundreds of hours before admitting they weren't having fun. The "game" wasted their time successfully before letting them realize it.
                     </p>
-                    
+
                     <h2>The 2-hour refund window</h2>
                     <p>
-                        Steam lets you refund a game if you've played less than 2 hours. Sounds 
+                        Steam lets you refund a game if you've played less than 2 hours. Sounds
                         consumer-friendly until you realize what it incentivizes.
                     </p>
                     <p>
-                        Developers know about the 2-hour window. So they front-load the good stuff. 
-                        The first 2 hours are polished, exciting, full of promise. The extraction 
+                        Developers know about the 2-hour window. So they front-load the good stuff.
+                        The first 2 hours are polished, exciting, full of promise. The extraction
                         mechanics, the grind, the paywalls come later. After you're locked in.
                     </p>
                     <p>
-                        Look at any extraction game's curve. The negative reviews don't cluster before 
-                        the refund threshold. They cluster at 10, 50, 500 hours. Long after you've 
+                        Look at any extraction game's curve. The negative reviews don't cluster before
+                        the refund threshold. They cluster at 10, 50, 500 hours. Long after you've
                         lost the right to get your money back.
                     </p>
                     <p>
-                        The refund window isn't consumer protection. It's a design constraint that 
+                        The refund window isn't consumer protection. It's a design constraint that
                         teaches developers exactly how long they need to keep up the illusion.
                     </p>
-                    
-                    <h2>How do I use this?</h2>
-                    <p>
-                        Share this tool with your friends.
-                    </p>
-                    <p>
-                        Game companies optimize for metrics that matter. Right now they optimize for 
-                        engagement, retention, time-to-first-purchase, ARPU. These are the metrics 
-                        investors and executives look at.
-                    </p>
-                    <p>
-                        If enough players start checking games here before buying, the shape of the 
-                        curve becomes a metric that matters. Games with healthy curves sell better. 
-                        Games with extraction patterns get called out.
-                    </p>
-                    <p>
-                        You don't need to boycott anything. You don't need to write angry tweets. 
-                        Just make the data visible. Natural selection does the rest.
-                    </p>
-                    
+
                     <h2>Why doesn't Steam show this?</h2>
                     <p>
                         Three reasons.
                     </p>
                     <p>
-                        <strong>Publisher leverage.</strong> Show data that makes EA look bad, 
+                        <strong>Publisher leverage.</strong> Show data that makes EA look bad,
                         EA threatens to leave. Steam can't afford that.
                     </p>
                     <p>
-                        <strong>Self-incrimination.</strong> Valve's own games are some of the worst 
-                        offenders. Dota 2, CS2, TF2. They're not going to build a feature that puts 
-                        themselves on the wall of shame.
+                        <strong>Self-incrimination.</strong> Valve's own games are some of the worst
+                        offenders. Dota 2, CS2, TF2. They're not going to build a feature that puts
+                        themselves on the wall of shame. They want you to think that "Very Positive"
+                        means that it's a good game (whatever that means). And they want you to stop thinking right there.
                     </p>
                     <p>
-                        <strong>The market loop.</strong> Steam credits are denominated in dollars 
-                        but can never become dollars again. Every market transaction takes 5% at best, 
-                        over 15% at worst. Buy an item, sell an item, buy another. Each cycle 
-                        bleeds value to Valve. Eventually all the money evaporates and players need 
-                        to put new dollars in. Games that keep you playing longer generate more 
-                        transactions. The extraction isn't just your time. It's infinite taxation 
-                        on a closed loop.
+                        <strong>The market loop.</strong> Steam credits are denominated in dollars but can never become dollars again.
+                        Every market transaction takes 5% at best, over 15% at worst. Buy an item, sell an item, buy another...
+                        each cycle bleeds value to Valve until it all evaporates and players put new dollars in.
+                        Games that keep you playing longer generate more transactions.
+                        The extraction isn't just your time. It's infinite taxation on a closed loop. <em>That's</em> how one buys a yacht.
+                    </p>
+
+                    <h2>How do I use this?</h2>
+                    <p>
+                        Share this tool with your friends.
+                    </p>
+                    <p>
+                        Game companies optimize for metrics that matter. Right now they optimize for
+                        engagement, retention, time-to-first-purchase, ARPU. These are the metrics
+                        investors and executives look at.
+                    </p>
+                    <p>
+                        If enough players start checking games here before buying, the shape of the
+                        curve becomes a metric that matters. Games with healthy curves sell better.
+                        Games with extraction patterns get called out.
+                    </p>
+                    <p>
+                        You don't need to boycott anything. You don't need to write angry tweets.
+                        Just make the data visible. Natural selection does the rest.
                     </p>
                 </div>
             </div>
         </div>
-        
+
         <div class="sidebar">
             <div class="sidebar-box">
                 <div class="sidebar-header">Quick Stats</div>
@@ -387,7 +407,7 @@
                     <p><strong>Extraction detected:</strong> 34%</p>
                 </div>
             </div>
-            
+
             <div class="sidebar-box">
                 <div class="sidebar-header">Worst Offenders</div>
                 <div class="sidebar-body">
@@ -398,7 +418,7 @@
                     <p>5. Path of Exile</p>
                 </div>
             </div>
-            
+
             <div class="sidebar-box">
                 <div class="sidebar-header">Healthiest Games</div>
                 <div class="sidebar-body">
@@ -411,11 +431,12 @@
             </div>
         </div>
     </div>
-    
+
     <div class="footer">
         Made with 💊 by <a href="#">ritalin.js</a>
     </div>
-    
+
+    <script src="eye.js"></script>
     <script src="app.js"></script>
 </body>
 </html>

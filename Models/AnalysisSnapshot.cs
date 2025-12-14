@@ -6,10 +6,6 @@ public record struct AnalysisSnapshot(
     HistogramBucket[] BucketsByTotalTime,
     VelocityBucket[] VelocityBuckets,
     int[] AnomalyIndices,
-    double PositiveMedianReview,
-    double NegativeMedianReview,
-    double PositiveMedianTotal,
-    double NegativeMedianTotal,
     int TotalPositive,
     int TotalNegative
 );

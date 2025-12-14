@@ -36,16 +36,22 @@ async function analyze() {
     const ws = new WebSocket(`${protocol}//${location.host}/ws/game/${appId}`);
 
     ws.onmessage = (e) => {
+        state.lastInteraction = Date.now();
         const snapshot = JSON.parse(e.data);
         updateChart(snapshot);
         updateTimelineData(snapshot, isFirstSnapshot);
         updateVelocityChart(snapshot);
         updateStats(snapshot);
         isFirstSnapshot = false;
+
+        setLoading(true);
     };
 
     isFirstSnapshot = true;
-    ws.onclose = () => console.log('Analysis complete');
+    ws.onclose = () => {
+        console.log('Analysis complete');
+        setLoading(false);
+    };
 }
 
 function extractAppId(input) {
@@ -53,13 +59,65 @@ function extractAppId(input) {
     return match ? match[1] : null;
 }
 
+function findInflectionPoint(snapshot) {
+    const buckets = snapshot.bucketsByReviewTime;
+    const months = timelineData.months;
+
+    for (let i = 0; i < months.length; i++) {
+        // compute medians for all data up to month i
+        const range = { from: months[0], to: months[i] };
+        const posMedian = computeMedianForRange(buckets, 'positive', range);
+        const negMedian = computeMedianForRange(buckets, 'negative', range);
+
+        if (negMedian > posMedian) {
+            return months[i]; // first month where it flipped
+        }
+    }
+    return null; // never flipped, game is healthy
+}
+
+function computeRefundHonesty(buckets) {
+    let negBeforeRefund = 0;
+    let negTotal = 0;
+
+    for (const bucket of buckets) {
+        const filtered = filterBucketByTime(bucket);
+        const neg = filtered.neg + filtered.uncNeg;
+        negTotal += neg;
+
+        if (bucket.maxPlaytime <= 120) {
+            negBeforeRefund += neg;
+        } else if (bucket.minPlaytime < 120) {
+            // bucket straddles refund line, interpolate
+            const ratio = (120 - bucket.minPlaytime) / (bucket.maxPlaytime - bucket.minPlaytime);
+            negBeforeRefund += neg * ratio;
+        }
+    }
+
+    return negTotal > 0 ? negBeforeRefund / negTotal : 0;
+}
+
+function hexToRgba(hex, alpha) {
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+function getColors() {
+    const styles = getComputedStyle(document.documentElement);
+    return {
+        positive: styles.getPropertyValue('--color-positive').trim(),
+        negative: styles.getPropertyValue('--color-negative').trim(),
+        uncertain: styles.getPropertyValue('--color-uncertain').trim()
+    };
+}
+
 function updateChart(snapshot) {
     currentSnapshot = snapshot;
 
     const showTotal = document.getElementById('showTotalTime').checked;
     const buckets = showTotal ? snapshot.bucketsByTotalTime : snapshot.bucketsByReviewTime;
-    const posMedian = showTotal ? snapshot.positiveMedianTotal : snapshot.positiveMedianReview;
-    const negMedian = showTotal ? snapshot.negativeMedianTotal : snapshot.negativeMedianReview;
 
     const labels = buckets.map(() => '');
     const hideAnomalies = document.getElementById('hideAnomalies').checked;
@@ -83,19 +141,23 @@ function updateChart(snapshot) {
         return hideAnomalies && anomalySet.has(i) ? 0 : -filtered.uncNeg;
     });
 
+    const colors = getColors();
+
     const positiveColors = buckets.map((_, i) =>
-        anomalySet.has(i) ? 'rgba(59, 130, 246, 0.3)' : 'rgba(59, 130, 246, 0.7)'
+        hexToRgba(colors.positive, anomalySet.has(i) ? 0.3 : 0.7)
     );
     const uncertainPosColors = buckets.map((_, i) =>
-        anomalySet.has(i) ? 'rgba(120, 120, 120, 0.3)' : 'rgba(120, 120, 120, 0.7)'
+        hexToRgba(colors.uncertain, anomalySet.has(i) ? 0.3 : 0.7)
     );
     const negativeColors = buckets.map((_, i) =>
-        anomalySet.has(i) ? 'rgba(249, 115, 22, 0.3)' : 'rgba(249, 115, 22, 0.7)'
+        hexToRgba(colors.negative, anomalySet.has(i) ? 0.3 : 0.7)
     );
     const uncertainNegColors = buckets.map((_, i) =>
-        anomalySet.has(i) ? 'rgba(120, 120, 120, 0.3)' : 'rgba(120, 120, 120, 0.7)'
+        hexToRgba(colors.uncertain, anomalySet.has(i) ? 0.3 : 0.7)
     );
 
+    const posMedian = computeMedian(buckets, 'positive');
+    const negMedian = computeMedian(buckets, 'negative');
     const annotations = buildMedianAnnotations(posMedian, negMedian, buckets);
     if (!currentGameInfo?.isFree) {
         annotations.refundLine = {
@@ -175,7 +237,8 @@ function updateChart(snapshot) {
 }
 
 function updateVelocityChart(snapshot) {
-    const labels = ['Quit', '<25%', '25-50%', '50-100%', '2x', '3x+'];
+    const labels = ['~1x', '1.25x', '1.5x', '2x', '3x+'];
+    const colors = getColors();
 
     const positive = snapshot.velocityBuckets.map(b => {
         const filtered = filterVelocityBucketByTime(b);
@@ -200,10 +263,10 @@ function updateVelocityChart(snapshot) {
             data: {
                 labels,
                 datasets: [
-                    { label: 'Positive', data: positive, backgroundColor: 'rgba(59, 130, 246, 0.7)', stack: 'stack' },
-                    { label: 'Uncertain (Positive)', data: uncertainPos, backgroundColor: 'rgba(120, 120, 120, 0.7)', stack: 'stack' },
-                    { label: 'Negative', data: negative, backgroundColor: 'rgba(249, 115, 22, 0.7)', stack: 'stack' },
-                    { label: 'Uncertain (Negative)', data: uncertainNeg, backgroundColor: 'rgba(120, 120, 120, 0.7)', stack: 'stack' }
+                    { label: 'Positive', data: positive, backgroundColor: hexToRgba(colors.positive, 0.7), stack: 'stack' },
+                    { label: 'Uncertain (Positive)', data: uncertainPos, backgroundColor: hexToRgba(colors.uncertain, 0.7), stack: 'stack' },
+                    { label: 'Negative', data: negative, backgroundColor: hexToRgba(colors.negative, 0.7), stack: 'stack' },
+                    { label: 'Uncertain (Negative)', data: uncertainNeg, backgroundColor: hexToRgba(colors.uncertain, 0.7), stack: 'stack' }
                 ]
             },
             options: {
@@ -217,11 +280,36 @@ function updateVelocityChart(snapshot) {
         });
     } else {
         velocityChart.data.datasets[0].data = positive;
+        velocityChart.data.datasets[0].backgroundColor = hexToRgba(colors.positive, 0.7);
         velocityChart.data.datasets[1].data = uncertainPos;
+        velocityChart.data.datasets[1].backgroundColor = hexToRgba(colors.uncertain, 0.7);
         velocityChart.data.datasets[2].data = negative;
+        velocityChart.data.datasets[2].backgroundColor = hexToRgba(colors.negative, 0.7);
         velocityChart.data.datasets[3].data = uncertainNeg;
+        velocityChart.data.datasets[3].backgroundColor = hexToRgba(colors.uncertain, 0.7);
         velocityChart.update();
     }
+}
+
+function computeMedian(buckets, type) {
+    // build array of (playtime, count) for positive or negative
+    const values = [];
+
+    for (const bucket of buckets) {
+        const filtered = filterBucketByTime(bucket);
+        const midpoint = (bucket.minPlaytime + bucket.maxPlaytime) / 2;
+        const count = type === 'positive'
+            ? filtered.pos + filtered.uncPos
+            : filtered.neg + filtered.uncNeg;
+
+        for (let i = 0; i < count; i++) {
+            values.push(midpoint);
+        }
+    }
+
+    if (values.length === 0) return 0;
+    values.sort((a, b) => a - b);
+    return values[Math.floor(values.length / 2)];
 }
 
 function addCustomLabels(snapshot, buckets) {
@@ -247,12 +335,14 @@ function addCustomLabels(snapshot, buckets) {
 }
 
 function buildMedianAnnotations(posMedian, negMedian, buckets) {
+    const colors = getColors();
+
     return {
         posMedian: {
             type: 'line',
             xMin: findExactPosition(buckets, posMedian),
             xMax: findExactPosition(buckets, posMedian),
-            borderColor: 'rgba(59, 130, 246, 0.9)',
+            borderColor: hexToRgba(colors.positive, 0.9),
             borderWidth: 2,
             borderDash: [6, 4],
             label: {
@@ -260,7 +350,7 @@ function buildMedianAnnotations(posMedian, negMedian, buckets) {
                 content: `Positive: ${formatPlaytime(posMedian)}`,
                 position: 'end',
                 yAdjust: 30,
-                backgroundColor: 'rgba(30, 64, 175, 0.7)',
+                backgroundColor: hexToRgba(colors.positive, 0.7),
                 color: 'white'
             }
         },
@@ -268,7 +358,7 @@ function buildMedianAnnotations(posMedian, negMedian, buckets) {
             type: 'line',
             xMin: findExactPosition(buckets, negMedian),
             xMax: findExactPosition(buckets, negMedian),
-            borderColor: 'rgba(249, 115, 22, 0.9)',
+            borderColor: hexToRgba(colors.negative, 0.9),
             borderWidth: 2,
             borderDash: [6, 4],
             label: {
@@ -276,7 +366,7 @@ function buildMedianAnnotations(posMedian, negMedian, buckets) {
                 content: `Negative: ${formatPlaytime(negMedian)}`,
                 position: 'start',
                 yAdjust: -30,
-                backgroundColor: 'rgba(154, 52, 18, 0.7)',
+                backgroundColor: hexToRgba(colors.negative, 0.7),
                 color: 'white'
             }
         }
@@ -323,10 +413,11 @@ function formatPlaytime(minutes) {
 
 function updateStats(snapshot) {
     const showTotal = document.getElementById('showTotalTime').checked;
-    const posMedian = showTotal ? snapshot.positiveMedianTotal : snapshot.positiveMedianReview;
-    const negMedian = showTotal ? snapshot.negativeMedianTotal : snapshot.negativeMedianReview;
-
     const buckets = showTotal ? snapshot.bucketsByTotalTime : snapshot.bucketsByReviewTime;
+
+    const posMedian = computeMedian(buckets, 'positive');
+    const negMedian = computeMedian(buckets, 'negative');
+
     let totalPos = 0, totalNeg = 0;
     for (const bucket of buckets) {
         const filtered = filterBucketByTime(bucket);
@@ -408,6 +499,7 @@ function updateTimelineData(snapshot, reset = false) {
 function drawTimeline() {
     const w = timelineCanvas.width;
     const h = timelineCanvas.height;
+    const colors = getColors();
 
     timelineCtx.clearRect(0, 0, w, h);
 
@@ -434,24 +526,24 @@ function drawTimeline() {
 
         let y = chartH;
 
-        // blue on bottom (positive)
-        timelineCtx.fillStyle = 'rgba(59, 130, 246, 0.7)';
-        timelineCtx.fillRect(i * barW, y - posH, barW - 1, posH);
-        y -= posH;
+        // negative on bottom
+        timelineCtx.fillStyle = colors.negative;
+        timelineCtx.fillRect(i * barW, y - negH, barW - 1, negH);
+        y -= negH;
 
-        // gray (uncertain positive)
-        timelineCtx.fillStyle = 'rgba(120, 120, 120, 0.7)';
-        timelineCtx.fillRect(i * barW, y - uncPosH, barW - 1, uncPosH);
-        y -= uncPosH;
-
-        // gray (uncertain negative)
-        timelineCtx.fillStyle = 'rgba(120, 120, 120, 0.7)';
+        // uncertain negative
+        timelineCtx.fillStyle = colors.uncertain;
         timelineCtx.fillRect(i * barW, y - uncNegH, barW - 1, uncNegH);
         y -= uncNegH;
 
-        // orange on top (negative)
-        timelineCtx.fillStyle = 'rgba(249, 115, 22, 0.7)';
-        timelineCtx.fillRect(i * barW, y - negH, barW - 1, negH);
+        // uncertain positive
+        timelineCtx.fillStyle = colors.uncertain;
+        timelineCtx.fillRect(i * barW, y - uncPosH, barW - 1, uncPosH);
+        y -= uncPosH;
+
+        // positive on top
+        timelineCtx.fillStyle = colors.positive;
+        timelineCtx.fillRect(i * barW, y - posH, barW - 1, posH);
     }
 
     // selection outline

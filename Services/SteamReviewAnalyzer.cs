@@ -49,10 +49,6 @@ public record SteamReviewAnalyzer(IOptions<SteamReviewAnalyzer.Configuration> Op
             bucketsByTotal,
             velocityBuckets,
             anomalies,
-            Median(positiveReviews.Select(r => r.TimePlayedAtReview.TotalMinutes)),
-            Median(negativeReviews.Select(r => r.TimePlayedAtReview.TotalMinutes)),
-            Median(positiveReviews.Select(r => r.TimePlayedInTotal.TotalMinutes)),
-            Median(negativeReviews.Select(r => r.TimePlayedInTotal.TotalMinutes)),
             positiveReviews.Count,
             negativeReviews.Count
         );
@@ -184,11 +180,5 @@ public record SteamReviewAnalyzer(IOptions<SteamReviewAnalyzer.Configuration> Op
         var atReview = r.TimePlayedAtReview.TotalMinutes;
         if (atReview == 0) return 0;
         return (r.TimePlayedInTotal.TotalMinutes - atReview) / atReview;
-    }
-
-    private static double Median(IEnumerable<double> values)
-    {
-        var list = values.ToList();
-        return list.Count > 0 ? list.OrderBy(x => x).ElementAt(list.Count / 2) : 0;
     }
 }
