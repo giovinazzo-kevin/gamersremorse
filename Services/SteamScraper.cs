@@ -19,6 +19,7 @@ public record SteamScraper(IOptions<SteamScraper.Configuration> Options, IHttpCl
         public bool FilterOffTopicActivity { get; set; } = false;
         public long MaxDayRange { get; set; } = 9223372036854775807;
         public int RateLimitMs { get; set; } = 500;
+        public int NumPerPage { get; set; } = 100;
     }
     
     public async Task<SteamAppInfo?> FetchAppInfo(AppId appId, CancellationToken cancellationToken = default)
@@ -39,6 +40,7 @@ public record SteamScraper(IOptions<SteamScraper.Configuration> Options, IHttpCl
         query = QueryHelpers.AddQueryString(query, "filter_offtopic_activity", Options.Value.FilterOffTopicActivity ? "1" : "0");
         query = QueryHelpers.AddQueryString(query, "purchase_type", Options.Value.PurchaseType);
         query = QueryHelpers.AddQueryString(query, "review_type", Options.Value.ReviewType);
+        query = QueryHelpers.AddQueryString(query, "num_per_page", Options.Value.NumPerPage.ToString());
         query = QueryHelpers.AddQueryString(query, "json", "1");
 
         var (cursor, nextCursor) = ("", "*");

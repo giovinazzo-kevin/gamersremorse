@@ -33,11 +33,25 @@ const Metrics = {
         },
         {
             id: 'EXTRACTIVE',
-            // Negatives play 30%+ longer before reviewing - game hides its problems
-            condition: (m) => m.medianRatio > 1.3,
-            reason: (m) => `Negatives at ${Math.round(m.negMedianReview / 60)}h vs positives at ${Math.round(m.posMedianReview / 60)}h (${Math.round((m.medianRatio - 1) * 100)}% longer)`,
+            // Significant mass of negatives at high playtime
+            // Not just outliers - actual pattern of people getting trapped
+            condition: (m) => m.medianRatio > 1.3 
+                && m.negativeRatio > 0.20  // At least 20% negative overall
+                && m.temporalDriftZ <= 1,
+            reason: (m) => `${Math.round(m.negativeRatio * 100)}% negative at ${Math.round(m.negMedianReview / 60)}h (${Math.round((m.medianRatio - 1) * 100)}% longer than positives)`,
             severity: (m) => Math.min(0.3, (m.medianRatio - 1) * 0.3),
             color: '#cc4400'
+        },
+        {
+            id: 'ENSHITTIFIED',
+            // Game got worse: sentiment declined AND now shows extraction pattern
+            // The extraction pattern is ACQUIRED, not designed
+            condition: (m) => m.medianRatio > 1.3 
+                && m.negativeRatio > 0.20
+                && m.temporalDriftZ > 1,
+            reason: (m) => `Was good, got ruined: sentiment ${Math.round(m.firstHalfNegRatio * 100)}% → ${Math.round(m.secondHalfNegRatio * 100)}% negative, ${Math.round(m.negativeRatio * 100)}% now trapped`,
+            severity: (m) => Math.min(0.35, (m.medianRatio - 1) * 0.3 + m.temporalDriftZ * 0.05),
+            color: '#8B4513'
         },
         {
             id: 'PREDATORY',
@@ -120,8 +134,8 @@ const Metrics = {
         },
         {
             id: 'HONEYMOON',
-            // Sentiment got worse: second half 1+ stddev more negative than first half
-            condition: (m) => m.temporalDriftZ > 1,
+            // Sentiment got worse BUT not extractive - game is honest about getting worse
+            condition: (m) => m.temporalDriftZ > 1 && m.medianRatio <= 1.3,
             reason: (m) => `Sentiment declined: ${Math.round(m.firstHalfNegRatio * 100)}% → ${Math.round(m.secondHalfNegRatio * 100)}% negative`,
             severity: 0.1,
             color: '#DAA520'
@@ -334,6 +348,9 @@ const Metrics = {
         const medianRatio = posMedianReview > 0 ? negMedianReview / posMedianReview : 1;
         const stockholmIndex = negMedianReview > 0 ? negMedianTotal / negMedianReview : 1;
         const refundData = isFree ? null : this.computeRefundHonesty(buckets, organicFilter);
+        
+        // Bimodality detection for negatives
+        const negBimodal = this.detectBimodality(buckets, organicFilter);
 
         // === STDDEV-BASED METRICS ===
         
@@ -377,6 +394,7 @@ const Metrics = {
             stockholmIndex,
             refundPosRate: refundData?.posRate ?? null,
             refundNegRate: refundData?.negRate ?? null,
+            negBimodal,
             confidence,
             anomalyDensity,
             isFree,
@@ -465,6 +483,54 @@ const Metrics = {
         const stddev = Math.sqrt(variance);
         
         return { mean, median, stddev, p95 };
+    },
+
+    /**
+     * Detect bimodal distribution in negatives
+     * Extraction signature: some bounce early (<20h), some get trapped late (>100h)
+     * Both clusters need significant mass (>15% each) to count as bimodal
+     */
+    detectBimodality(buckets, filter) {
+        const earlyThreshold = 20 * 60;  // 20 hours in minutes
+        const lateThreshold = 100 * 60;  // 100 hours in minutes
+        const minClusterRatio = 0.15;    // Each cluster needs 15%+ of negatives
+        
+        let earlyCount = 0;
+        let lateCount = 0;
+        let totalNeg = 0;
+        
+        for (const bucket of buckets) {
+            const filtered = this.filterBucket(bucket, filter);
+            const neg = filtered.neg + filtered.uncNeg;
+            totalNeg += neg;
+            
+            const midpoint = (bucket.minPlaytime + bucket.maxPlaytime) / 2;
+            
+            if (midpoint < earlyThreshold) {
+                earlyCount += neg;
+            } else if (midpoint > lateThreshold) {
+                lateCount += neg;
+            }
+        }
+        
+        if (totalNeg < 50) {
+            return { isBimodal: false, earlyRatio: 0, lateRatio: 0, totalNeg };
+        }
+        
+        const earlyRatio = earlyCount / totalNeg;
+        const lateRatio = lateCount / totalNeg;
+        
+        // Bimodal if both clusters have significant mass
+        const isBimodal = earlyRatio >= minClusterRatio && lateRatio >= minClusterRatio;
+        
+        return {
+            isBimodal,
+            earlyRatio,
+            lateRatio,
+            earlyCount,
+            lateCount,
+            totalNeg
+        };
     },
 
     /**
