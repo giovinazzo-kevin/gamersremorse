@@ -731,7 +731,7 @@ function updateMetrics(snapshot) {
             </ul>
             <div class="metrics-raw">
                 Median ratio: ${currentMetrics.medianRatio.toFixed(2)} |
-                Refund honesty: ${currentMetrics.refundHonesty !== null ? Math.round(currentMetrics.refundHonesty * 100) + '%' : 'N/A (F2P)'} |
+                Refund honesty: ${currentMetrics.refundNegRate !== null ? Math.round(currentMetrics.refundNegRate * 100) + '%' : 'N/A (F2P)'} |
                 Stockholm: ${currentMetrics.stockholmIndex.toFixed(2)}x |
                 Confidence: ${Math.round(currentMetrics.confidence * 100)}%
                 <br>

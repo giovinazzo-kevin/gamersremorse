@@ -34,7 +34,7 @@ const Metrics = {
         {
             id: 'EXTRACTIVE',
             // Negatives play 30%+ longer before reviewing - game hides its problems
-            condition: (m) => m.medianRatio > 1.3 && m.negativeRatio > 0.15,
+            condition: (m) => m.medianRatio > 1.3,
             reason: (m) => `Negatives at ${Math.round(m.negMedianReview / 60)}h vs positives at ${Math.round(m.posMedianReview / 60)}h (${Math.round((m.medianRatio - 1) * 100)}% longer)`,
             severity: (m) => Math.min(0.3, (m.medianRatio - 1) * 0.3),
             color: '#cc4400'
@@ -78,11 +78,19 @@ const Metrics = {
             color: '#8B0000'
         },
         {
+            id: 'BAD',
+            // Significant negativity, negatives aren't being trapped (knew fast or same time)
+            condition: (m) => m.negativeRatio > 0.35 && m.medianRatio <= 1.0 && m.positiveRatio < 0.80,
+            reason: (m) => `${Math.round(m.negativeRatio * 100)}% negative at ${Math.round(m.negMedianReview / 60)}h - positive median isn't any better (${Math.round(m.posMedianReview / 60)}h)`,
+            severity: 0.15,
+            color: '#a04030'
+        },
+        {
             id: 'REFUND_TRAP',
-            // Less than 10% of negative reviews before 2h refund window
-            // (compared to where you'd expect them based on positive distribution)
-            condition: (m) => m.refundHonesty !== null && m.refundHonesty < 0.10 && m.negativeRatio > 0.15,
-            reason: (m) => `Only ${Math.round(m.refundHonesty * 100)}% of negatives before 2h refund window`,
+            // Positives review early, but negatives don't
+            // At least 20% of positives before 2h, but less than 10% of negatives
+            condition: (m) => m.refundPosRate !== null && m.refundPosRate >= 0.20 && m.refundNegRate < 0.10 && m.negativeRatio > 0.15,
+            reason: (m) => `${Math.round(m.refundPosRate * 100)}% of positives before 2h, but only ${Math.round(m.refundNegRate * 100)}% of negatives`,
             severity: 0.15,
             color: '#c0392b'
         },
@@ -95,9 +103,9 @@ const Metrics = {
         
         {
             id: 'DEAD',
-            // End-of-period activity 1+ stddev below the period's average monthly activity
-            condition: (m) => m.windowEndActivityZ < -1 && m.total > 500,
-            reason: (m) => `End-of-period activity ${Math.abs(m.windowEndActivityZ).toFixed(1)}σ below average`,
+            // Was alive, now dead - activity declined from earlier in window
+            condition: (m) => m.isEndDead,
+            reason: (m) => `Activity declined - tail end is dead`,
             severity: 0.15,
             color: '#444'
         },
@@ -105,7 +113,7 @@ const Metrics = {
             id: 'CULT',
             // Fat tail: 2x+ more players at extreme playtimes than normal distribution predicts
             // AND game is struggling or small
-            condition: (m) => m.tailRatio > 0.05 && (m.windowEndActivityZ < -0.5 || m.total < 2000),
+            condition: (m) => m.tailRatio > 0.05 && (m.isEndDead || m.total < 2000),
             reason: (m) => `${Math.round(m.tailRatio * 100)}% at extreme playtimes (expected ~2.5%)`,
             severity: 0,
             color: '#8e44ad'
@@ -226,19 +234,26 @@ const Metrics = {
         },
         {
             id: 'REVIEW_BOMBED',
-            // Massive negative spike AND it's bigger than any positive spike
-            // Z-score already weighted by launch decay (early spikes discounted)
-            condition: (m) => m.negativeBombZ > 3 && m.negativeBombZ >= m.positiveBombZ && (m.negativeBombCount / m.total) >= 0.10 && m.negativeBombCount >= 100,
-            reason: (m) => `Negative surge in ${m.negativeBombMonth}: ${Math.round(m.negativeBombCount / m.total * 100)}% of reviews (${m.negativeBombMultiple.toFixed(1)}x normal)`,
+            // Any significant negative spike(s) detected
+            condition: (m) => m.negativeSpikes?.length > 0 && m.negativeSpikes.some(s => s.z >= 3 && s.count >= 50),
+            reason: (m) => {
+                const significant = m.negativeSpikes.filter(s => s.z >= 3 && s.count >= 50);
+                const totalCount = significant.reduce((sum, s) => sum + s.count, 0);
+                const months = significant.map(s => s.month).join(', ');
+                return `${significant.length} negative surge${significant.length > 1 ? 's' : ''} (${months}): ${totalCount} reviews excluded`;
+            },
             severity: 0,
             color: '#ff6600'
         },
         {
-            id: 'REVIEW_BRIGADED',
-            // Massive positive spike AND it's bigger than any negative spike
-            // Z-score already weighted by launch decay (early spikes discounted)
-            condition: (m) => m.positiveBombZ > 3 && m.positiveBombZ > m.negativeBombZ && (m.positiveBombCount / m.total) >= 0.10 && m.positiveBombCount >= 100,
-            reason: (m) => `Positive surge in ${m.positiveBombMonth}: ${Math.round(m.positiveBombCount / m.total * 100)}% of reviews (${m.positiveBombMultiple.toFixed(1)}x normal)`,
+            id: 'SURGE',
+            // Positive spikes - could be viral moment, sale, streamer attention
+            condition: (m) => m.positiveSpikes?.length > 0 && m.positiveSpikes.some(s => s.z >= 4 && s.count >= 100 && s.multiple >= 3),
+            reason: (m) => {
+                const significant = m.positiveSpikes.filter(s => s.z >= 4 && s.count >= 100 && s.multiple >= 3);
+                const months = significant.map(s => s.month).join(', ');
+                return `Viral moment in ${months} (excluded from stats)`;
+            },
             severity: 0,
             color: '#00cc66'
         }
@@ -253,21 +268,34 @@ const Metrics = {
         const filter = options.timelineFilter || null;
         const isFree = options.isFree || false;
 
-        // Detect spikes FIRST (on unfiltered data within timeline)
-        const spikeData = this.detectSpikes(buckets, filter);
+        // Detect spikes on FULL timeline (not filtered window)
+        // A spike is a spike regardless of what slice you're viewing
+        const spikeData = this.detectSpikes(buckets, null);
         
-        // Build list of months to exclude (significant spikes)
+        // Filter spikes to only those within the selected window
+        const filterSpikesToWindow = (spikes) => {
+            if (!filter || !filter.from) return spikes;
+            return spikes.filter(s => s.month >= filter.from && s.month <= filter.to);
+        };
+        
+        const windowNegativeSpikes = filterSpikesToWindow(spikeData.negativeSpikes);
+        const windowPositiveSpikes = filterSpikesToWindow(spikeData.positiveSpikes);
+        
+        // Build list of months to exclude (only spikes within current window)
         const excludeMonths = [];
-        if (spikeData.negativeBombZ > 3 && spikeData.negativeBombCount > 0) {
-            const total = this.computeCounts(buckets, filter).total;
-            if (spikeData.negativeBombCount / total >= 0.10) {
-                excludeMonths.push(spikeData.negativeBombMonth);
+        const total = this.computeCounts(buckets, filter).total;
+        
+        // Exclude negative spikes above threshold
+        for (const spike of windowNegativeSpikes) {
+            if (spike.z >= 3 && spike.count >= 50) {
+                excludeMonths.push(spike.month);
             }
         }
-        if (spikeData.positiveBombZ > 3 && spikeData.positiveBombCount > 0) {
-            const total = this.computeCounts(buckets, filter).total;
-            if (spikeData.positiveBombCount / total >= 0.10) {
-                excludeMonths.push(spikeData.positiveBombMonth);
+        
+        // Exclude positive spikes only if they meet stricter threshold
+        for (const spike of windowPositiveSpikes) {
+            if (spike.z >= 4 && spike.count >= 100 && spike.multiple >= 3) {
+                excludeMonths.push(spike.month);
             }
         }
         
@@ -278,11 +306,11 @@ const Metrics = {
 
         // Review counts (organic)
         const counts = this.computeCounts(buckets, organicFilter);
-        const total = Math.max(1, counts.total);
+        const organicTotal = Math.max(1, counts.total);
         
         // Mass ratios
-        const positiveRatio = (counts.positive + counts.uncertainPositive) / total;
-        const negativeRatio = (counts.negative + counts.uncertainNegative) / total;
+        const positiveRatio = (counts.positive + counts.uncertainPositive) / organicTotal;
+        const negativeRatio = (counts.negative + counts.uncertainNegative) / organicTotal;
 
         // Playtime distributions (organic)
         const posPlaytimes = this.getPlaytimeArray(buckets, 'positive', organicFilter);
@@ -305,7 +333,7 @@ const Metrics = {
         // === RATIO-BASED METRICS ===
         const medianRatio = posMedianReview > 0 ? negMedianReview / posMedianReview : 1;
         const stockholmIndex = negMedianReview > 0 ? negMedianTotal / negMedianReview : 1;
-        const refundHonesty = isFree ? null : this.computeRefundHonesty(buckets, organicFilter);
+        const refundData = isFree ? null : this.computeRefundHonesty(buckets, organicFilter);
 
         // === STDDEV-BASED METRICS ===
         
@@ -318,19 +346,18 @@ const Metrics = {
         // p95 for addictive check
         const p95Playtime = posStats.p95;
         
-        // Temporal drift (with stddev context) - use original filter, drift IS about the bomb
-        const temporalData = this.computeTemporalDrift(buckets, filter);
+        // Temporal drift (with stddev context) - use organic filter to exclude spikes
+        const temporalData = this.computeTemporalDrift(buckets, organicFilter);
         const temporalDriftZ = temporalData.stddev > 0 
             ? (temporalData.secondHalfNegRatio - temporalData.firstHalfNegRatio) / temporalData.stddev 
             : 0;
         
-        // Window end activity (with stddev context)
+        // Window end activity (percentile-based)
         const activityData = this.computeWindowEndActivity(buckets, filter);
-        const windowEndActivityZ = activityData.stddev > 0 
-            ? (activityData.endActivity - activityData.meanActivity) / activityData.stddev 
-            : 0;
+        const isEndDead = activityData.isInBottomQuartile;
         
-        // Revival detection (180/360)
+        // Revival detection - use WINDOW, not full timeline
+        // If revival happened outside the window you're viewing, don't show it
         const revivalData = this.detectRevival(buckets, filter);
 
         // Confidence
@@ -348,7 +375,8 @@ const Metrics = {
             negMedianTotal,
             medianRatio,
             stockholmIndex,
-            refundHonesty,
+            refundPosRate: refundData?.posRate ?? null,
+            refundNegRate: refundData?.negRate ?? null,
             confidence,
             anomalyDensity,
             isFree,
@@ -364,7 +392,7 @@ const Metrics = {
             firstHalfNegRatio: temporalData.firstHalfNegRatio,
             secondHalfNegRatio: temporalData.secondHalfNegRatio,
             temporalDriftZ,
-            windowEndActivityZ,
+            isEndDead,
             
             // Revival (180/360)
             hasRevival: revivalData.hasRevival,
@@ -373,15 +401,17 @@ const Metrics = {
             revivalSentimentChange: revivalData.revivalSentimentChange,
             isStillAlive: revivalData.isStillAlive,
             
-            // Spikes (z-scores already launch-weighted)
-            negativeBombZ: spikeData.negativeBombZ,
-            negativeBombMonth: spikeData.negativeBombMonth,
-            negativeBombMultiple: spikeData.negativeBombMultiple,
-            negativeBombCount: spikeData.negativeBombCount,
-            positiveBombZ: spikeData.positiveBombZ,
-            positiveBombMonth: spikeData.positiveBombMonth,
-            positiveBombMultiple: spikeData.positiveBombMultiple,
-            positiveBombCount: spikeData.positiveBombCount,
+            // Spikes (window-filtered for display, detected on full timeline)
+            negativeSpikes: windowNegativeSpikes,
+            positiveSpikes: windowPositiveSpikes,
+            negativeBombZ: windowNegativeSpikes[0]?.z || 0,
+            negativeBombMonth: windowNegativeSpikes[0]?.month || null,
+            negativeBombMultiple: windowNegativeSpikes[0]?.multiple || 0,
+            negativeBombCount: windowNegativeSpikes[0]?.count || 0,
+            positiveBombZ: windowPositiveSpikes[0]?.z || 0,
+            positiveBombMonth: windowPositiveSpikes[0]?.month || null,
+            positiveBombMultiple: windowPositiveSpikes[0]?.multiple || 0,
+            positiveBombCount: windowPositiveSpikes[0]?.count || 0,
             excludedMonths: excludeMonths
         };
 
@@ -438,7 +468,8 @@ const Metrics = {
     },
 
     /**
-     * Compute temporal drift with its own statistical context
+     * Compute temporal drift - compare RECENT (last 12 months) vs EARLIER
+     * This catches "game is getting worse NOW" better than arbitrary halves
      */
     computeTemporalDrift(buckets, filter) {
         const allMonths = new Set();
@@ -450,7 +481,12 @@ const Metrics = {
         let sortedMonths = [...allMonths].sort();
         
         if (filter) {
-            sortedMonths = sortedMonths.filter(m => m >= filter.from && m <= filter.to);
+            sortedMonths = sortedMonths.filter(m => {
+                if (filter.from && m < filter.from) return false;
+                if (filter.to && m > filter.to) return false;
+                if (filter.excludeMonths && filter.excludeMonths.includes(m)) return false;
+                return true;
+            });
         }
         
         if (sortedMonths.length < 6) {
@@ -470,18 +506,20 @@ const Metrics = {
             }
         }
         
-        const midpoint = Math.floor(sortedMonths.length / 2);
-        const firstHalf = { from: sortedMonths[0], to: sortedMonths[midpoint - 1] };
-        const secondHalf = { from: sortedMonths[midpoint], to: sortedMonths[sortedMonths.length - 1] };
+        // Split: last 12 months vs everything before
+        const recentMonths = 12;
+        const cutoff = Math.max(0, sortedMonths.length - recentMonths);
+        const earlierPeriod = { from: sortedMonths[0], to: sortedMonths[cutoff - 1] || sortedMonths[0], excludeMonths: filter?.excludeMonths };
+        const recentPeriod = { from: sortedMonths[cutoff], to: sortedMonths[sortedMonths.length - 1], excludeMonths: filter?.excludeMonths };
 
-        const firstCounts = this.computeCounts(buckets, firstHalf);
-        const secondCounts = this.computeCounts(buckets, secondHalf);
+        const earlierCounts = this.computeCounts(buckets, earlierPeriod);
+        const recentCounts = this.computeCounts(buckets, recentPeriod);
         
-        const firstHalfNegRatio = firstCounts.total > 0 
-            ? (firstCounts.negative + firstCounts.uncertainNegative) / firstCounts.total 
+        const firstHalfNegRatio = earlierCounts.total > 0 
+            ? (earlierCounts.negative + earlierCounts.uncertainNegative) / earlierCounts.total 
             : 0;
-        const secondHalfNegRatio = secondCounts.total > 0 
-            ? (secondCounts.negative + secondCounts.uncertainNegative) / secondCounts.total 
+        const secondHalfNegRatio = recentCounts.total > 0 
+            ? (recentCounts.negative + recentCounts.uncertainNegative) / recentCounts.total 
             : 0;
         
         const ratioStats = this.computeStats(monthlyRatios);
@@ -494,9 +532,12 @@ const Metrics = {
     },
 
     /**
-     * Compute window end activity with statistical context
+     * Get monthly activity data from buckets
+     * @param buckets - histogram buckets
+     * @param filter - optional filter for window
+     * @returns { months: string[], activity: {month, count, pos, neg}[], p25: number, p75: number }
      */
-    computeWindowEndActivity(buckets, filter) {
+    getMonthlyActivityData(buckets, filter = null) {
         const allMonths = new Set();
         for (const bucket of buckets) {
             for (const month of Object.keys(bucket.positiveByMonth || {})) allMonths.add(month);
@@ -507,167 +548,154 @@ const Metrics = {
         
         let sortedMonths = [...allMonths].sort();
         
-        if (filter) {
-            sortedMonths = sortedMonths.filter(m => m >= filter.from && m <= filter.to);
-        }
-        
-        if (sortedMonths.length < 5) {
-            return { endActivity: 1, meanActivity: 1, stddev: 0 };
-        }
-        
-        // Monthly activity counts
-        const monthlyActivity = [];
-        for (const month of sortedMonths) {
-            let count = 0;
-            for (const bucket of buckets) {
-                count += (bucket.positiveByMonth?.[month] || 0);
-                count += (bucket.negativeByMonth?.[month] || 0);
-                count += (bucket.uncertainPositiveByMonth?.[month] || 0);
-                count += (bucket.uncertainNegativeByMonth?.[month] || 0);
-            }
-            monthlyActivity.push(count);
-        }
-        
-        const activityStats = this.computeStats(monthlyActivity);
-        
-        // Last 20% of months
-        const cutoffIdx = Math.floor(sortedMonths.length * 0.8);
-        const endMonthsActivity = monthlyActivity.slice(cutoffIdx);
-        const endActivity = endMonthsActivity.reduce((a, b) => a + b, 0) / endMonthsActivity.length;
-        
-        return {
-            endActivity,
-            meanActivity: activityStats.mean,
-            stddev: activityStats.stddev || 1
-        };
-    },
-
-    /**
-     * Detect revival pattern - game died, came back
-     * Returns { hasRevival, firstWaveNegRatio, lastWaveNegRatio, revivalSentimentChange }
-     */
-    detectRevival(buckets, filter) {
-        // Get monthly activity
-        const allMonths = new Set();
-        for (const bucket of buckets) {
-            for (const month of Object.keys(bucket.positiveByMonth || {})) allMonths.add(month);
-            for (const month of Object.keys(bucket.negativeByMonth || {})) allMonths.add(month);
-        }
-        
-        let sortedMonths = [...allMonths].sort();
         if (filter && filter.from) {
             sortedMonths = sortedMonths.filter(m => m >= filter.from && m <= filter.to);
         }
         
-        if (sortedMonths.length < 6) {
-            return { hasRevival: false };
-        }
-        
-        // Calculate monthly totals
-        const monthlyData = sortedMonths.map(month => {
+        const activity = sortedMonths.map(month => {
             let pos = 0, neg = 0;
             for (const bucket of buckets) {
                 pos += (bucket.positiveByMonth?.[month] || 0) + (bucket.uncertainPositiveByMonth?.[month] || 0);
                 neg += (bucket.negativeByMonth?.[month] || 0) + (bucket.uncertainNegativeByMonth?.[month] || 0);
             }
-            return { month, pos, neg, total: pos + neg };
+            return { month, pos, neg, count: pos + neg };
         });
         
-        // Find average activity
-        const avgActivity = monthlyData.reduce((sum, m) => sum + m.total, 0) / monthlyData.length;
-        
-        // Identify waves (contiguous periods above 50% of average)
-        const threshold = avgActivity * 0.5;
-        const deathThreshold = avgActivity * 0.15; // Must drop to 15% of average to count as "dead"
-        const waves = [];
-        let currentWave = null;
-        
-        for (const data of monthlyData) {
-            if (data.total >= threshold) {
-                if (!currentWave) {
-                    currentWave = { months: [], pos: 0, neg: 0 };
-                }
-                currentWave.months.push(data.month);
-                currentWave.pos += data.pos;
-                currentWave.neg += data.neg;
-            } else {
-                if (currentWave && currentWave.months.length >= 2) {
-                    waves.push(currentWave);
-                }
-                currentWave = null;
-            }
-        }
-        if (currentWave && currentWave.months.length >= 2) {
-            waves.push(currentWave);
+        if (activity.length === 0) {
+            return { months: [], activity: [], p25: 0, p75: 0 };
         }
         
-        // Need at least 2 waves separated by gap
-        if (waves.length < 2) {
+        const sortedByCount = [...activity].sort((a, b) => a.count - b.count);
+        const p10 = sortedByCount[Math.floor(sortedByCount.length * 0.10)].count;
+        const p25 = sortedByCount[Math.floor(sortedByCount.length * 0.25)].count;
+        const p75 = sortedByCount[Math.floor(sortedByCount.length * 0.75)].count;
+        
+        return { months: sortedMonths, activity, p10, p25, p75 };
+    },
+
+    /**
+     * Compute window end activity - detect DYING (was alive, now dead)
+     * Compare end of window to earlier activity in same window
+     */
+    computeWindowEndActivity(buckets, filter) {
+        const windowData = this.getMonthlyActivityData(buckets, filter);
+        
+        if (windowData.activity.length < 6) {
+            return { endActivity: 1, startActivity: 1, isInBottomQuartile: false };
+        }
+        
+        const activity = windowData.activity;
+        
+        // First half activity (average)
+        const firstHalfCount = Math.floor(activity.length / 2);
+        const firstHalf = activity.slice(0, firstHalfCount);
+        const startActivity = firstHalf.reduce((sum, m) => sum + m.count, 0) / firstHalf.length;
+        
+        // Last 3 months activity (average)
+        const endMonths = activity.slice(-3);
+        const endActivity = endMonths.reduce((sum, m) => sum + m.count, 0) / endMonths.length;
+        
+        // Dead if end activity is less than 20% of start activity (80%+ decline)
+        const isInBottomQuartile = startActivity > 0 && endActivity < startActivity * 0.2;
+        
+        return {
+            endActivity,
+            startActivity,
+            isInBottomQuartile
+        };
+    },
+
+    /**
+     * Detect revival pattern - game died, came back
+     * Death = activity dropped to <20% of previous levels (consistent with DEAD logic)
+     */
+    detectRevival(buckets, filter) {
+        const windowData = this.getMonthlyActivityData(buckets, filter);
+        
+        if (windowData.activity.length < 6) {
             return { hasRevival: false };
         }
         
-        // Check for meaningful death gap between waves:
-        // - At least 3 months gap
-        // - Activity during gap must be below death threshold
-        let hasDeathGap = false;
-        for (let i = 0; i < waves.length - 1; i++) {
-            const lastMonthOfWave = waves[i].months[waves[i].months.length - 1];
-            const firstMonthOfNext = waves[i + 1].months[0];
-            const lastIdx = sortedMonths.indexOf(lastMonthOfWave);
-            const nextIdx = sortedMonths.indexOf(firstMonthOfNext);
+        const activity = windowData.activity;
+        
+        // Find death/revival pattern using relative decline
+        // Death = 3+ consecutive months at <20% of prior activity
+        // Revival = jump back to >50% of prior activity
+        let hasRevival = false;
+        let firstWaveData = { pos: 0, neg: 0 };
+        let lastWaveData = { pos: 0, neg: 0 };
+        let deathStartIdx = -1;
+        
+        // Calculate rolling average (3 month window) to smooth noise
+        const getAvg = (start, end) => {
+            const slice = activity.slice(start, end);
+            return slice.length > 0 ? slice.reduce((sum, m) => sum + m.count, 0) / slice.length : 0;
+        };
+        
+        // Look for death: activity drops to <20% of previous 6 month average
+        for (let i = 6; i < activity.length - 3; i++) {
+            const priorAvg = getAvg(i - 6, i);
+            const currentAvg = getAvg(i, i + 3);
             
-            if (nextIdx - lastIdx >= 3) {
-                // Check that gap months are actually dead (below death threshold)
-                const gapMonths = monthlyData.slice(lastIdx + 1, nextIdx);
-                const allDead = gapMonths.every(m => m.total < deathThreshold);
-                if (allDead && gapMonths.length >= 3) {
-                    hasDeathGap = true;
-                    break;
+            if (priorAvg > 0 && currentAvg < priorAvg * 0.2) {
+                // Found death, now look for revival
+                for (let j = i + 3; j < activity.length - 2; j++) {
+                    const revivalAvg = getAvg(j, j + 3);
+                    if (revivalAvg >= priorAvg * 0.5) {
+                        // Found revival
+                        hasRevival = true;
+                        deathStartIdx = i;
+                        
+                        // First wave = everything before death
+                        for (let k = 0; k < i; k++) {
+                            firstWaveData.pos += activity[k].pos;
+                            firstWaveData.neg += activity[k].neg;
+                        }
+                        // Last wave = from revival onwards
+                        for (let k = j; k < activity.length; k++) {
+                            lastWaveData.pos += activity[k].pos;
+                            lastWaveData.neg += activity[k].neg;
+                        }
+                        break;
+                    }
                 }
+                if (hasRevival) break;
             }
         }
         
-        if (!hasDeathGap) {
+        if (!hasRevival) {
             return { hasRevival: false };
         }
         
-        const firstWave = waves[0];
-        const lastWave = waves[waves.length - 1];
+        const firstWaveNegRatio = firstWaveData.neg / Math.max(1, firstWaveData.pos + firstWaveData.neg);
+        const lastWaveNegRatio = lastWaveData.neg / Math.max(1, lastWaveData.pos + lastWaveData.neg);
         
-        const firstWaveNegRatio = firstWave.neg / Math.max(1, firstWave.pos + firstWave.neg);
-        const lastWaveNegRatio = lastWave.neg / Math.max(1, lastWave.pos + lastWave.neg);
-        const revivalSentimentChange = lastWaveNegRatio - firstWaveNegRatio;
+        // Is it still alive? Same logic as DEAD - compare end to earlier post-revival
+        const postRevivalStart = deathStartIdx + 6; // rough estimate
+        const postRevivalActivity = activity.slice(postRevivalStart);
+        if (postRevivalActivity.length < 6) {
+            return { hasRevival: true, firstWaveNegRatio, lastWaveNegRatio, revivalSentimentChange: lastWaveNegRatio - firstWaveNegRatio, isStillAlive: true };
+        }
         
-        // Is the game still alive? Use same logic as DEAD tag
-        // Check if last 20% of months have activity 1+ stddev below average
-        const activityValues = monthlyData.map(d => d.total);
-        const meanActivity = activityValues.reduce((a, b) => a + b, 0) / activityValues.length;
-        const stddevActivity = Math.sqrt(
-            activityValues.reduce((sum, v) => sum + (v - meanActivity) ** 2, 0) / activityValues.length
-        );
-        
-        const cutoffIdx = Math.floor(monthlyData.length * 0.8);
-        const endMonths = monthlyData.slice(cutoffIdx);
-        const endActivity = endMonths.reduce((sum, d) => sum + d.total, 0) / Math.max(1, endMonths.length);
-        
-        // Alive if end activity is NOT 1+ stddev below average
-        const isStillAlive = stddevActivity > 0 
-            ? (endActivity - meanActivity) / stddevActivity > -1
-            : endActivity > 0;
+        const firstHalf = postRevivalActivity.slice(0, Math.floor(postRevivalActivity.length / 2));
+        const startActivity = firstHalf.reduce((sum, m) => sum + m.count, 0) / firstHalf.length;
+        const endMonths = activity.slice(-3);
+        const endActivity = endMonths.reduce((sum, m) => sum + m.count, 0) / endMonths.length;
+        const isStillAlive = startActivity === 0 || endActivity >= startActivity * 0.2;
         
         return {
             hasRevival: true,
             firstWaveNegRatio,
             lastWaveNegRatio,
-            revivalSentimentChange,
-            waveCount: waves.length,
+            revivalSentimentChange: lastWaveNegRatio - firstWaveNegRatio,
             isStillAlive
         };
     },
 
     /**
      * Detect review spikes (bombs or botting)
-     * A spike is a month with volume 3σ+ above the mean
+     * Uses LOCAL comparison: each month vs its ±3 month neighbors
+     * Returns ALL spikes above threshold, not just the biggest
      */
     detectSpikes(buckets, filter) {
         const allMonths = new Set();
@@ -683,14 +711,14 @@ const Metrics = {
         
         if (sortedMonths.length < 3) {
             return {
-                negativeBombZ: 0, negativeBombMonth: null, negativeBombMultiple: 0,
-                positiveBombZ: 0, positiveBombMonth: null, positiveBombMultiple: 0
+                negativeSpikes: [], positiveSpikes: [],
+                negativeBombZ: 0, negativeBombMonth: null, negativeBombMultiple: 0, negativeBombCount: 0,
+                positiveBombZ: 0, positiveBombMonth: null, positiveBombMultiple: 0, positiveBombCount: 0
             };
         }
         
         // Count monthly positives and negatives
-        const monthlyPos = [];
-        const monthlyNeg = [];
+        const monthlyData = [];
         
         for (const month of sortedMonths) {
             let pos = 0, neg = 0;
@@ -698,54 +726,81 @@ const Metrics = {
                 pos += (bucket.positiveByMonth?.[month] || 0) + (bucket.uncertainPositiveByMonth?.[month] || 0);
                 neg += (bucket.negativeByMonth?.[month] || 0) + (bucket.uncertainNegativeByMonth?.[month] || 0);
             }
-            monthlyPos.push({ month, count: pos });
-            monthlyNeg.push({ month, count: neg });
+            monthlyData.push({ month, pos, neg, total: pos + neg });
         }
         
-        // Find spikes
-        const findSpike = (monthlyData) => {
-            const counts = monthlyData.map(m => m.count);
-            const stats = this.computeStats(counts);
+        // Find ALL spikes using LOCAL comparison (rolling window) on TOTAL activity
+        const windowSize = 3; // +/-3 months = 7 month window
+        const spikeThreshold = 2.5; // Z-score threshold for spike detection
+        
+        const negativeSpikes = [];
+        const positiveSpikes = [];
+        
+        for (let i = 0; i < monthlyData.length; i++) {
+            const m = monthlyData[i];
             
-            let maxZ = 0;
-            let spikeMonth = null;
-            let spikeMultiple = 0;
-            let spikeCount = 0;
-            let spikeLaunchWeight = 0;
-            
-            for (let i = 0; i < monthlyData.length; i++) {
-                const m = monthlyData[i];
-                if (stats.stddev > 0 && stats.mean > 0) {
-                    const z = (m.count - stats.mean) / stats.stddev;
-                    // Exponential decay: month 0 = 0% weight, month 6 = 63%, month 12 = 86%, month 24 = 98%
-                    const launchWeight = 1 - Math.exp(-i / 6);
-                    const effectiveZ = z * launchWeight;
-                    
-                    if (effectiveZ > maxZ) {
-                        maxZ = effectiveZ;
-                        spikeMonth = m.month;
-                        spikeMultiple = m.count / stats.mean;
-                        spikeCount = m.count;
-                        spikeLaunchWeight = launchWeight;
-                    }
-                }
+            // Get neighbors (excluding self)
+            const neighbors = [];
+            for (let j = Math.max(0, i - windowSize); j <= Math.min(monthlyData.length - 1, i + windowSize); j++) {
+                if (j !== i) neighbors.push(monthlyData[j].total);
             }
             
-            return { z: maxZ, month: spikeMonth, multiple: spikeMultiple, count: spikeCount, launchWeight: spikeLaunchWeight };
-        };
+            if (neighbors.length < 2) continue;
+            
+            const localStats = this.computeStats(neighbors);
+            if (localStats.stddev === 0) continue;
+            
+            const z = localStats.stddev > 0 ? (m.total - localStats.mean) / localStats.stddev : 0;
+            
+            // Launch weight: discount early months (month 0 = 0%, month 6 = 63%, month 12 = 86%)
+            const launchWeight = 1 - Math.exp(-i / 6);
+            const effectiveZ = z * launchWeight;
+            
+            if (effectiveZ >= spikeThreshold) {
+                // Determine if this is a negative or positive spike based on sentiment
+                // >2/3 negative = review bomb, >2/3 positive = surge
+                const negRatio = m.total > 0 ? m.neg / m.total : 0;
+                const spikeData = {
+                    month: m.month,
+                    z: effectiveZ,
+                    rawZ: z,
+                    multiple: localStats.mean > 0 ? m.total / localStats.mean : m.total,
+                    count: m.total,
+                    negCount: m.neg,
+                    posCount: m.pos,
+                    negRatio,
+                    launchWeight
+                };
+                
+                if (negRatio > 2/3) {
+                    negativeSpikes.push(spikeData);
+                } else if (negRatio < 1/3) {
+                    positiveSpikes.push(spikeData);
+                }
+                // If between 1/3 and 2/3, it's mixed - not a bomb or surge, ignore it
+            }
+        }
         
-        const negSpike = findSpike(monthlyNeg);
-        const posSpike = findSpike(monthlyPos);
+        // Sort by Z-score descending
+        negativeSpikes.sort((a, b) => b.z - a.z);
+        positiveSpikes.sort((a, b) => b.z - a.z);
+        
+        // For backwards compat, also return the biggest spike in old format
+        const biggestNeg = negativeSpikes[0] || { z: 0, month: null, multiple: 0, count: 0 };
+        const biggestPos = positiveSpikes[0] || { z: 0, month: null, multiple: 0, count: 0 };
         
         return {
-            negativeBombZ: negSpike.z,
-            negativeBombMonth: negSpike.month,
-            negativeBombMultiple: negSpike.multiple,
-            negativeBombCount: negSpike.count,
-            positiveBombZ: posSpike.z,
-            positiveBombMonth: posSpike.month,
-            positiveBombMultiple: posSpike.multiple,
-            positiveBombCount: posSpike.count
+            negativeSpikes,
+            positiveSpikes,
+            // Legacy fields for biggest spike
+            negativeBombZ: biggestNeg.z,
+            negativeBombMonth: biggestNeg.month,
+            negativeBombMultiple: biggestNeg.multiple,
+            negativeBombCount: biggestNeg.count,
+            positiveBombZ: biggestPos.z,
+            positiveBombMonth: biggestPos.month,
+            positiveBombMultiple: biggestPos.multiple,
+            positiveBombCount: biggestPos.count
         };
     },
 
@@ -818,26 +873,33 @@ const Metrics = {
     },
 
     /**
-     * What percentage of negative reviews came before the 2h refund window?
+     * What percentage of positive/negative reviews came before the 2h refund window?
      */
     computeRefundHonesty(buckets, filter = null) {
-        let negBeforeRefund = 0;
-        let negTotal = 0;
+        let posBeforeRefund = 0, negBeforeRefund = 0;
+        let posTotal = 0, negTotal = 0;
 
         for (const bucket of buckets) {
             const filtered = this.filterBucket(bucket, filter);
+            const pos = filtered.pos + filtered.uncPos;
             const neg = filtered.neg + filtered.uncNeg;
+            posTotal += pos;
             negTotal += neg;
 
             if (bucket.maxPlaytime <= 120) {
+                posBeforeRefund += pos;
                 negBeforeRefund += neg;
             } else if (bucket.minPlaytime < 120) {
                 const ratio = (120 - bucket.minPlaytime) / (bucket.maxPlaytime - bucket.minPlaytime);
+                posBeforeRefund += pos * ratio;
                 negBeforeRefund += neg * ratio;
             }
         }
 
-        return negTotal > 0 ? negBeforeRefund / negTotal : 0.5;
+        return {
+            posRate: posTotal > 0 ? posBeforeRefund / posTotal : 0,
+            negRate: negTotal > 0 ? negBeforeRefund / negTotal : 0
+        };
     },
 
     /**
