@@ -67,6 +67,17 @@ public record SteamReviewRepository(IOptions<SteamReviewRepository.Configuration
         var targetCount = (int)(totalReviews * Options.Value.LazyRefreshTargetPercent);
         targetCount = Math.Clamp(targetCount, Options.Value.LazyRefreshMinItems, Options.Value.LazyRefreshMaxItems);
 
+        // calculate sentiment weights based on controversy
+        // sigmoid curve: stays ~1 until very extreme ratios, then ramps to 2
+        var positiveRatio = totalReviews > 0 ? (double)totalPositive / totalReviews : 0.5;
+        var distanceFrom50 = Math.Abs(positiveRatio - 0.5); // 0 at 50/50, 0.5 at 100/0
+        // sigmoid: 1 + 1/(1 + e^(-k*(x-midpoint)))
+        // k controls steepness, midpoint at 0.42 means only 92%+ games get weighted
+        var sigmoid = 1.0 / (1.0 + Math.Exp(-30 * (distanceFrom50 - 0.42)));
+        var majorityWeight = 1.0 + sigmoid;
+        var positiveWeight = positiveRatio >= 0.5 ? majorityWeight : 1.0;
+        var negativeWeight = positiveRatio < 0.5 ? majorityWeight : 1.0;
+
         var batch = new List<SteamReview>();
         var count = 0;
 
@@ -79,10 +90,19 @@ public record SteamReviewRepository(IOptions<SteamReviewRepository.Configuration
             _ => 1
         };
 
-        var enumerators = Languages
-            .Take(numLanguages)
-            .Select(lang => Scraper.FetchReviews(appId, "all", "all", null, lang, cancellationToken).GetAsyncEnumerator(cancellationToken))
-            .ToArray();
+        // for each language: all, positive, negative cursors
+        // weights determine how many reviews to pull from each cursor type
+        var enumeratorList = new List<(IAsyncEnumerator<SteamReview> Enumerator, double Weight)>();
+        foreach (var lang in Languages.Take(numLanguages))
+        {
+            enumeratorList.Add((Scraper.FetchReviews(appId, "all", "all", null, lang, cancellationToken).GetAsyncEnumerator(cancellationToken), 1.0));
+            enumeratorList.Add((Scraper.FetchReviews(appId, "all", "positive", null, lang, cancellationToken).GetAsyncEnumerator(cancellationToken), positiveWeight));
+            enumeratorList.Add((Scraper.FetchReviews(appId, "all", "negative", null, lang, cancellationToken).GetAsyncEnumerator(cancellationToken), negativeWeight));
+        }
+        
+        var enumerators = enumeratorList.Select(x => x.Enumerator).ToArray();
+        var weights = enumeratorList.Select(x => x.Weight).ToArray();
+        var pullCounts = new double[enumerators.Length]; // track fractional pulls
         var alive = Enumerable.Range(0, enumerators.Length).ToHashSet();
         var currentIdx = -1;
 
@@ -90,20 +110,22 @@ public record SteamReviewRepository(IOptions<SteamReviewRepository.Configuration
         {
             while (alive.Count > 0 && count < targetCount)
             {
-                // round robin across language cursors
-                var found = false;
-                for (var attempts = 0; attempts < enumerators.Length; attempts++)
+                // pick cursor that's most behind its weighted target
+                var minProgress = double.MaxValue;
+                var nextIdx = -1;
+                foreach (var i in alive)
                 {
-                    currentIdx = (currentIdx + 1) % enumerators.Length;
-                    if (alive.Contains(currentIdx))
+                    var progress = pullCounts[i] / weights[i];
+                    if (progress < minProgress)
                     {
-                        found = true;
-                        break;
+                        minProgress = progress;
+                        nextIdx = i;
                     }
                 }
-                if (!found) break;
+                if (nextIdx < 0) break;
+                currentIdx = nextIdx;
 
-                // pull up to 100 reviews from current cursor before rotating
+                // pull up to 100 reviews from current cursor before re-evaluating
                 for (var pull = 0; pull < 100 && count < targetCount; pull++)
                 {
                     if (!await enumerators[currentIdx].MoveNextAsync())
@@ -112,6 +134,7 @@ public record SteamReviewRepository(IOptions<SteamReviewRepository.Configuration
                         break;
                     }
 
+                    pullCounts[currentIdx]++;
                     var review = enumerators[currentIdx].Current;
 
                     if (!seen.Add((review.AppId, review.AuthorId)))
