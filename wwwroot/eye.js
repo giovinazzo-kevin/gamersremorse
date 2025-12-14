@@ -110,6 +110,13 @@ const expressions = {
         irisYOffset: -0.08,
         lashMultiplier: 1.3,
     },
+    flustered: {
+        top: { shape: 'gaussian', params: { sigma: 0.8 }, maxHeight: 0.10 },
+        bottom: { shape: 'gaussian', params: { sigma: 0.8 }, maxHeight: 0.10 },
+        irisRadius: 0.08,
+        irisYOffset: 0.08,
+        lashMultiplier: 2.0,
+    },
 };
 
 const state = {
@@ -139,6 +146,13 @@ const state = {
     // Dilation state (0-1, 0=normal, 1=dilated)
     dilation: 0,
     targetDilation: 0,
+    // Shy mode - looks away from cursor instead of at it
+    shy: false,
+    blush: 0,
+    targetBlush: 0,
+    // Derived states (computed each frame)
+    lookingAtGraph: false,
+    beingCornered: false,
 };
 
 const savedThreshold = localStorage.getItem('eyeThreshold');
@@ -166,6 +180,22 @@ function easeInOut(t) {
     return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
 }
 
+function updateShyState(dt) {
+    if (!state.shy) return;
+    
+    // Dilation and expression based on what eye is looking at
+    if (state.beingCornered) {
+        state.targetDilation = Math.min(1.5, state.targetDilation + dt * 2);
+        setExpression('shocked');
+    } else if (state.lookingAtGraph) {
+        state.targetDilation = 1; // aroused by the data
+        setExpression('shocked'); // O.O
+    } else {
+        state.targetDilation = 0; // just flustered, not aroused
+        setExpression('flustered');
+    }
+}
+
 function updateExpression(dt) {
     if (state.exprProgress < 1) {
         state.exprProgress = Math.min(1, state.exprProgress + config.expressionSpeed * dt);
@@ -173,6 +203,9 @@ function updateExpression(dt) {
     // Smooth dilation
     const dilationSpeed = 2;
     state.dilation += (state.targetDilation - state.dilation) * dilationSpeed * dt;
+    // Smooth blush
+    const blushSpeed = 3;
+    state.blush += (state.targetBlush - state.blush) * blushSpeed * dt;
 }
 
 function clamp(val, min, max) {
@@ -354,6 +387,12 @@ function draw() {
     const navbarBg = styles.getPropertyValue('--color-accent').trim();
     const lashColor = styles.getPropertyValue('--color-uncertain').trim();
     const currentLashColor = lerpColor(navbarBg, lashColor, 1 - state.blink);
+    
+    // Blush tints the colors pink
+    const blushColor = '#ff6b9d';
+    const blushAmount = state.blush * 0.4; // max 40% tint
+    const tintedPositive = lerpColor(colorPositive, blushColor, blushAmount);
+    const tintedNegative = lerpColor(colorNegative, blushColor, blushAmount);
 
     for (let i = 0; i < barCount; i++) {
         const x = startX + i * spacing + spacing / 2;
@@ -378,8 +417,8 @@ function draw() {
         const lashLengthTop = topShape * maxLashPx;
         const lashLengthBottom = bottomShape * maxLashPx;
 
-        drawBar(x, topHeight, 'up', colorPositive, barWidthPx, irisXPx, irisYPx, irisRadiusPx);
-        drawBar(x, bottomHeight, 'down', colorNegative, barWidthPx, irisXPx, irisYPx, irisRadiusPx);
+        drawBar(x, topHeight, 'up', tintedPositive, barWidthPx, irisXPx, irisYPx, irisRadiusPx);
+        drawBar(x, bottomHeight, 'down', tintedNegative, barWidthPx, irisXPx, irisYPx, irisRadiusPx);
         drawLashTip(x, topHeight, lashLengthTop, 'up', currentLashColor, barWidthPx);
         drawLashTip(x, bottomHeight, lashLengthBottom, 'down', currentLashColor, barWidthPx);
     }
@@ -426,8 +465,17 @@ function updateCursorTracking() {
 function updateIrisPosition(dt) {
     if (!state.awake) return;
 
-    const goalX = state.targetX * state.attention;
-    const goalY = state.targetY * state.attention;
+    // Shy mode: look AWAY from cursor instead of at it
+    const shyMultiplier = state.shy ? -1 : 1;
+    const goalX = state.targetX * state.attention * shyMultiplier;
+    const goalY = state.targetY * state.attention * shyMultiplier;
+    
+    // Detect if cursor is "chasing" the eye into the corner
+    // Eye tries to look bottom-right when shy, so cursor in top-left corners it
+    state.beingCornered = state.shy && state.attention > 0.3 && state.targetX < -0.3 && state.targetY < -0.3;
+    
+    // Detect if eye is looking at the graph (bottom-right)
+    state.lookingAtGraph = state.shy && state.irisX > 0.2 && state.irisY > 0.1;
 
     const lerpSpeed = 1.5;
     const lerpFactor = 1 - Math.exp(-lerpSpeed * dt);
@@ -435,13 +483,19 @@ function updateIrisPosition(dt) {
     state.irisX += (goalX - state.irisX) * lerpFactor;
     state.irisY += (goalY - state.irisY) * lerpFactor;
 
-    const drift = (1 - state.attention) * config.driftStrength * dt * 60;
+    // Nervous drift when shy and not focused, or extra jittery when cornered
+    const nervousDrift = state.shy && state.attention < config.boredThreshold;
+    const corneredJitter = state.beingCornered ? 0.08 : 0;
+    const driftAmount = nervousDrift ? 0.02 : (1 - state.attention) * config.driftStrength + corneredJitter;
+    const drift = driftAmount * dt * 60;
     state.irisX += (Math.random() - 0.5) * drift;
     state.irisY += (Math.random() - 0.5) * drift;
 
     if (state.attention < config.boredThreshold) {
-        state.irisX *= (1 - config.boredDamping);
-        state.irisY *= (1 - config.boredDamping);
+        // When shy, don't fully center - keep darting to the side
+        const dampingAmount = state.shy ? config.damping : config.boredDamping;
+        state.irisX *= (1 - dampingAmount);
+        state.irisY *= (1 - dampingAmount);
     } else {
         state.irisX *= (1 - config.damping);
         state.irisY *= (1 - config.damping);
@@ -484,6 +538,7 @@ function tick(timestamp) {
 
         updateCursorTracking(dt);
         updateIrisPosition(dt);
+        updateShyState(dt);
         draw();
         lastFrame = timestamp;
     }
@@ -514,7 +569,17 @@ document.addEventListener('click', () => {
 requestAnimationFrame(tick);
 scheduleNextBlink();
 
+function setShy(isShy) {
+    state.shy = isShy;
+    state.targetBlush = isShy ? 1 : 0;
+    // Don't set dilation here - it's controlled by where the eye is looking
+    if (isShy) {
+        setExpression('flustered');
+    }
+}
+
 // Expose for other modules
 window.setEyeExpression = setExpression;
 window.setEyeDilation = setDilation;
 window.setEyeLoading = setLoading;
+window.setEyeShy = setShy;

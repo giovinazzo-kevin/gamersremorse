@@ -38,6 +38,12 @@ async function analyze() {
     if (infoRes.ok) {
         currentGameInfo = await infoRes.json();
         document.getElementById('game-title').textContent = currentGameInfo.name;
+        
+        // Check for sexual content (flag bit 3 = 8)
+        const isSexual = (currentGameInfo.flags & 8) !== 0;
+        if (window.setEyeShy) {
+            window.setEyeShy(isSexual);
+        }
     }
 
     const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -710,7 +716,8 @@ function updateMetrics(snapshot) {
     
     const filter = getSelectedMonths();
     const isFree = currentGameInfo?.isFree || false;
-    currentMetrics = Metrics.compute(snapshot, { timelineFilter: filter, isFree });
+    const isSexual = currentGameInfo?.flags ? (currentGameInfo.flags & 8) !== 0 : false;
+    currentMetrics = Metrics.compute(snapshot, { timelineFilter: filter, isFree, isSexual });
     
     const metricsEl = document.getElementById('metrics-detail');
     if (metricsEl && currentMetrics) {

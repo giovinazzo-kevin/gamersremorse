@@ -6,7 +6,12 @@ public static class Mappings
 {
     public static SteamAppInfo? MapToDomain(this SteamAppIdsDTO dto) => dto
         .Where(kv => kv.Value.Success)
-        .Select(kv => new SteamAppInfo { AppId = kv.Key, Name = kv.Value.Data.Name, IsFree = kv.Value.Data.IsFree })
+        .Select(kv => new SteamAppInfo {
+            AppId = kv.Key,
+            Name = kv.Value.Data.Name,
+            IsFree = kv.Value.Data.IsFree,
+            Flags = kv.Value.Data.Flags
+        })
         .SingleOrDefault();
     public static SteamReview MapToDomain(this SteamReviewDTO dto, AppId appId) => new SteamReview {
         AppId = appId,

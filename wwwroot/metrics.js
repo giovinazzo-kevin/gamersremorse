@@ -233,6 +233,14 @@ const Metrics = {
         // ============================================================
         
         {
+            id: 'HORNY',
+            // Game has sexual content
+            condition: (m) => m.isSexual,
+            reason: (m) => `Contains sexual content`,
+            severity: 0,
+            color: '#ff69b4'
+        },
+        {
             id: 'LOW_DATA',
             condition: (m) => m.confidence < 0.3,
             reason: (m) => `Only ${m.total} reviews - interpret with caution`,
@@ -281,6 +289,7 @@ const Metrics = {
         const totalBuckets = snapshot.bucketsByTotalTime;
         const filter = options.timelineFilter || null;
         const isFree = options.isFree || false;
+        const isSexual = options.isSexual || false;
 
         // Detect spikes on FULL timeline (not filtered window)
         // A spike is a spike regardless of what slice you're viewing
@@ -398,6 +407,7 @@ const Metrics = {
             confidence,
             anomalyDensity,
             isFree,
+            isSexual,
             
             // Stats
             posStats,
