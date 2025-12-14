@@ -8,6 +8,7 @@ let timelineData = { months: [], positive: {}, negative: {}, uncertainPos: {}, u
 let timelineSelection = { start: 0, end: 1 };
 let timelineDrag = null;
 let isFirstSnapshot = true;
+let currentMetrics = null;
 
 document.getElementById('hideAnomalies')?.addEventListener('change', () => {
     if (currentSnapshot) updateChart(currentSnapshot);
@@ -42,15 +43,20 @@ async function analyze() {
         updateTimelineData(snapshot, isFirstSnapshot);
         updateVelocityChart(snapshot);
         updateStats(snapshot);
+        updateMetrics(snapshot);
         isFirstSnapshot = false;
 
-        setLoading(true);
+        if (window.setEyeLoading) window.setEyeLoading(true);
     };
 
     isFirstSnapshot = true;
     ws.onclose = () => {
         console.log('Analysis complete');
-        setLoading(false);
+        if (window.setEyeLoading) window.setEyeLoading(false);
+        // Final metrics update triggers eye emotion
+        if (currentMetrics) {
+            updateEyeFromMetrics(currentMetrics);
+        }
     };
 }
 
@@ -645,6 +651,10 @@ function applyTimelineFilter() {
         updateChart(currentSnapshot);
         updateVelocityChart(currentSnapshot);
         updateStats(currentSnapshot);
+        updateMetrics(currentSnapshot);
+        if (currentMetrics) {
+            updateEyeFromMetrics(currentMetrics);
+        }
     }
 }
 
@@ -683,6 +693,60 @@ function filterBucketByTime(bucket) {
         if (month >= range.from && month <= range.to) uncNeg += count;
     }
     return { pos, neg, uncPos, uncNeg };
+}
+
+function updateMetrics(snapshot) {
+    if (!window.Metrics) return;
+    
+    const filter = getSelectedMonths();
+    const isFree = currentGameInfo?.isFree || false;
+    currentMetrics = Metrics.compute(snapshot, { timelineFilter: filter, isFree });
+    
+    // Update metrics display
+    const metricsEl = document.getElementById('metrics-detail');
+    if (metricsEl && currentMetrics) {
+        const v = currentMetrics.verdict;
+        const severityPct = Math.round(currentMetrics.verdict.severity * 100);
+        
+        metricsEl.innerHTML = `
+            <div class="verdict verdict-${v.category}">
+                <strong>${v.category.toUpperCase()}</strong>
+                <span class="severity">(${severityPct}% severity)</span>
+            </div>
+            <ul class="reasons">
+                ${v.reasons.map(r => `<li>${r}</li>`).join('')}
+            </ul>
+            <div class="metrics-raw">
+                Median ratio: ${currentMetrics.medianRatio.toFixed(2)} |
+                Refund honesty: ${currentMetrics.refundHonesty !== null ? Math.round(currentMetrics.refundHonesty * 100) + '%' : 'N/A (F2P)'} |
+                Stockholm: ${currentMetrics.stockholmIndex.toFixed(2)}x |
+                Confidence: ${Math.round(currentMetrics.confidence * 100)}%
+                <br>
+                <small style="color:#aaa">Debug: negRatio=${currentMetrics.negativeRatio.toFixed(2)}, wMD=${currentMetrics.weightedMedianDelta.toFixed(3)}, wS=${currentMetrics.weightedStockholm.toFixed(3)}, raw=${currentMetrics.verdict.rawSeverity?.toFixed(3)}</small>
+            </div>
+        `;
+    }
+}
+
+function updateEyeFromMetrics(metrics) {
+    if (!window.setEyeExpression) return;
+    
+    const category = metrics.verdict.category;
+    
+    // Map verdict category to eye expression
+    const expressionMap = {
+        'healthy': 'neutral',      // could add 'happy' expression
+        'neutral': 'neutral',
+        'insufficient': 'neutral',
+        'suspicious': 'suspicious',
+        'extractive': 'suspicious',
+        'predatory': 'angry',
+        'stockholm': 'angry',
+        'corrupted': 'mocking'
+    };
+    
+    const expression = expressionMap[category] || 'neutral';
+    window.setEyeExpression(expression);
 }
 
 function filterVelocityBucketByTime(bucket) {

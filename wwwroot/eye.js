@@ -501,3 +501,7 @@ document.addEventListener('click', () => {
 
 requestAnimationFrame(tick);
 scheduleNextBlink();
+
+// Expose for other modules
+window.setEyeExpression = setExpression;
+window.setEyeLoading = setLoading;

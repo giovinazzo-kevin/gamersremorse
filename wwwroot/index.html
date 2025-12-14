@@ -157,6 +157,52 @@
                 color: #333;
             }
 
+        #metrics-detail {
+            margin: 10px 0;
+            padding: 10px;
+            background: #f9f9f9;
+            border: 1px solid #ddd;
+            font-size: 11px;
+        }
+
+        .verdict {
+            font-size: 14px;
+            margin-bottom: 8px;
+        }
+
+        .verdict-healthy { color: var(--color-positive); }
+        .verdict-neutral { color: #666; }
+        .verdict-insufficient { color: #999; }
+        .verdict-suspicious { color: #cc8800; }
+        .verdict-extractive { color: #cc4400; }
+        .verdict-predatory { color: var(--color-negative); }
+        .verdict-stockholm { color: var(--color-negative); }
+        .verdict-corrupted { color: #666; font-style: italic; }
+
+        .verdict .severity {
+            font-size: 11px;
+            font-weight: normal;
+            margin-left: 8px;
+        }
+
+        .reasons {
+            margin: 8px 0;
+            padding-left: 20px;
+        }
+
+        .reasons li {
+            margin: 4px 0;
+            color: #555;
+        }
+
+        .metrics-raw {
+            font-size: 10px;
+            color: #888;
+            margin-top: 8px;
+            padding-top: 8px;
+            border-top: 1px solid #ddd;
+        }
+
         #game-title {
             font-size: 14px;
             font-weight: bold;
@@ -286,6 +332,7 @@
                     </div>
                     <h2 id="game-title"></h2>
                     <div id="stats"></div>
+                    <div id="metrics-detail"></div>
                     <div class="chart-controls">
                         <label><input type="checkbox" id="hideAnomalies"> Hide anomalies</label>
                         <label><input type="checkbox" id="hideAnnotations"> Hide annotations</label>
@@ -436,6 +483,7 @@
         Made with 💊 by <a href="#">ritalin.js</a>
     </div>
 
+    <script src="metrics.js"></script>
     <script src="eye.js"></script>
     <script src="app.js"></script>
 </body>
