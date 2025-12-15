@@ -77,7 +77,7 @@ public record SteamReviewAnalyzer(IOptions<SteamReviewAnalyzer.Configuration> Op
             var minPt = boundaries[i];
             var maxPt = boundaries[i + 1];
 
-            var inBucket = reviews.Where(r => getMinutes(r) >= minPt && getMinutes(r) < maxPt);
+            var inBucket = reviews.Where(r => getMinutes(r) >= minPt && getMinutes(r) < maxPt).ToList();
 
             var positiveByMonth = inBucket
                 .Where(r => !IsUncertain(r) && r.Verdict > 0)

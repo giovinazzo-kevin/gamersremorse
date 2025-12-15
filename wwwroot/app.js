@@ -13,6 +13,7 @@ let lastMetrics = null;
 let isStreaming = true;
 let convergenceScore = 0;
 let loadingMessageCount = 0;
+let tagTimelineData = [];
 
 const loadingMessages = {
     // Always available - generic loading flavor
@@ -267,6 +268,7 @@ async function analyze() {
     isFirstSnapshot = true;
     timelineData = { months: [], positive: {}, negative: {}, uncertainPos: {}, uncertainNeg: {}, volume: [], maxVolume: 0 };
     timelineSelection = { start: 0, end: 1 };
+    tagTimelineData = [];
 
     // clear UI
     if (chart) {
@@ -316,6 +318,7 @@ async function analyze() {
     ws.onclose = () => {
         isStreaming = false;
         console.log('Analysis complete');
+        
         if (currentSnapshot) {
             const sampled = currentSnapshot.totalPositive + currentSnapshot.totalNegative;
             const gameTotal = currentSnapshot.gameTotalPositive + currentSnapshot.gameTotalNegative;
@@ -326,6 +329,15 @@ async function analyze() {
             }
 
             updateMetrics(currentSnapshot);
+            
+            // Compute tag timeline after analysis completes
+            if (window.Metrics) {
+                const isFree = currentGameInfo?.isFree || false;
+                const isSexual = currentGameInfo?.flags ? (currentGameInfo.flags & 8) !== 0 : false;
+                const tagTimeline = Metrics.computeTimeline(currentSnapshot, 3, { isFree, isSexual });
+                console.log('Tag timeline:', tagTimeline);
+                updateTagTimeline(tagTimeline);
+            }
         }
 
         if (window.setEyeLoading) window.setEyeLoading(false);
@@ -792,6 +804,38 @@ function updateTimelineData(snapshot, reset = false) {
     drawTimeline();
 }
 
+// Map tag IDs to their CSS variable colors
+const tagColorMap = {
+    'HEALTHY': '#4ade80',
+    'HONEST': '#22c55e', 
+    'EXTRACTIVE': '#f97316',
+    'PREDATORY': '#ef4444',
+    'STOCKHOLM': '#a855f7',
+    'DIVISIVE': '#eab308',
+    'FLOP': '#dc2626',
+    'TROUBLED': '#f59e0b',
+    'REFUND_TRAP': '#be123c',
+    'DEAD': '#6b7280',
+    'CULT': '#8b5cf6',
+    'HONEYMOON': '#fbbf24',
+    'REDEMPTION': '#34d399',
+    'ENSHITTIFIED': '#b45309',
+    'PHOENIX': '#10b981',
+    'PRESS_F': '#9ca3af',
+    'ZOMBIE': '#84cc16',
+    '180': '#22d3ee',
+    'HOPELESS': '#64748b',
+    'PLAGUE': '#991b1b',
+    'CURSED': '#7f1d1d',
+    'ADDICTIVE': '#e879f9',
+    'RUGPULL': '#c2410c',
+    'HORNY': '#ec4899',
+    'LOW_DATA': '#9ca3af',
+    'CORRUPTED': '#71717a',
+    'REVIEW_BOMBED': '#f43f5e',
+    'SURGE': '#06b6d4'
+};
+
 function drawTimeline() {
     const w = timelineCanvas.width;
     const h = timelineCanvas.height;
@@ -801,7 +845,8 @@ function drawTimeline() {
 
     if (timelineData.months.length === 0) return;
 
-    const chartH = h - 20;
+    const tagStripH = tagTimelineData.length > 0 ? 8 : 0;
+    const chartH = h - 20 - tagStripH;
     const barW = w / timelineData.months.length;
 
     for (let i = 0; i < timelineData.months.length; i++) {
@@ -842,18 +887,40 @@ function drawTimeline() {
         timelineCtx.fillRect(i * barW, y - posH, barW - 1, posH);
     }
 
+    // Draw tag strip below chart
+    if (tagTimelineData.length > 0) {
+        const stripY = chartH + 2;
+        
+        for (const entry of tagTimelineData) {
+            const monthIdx = timelineData.months.indexOf(entry.month);
+            if (monthIdx < 0) continue;
+            
+            const x = (monthIdx / timelineData.months.length) * w;
+            
+            // Draw primary tag color (first non-data-quality tag)
+            const significantTags = entry.tags.filter(t => 
+                !['LOW_DATA', 'CORRUPTED', 'HORNY'].includes(t)
+            );
+            const primaryTag = significantTags[0] || entry.tags[0];
+            const color = tagColorMap[primaryTag] || '#666';
+            
+            timelineCtx.fillStyle = color;
+            timelineCtx.fillRect(x, stripY, barW, tagStripH - 2);
+        }
+    }
+
     // selection outline
     const selX = timelineSelection.start * w;
     const selW = (timelineSelection.end - timelineSelection.start) * w;
 
     timelineCtx.strokeStyle = 'rgba(139, 0, 0, 0.8)';
     timelineCtx.lineWidth = 2;
-    timelineCtx.strokeRect(selX, 0, selW, chartH);
+    timelineCtx.strokeRect(selX, 0, selW, chartH + tagStripH);
 
     // handles
     timelineCtx.fillStyle = '#8b0000';
-    timelineCtx.fillRect(selX - 4, 0, 8, chartH);
-    timelineCtx.fillRect(selX + selW - 4, 0, 8, chartH);
+    timelineCtx.fillRect(selX - 4, 0, 8, chartH + tagStripH);
+    timelineCtx.fillRect(selX + selW - 4, 0, 8, chartH + tagStripH);
 
     // year labels
     timelineCtx.fillStyle = '#666';
@@ -1166,6 +1233,11 @@ function updateOpinionPanel(metrics) {
               'Neutral: similar time to verdict either way.'}
         </div>
     `;
+}
+
+function updateTagTimeline(timeline) {
+    tagTimelineData = timeline;
+    drawTimeline(); // redraw to include tag overlay
 }
 
 function updateEyeFromMetrics(metrics) {

@@ -372,6 +372,44 @@
                 margin-right: 12px;
             }
 
+        .verbosity-legend {
+            margin: 8px 0;
+            font-size: 10px;
+            color: #666;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .verbosity-label {
+            color: #555;
+        }
+
+        .verbosity-sample {
+            display: inline-block;
+            width: 12px;
+            height: 24px;
+            vertical-align: middle;
+            margin-left: 8px;
+            border-radius: 2px;
+        }
+
+        .verbosity-sample.short {
+            background: linear-gradient(to bottom,
+                var(--color-positive) 0%,
+                var(--color-positive) 100%
+            );
+        }
+
+        .verbosity-sample.long {
+            background: linear-gradient(to bottom,
+                var(--color-positive) 0%,
+                var(--color-positive) 30%,
+                color-mix(in srgb, var(--color-positive) 50%, black) 30%,
+                color-mix(in srgb, var(--color-positive) 50%, black) 100%
+            );
+        }
+
         /* === OPINION SECTION === */
         .opinion-placeholder {
             padding: 20px;
@@ -511,24 +549,6 @@
                     </p>
                 </div>
             </div>
-
-            <div class="box">
-                <div class="box-header">Why is the refund threshold shown?</div>
-                <div class="box-body">
-                    <p>
-                        Steam lets you refund games under 2 hours.
-                        Sounds consumer-friendly until you realize what it incentivizes.
-                    </p>
-                    <p>
-                        Developers front-load the good stuff. First 2 hours: polished, exciting.
-                        The grind and paywalls come later. After you're locked in.
-                    </p>
-                    <p>
-                        The refund window isn't protection. It's a design constraint that teaches
-                        developers how long to keep up the illusion.
-                    </p>
-                </div>
-            </div>
         </div>
 
         <!-- CENTER COLUMN: Charts -->
@@ -575,53 +595,6 @@
                     </p>
                 </div>
             </div>
-
-            <div class="box">
-                <div class="box-header">Why Doesn't Steam Show This?</div>
-                <div class="box-body">
-                    <p>
-                        <strong>Publisher leverage.</strong> Make EA look bad, EA threatens to leave.
-                    </p>
-                    <p>
-                        <strong>Self-incrimination.</strong> Valve's games are some of the worst offenders.
-                    </p>
-                    <p>
-                        <strong>The market loop.</strong> Steam credits can never become real dollars again.
-                        Every transaction bleeds value to Valve. Games that keep you playing generate more transactions even when they harm your mental health in the process.
-                    </p>
-                </div>
-            </div>
-
-            <div class="box">
-                <div class="box-header">The Last Question</div>
-                <div class="box-body">
-                    <p>
-                        We built the economy on the hopeful premise that rational agents making informed decisions would willingly participate in a fair market.
-                    </p>
-                    <p>
-                        But the agents are not rational, the decisions are not informed, the participation is not optional and the market is not fair.
-                    </p>
-                    <p>
-                        When the market is not fair (such as in a monopoly, an oligopoly or a cartel), the agents who hoard information have
-                        an explicit incentive to shape it in a way that benefits them, making them appear less extractive than they really are.
-                    </p>
-                    <p>
-                        The gaming market is not fair because distribution is mediated by a handful of publishers and store fronts.
-                        The former exist to spend millions advertising games to people who aren't their target audience.
-                        The latter exist because we are collectively too lazy to keep track of dozens of individual company websites and game launchers.
-                    </p>
-                    <p>
-                        The result is that whoever controls the store front gets to decide what "games" are supposed to be.
-                        And they do so by making you think that "Recent: Very Positive" is a complete sentence.
-                    </p>
-                    <p>
-                        How can you make an informed decision when the data you're being shown doesn't trust you to be literate enough to read it?
-                    </p>
-                    <p>
-                        <em>THERE IS AS YET INSUFFICIENT DATA FOR A MEANINGFUL ANSWER.</em>
-                    </p>
-                </div>
-            </div>
         </div>
     </div>
 
@@ -629,6 +602,7 @@
         Made with 💊 by <a href="#">ritalin.js</a>
     </div>
 
+    <script src="patterns.js"></script>
     <script src="metrics.js"></script>
     <script src="eye.js"></script>
     <script src="app.js"></script>

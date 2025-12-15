@@ -1005,6 +1005,58 @@ const Metrics = {
         if (filter.from && month < filter.from) return false;
         if (filter.to && month > filter.to) return false;
         return true;
+    },
+
+    /**
+     * Slide a window across the timeline and detect tags at each position
+     * @param snapshot - full analysis snapshot
+     * @param windowMonths - window size in months (default 3)
+     * @param options - isFree, isSexual
+     * @returns Array of { month, tags: string[], negRatio, volume }
+     */
+    computeTimeline(snapshot, windowMonths = 3, options = {}) {
+        const buckets = snapshot.bucketsByReviewTime;
+        
+        // Get all months
+        const allMonths = new Set();
+        for (const bucket of buckets) {
+            for (const month of Object.keys(bucket.positiveByMonth || {})) allMonths.add(month);
+            for (const month of Object.keys(bucket.negativeByMonth || {})) allMonths.add(month);
+        }
+        const sortedMonths = [...allMonths].sort();
+        
+        if (sortedMonths.length < windowMonths) {
+            return [];
+        }
+        
+        const timeline = [];
+        
+        // Slide window across timeline
+        for (let i = 0; i <= sortedMonths.length - windowMonths; i++) {
+            const windowStart = sortedMonths[i];
+            const windowEnd = sortedMonths[i + windowMonths - 1];
+            const filter = { from: windowStart, to: windowEnd };
+            
+            // Compute metrics for this window
+            const metrics = this.compute(snapshot, { 
+                timelineFilter: filter, 
+                isFree: options.isFree, 
+                isSexual: options.isSexual,
+                convergenceScore: 1 // assume converged for timeline
+            });
+            
+            timeline.push({
+                month: windowEnd, // label by end of window
+                windowStart,
+                windowEnd,
+                tags: metrics.verdict.tags.map(t => t.id),
+                negRatio: metrics.negativeRatio,
+                volume: metrics.counts.total,
+                medianRatio: metrics.medianRatio
+            });
+        }
+        
+        return timeline;
     }
 };
 

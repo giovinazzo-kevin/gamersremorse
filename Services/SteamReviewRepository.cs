@@ -20,8 +20,8 @@ public record SteamReviewRepository(IOptions<SteamReviewRepository.Configuration
         public bool AllowLazyRefresh { get; set; } = true;
         public bool AllowLazyRefreshIfStale { get; set; } = true;
         public int LazyRefreshMinItems { get; set; } = 5000;
-        public int LazyRefreshMaxItems { get; set; } = 20000;
-        public double LazyRefreshTargetPercent { get; set; } = 0.10; // 10%
+        public int LazyRefreshMaxItems { get; set; } = 50000;
+        public double LazyRefreshTargetPercent { get; set; } = 0.25; // 25%
         public int LazyRefreshBatchSize = 100;
     }
 
@@ -36,11 +36,25 @@ public record SteamReviewRepository(IOptions<SteamReviewRepository.Configuration
         var now = EventDate.UtcNow;
         using var db = await DbContextFactory.CreateDbContextAsync(cancellationToken);
         var meta = await db.Metadatas.SingleOrDefaultAsync(x => x.AppId == appId, cancellationToken);
-        return meta switch {
-            null => Status.Uncached,
-            { UpdatedOn: var when } when (now - when).TotalDays > Options.Value.FreshnessDays => Status.Stale,
-            _ => Status.Fresh
-        };
+        
+        if (meta is null)
+            return Status.Uncached;
+        
+        // Check freshness by date
+        if ((now - meta.UpdatedOn).TotalDays > Options.Value.FreshnessDays)
+            return Status.Stale;
+        
+        // Check if we have enough cached reviews to meet target
+        var cachedCount = await db.SteamReviews.CountAsync(x => x.AppId == appId, cancellationToken);
+        var totalReviews = meta.TotalPositive + meta.TotalNegative;
+        var targetCount = (int)(totalReviews * Options.Value.LazyRefreshTargetPercent);
+        targetCount = Math.Clamp(targetCount, Options.Value.LazyRefreshMinItems, Options.Value.LazyRefreshMaxItems);
+        
+        // Stale if we have less than 90% of target (allow some margin)
+        if (cachedCount < targetCount * 0.9)
+            return Status.Stale;
+        
+        return Status.Fresh;
     }
 
     public async Task<SteamAppInfo> GetInfo(AppId appId, CancellationToken cancellationToken = default)
@@ -117,21 +131,35 @@ public record SteamReviewRepository(IOptions<SteamReviewRepository.Configuration
             _ => 1
         };
 
-        // for each language: all, positive, negative cursors
+        // filter modes give us different cursor paths through the same data
+        // "all" = sorted by helpfulness (surfaces popular reviews)
+        // "updated" = sorted by edit time (surfaces re-evaluations, important for live service games)
+        var filters = totalReviews switch
+        {
+            > 100000 => new[] { "all", "updated" },
+            _ => new[] { "all" }
+        };
+
+        // for each language × filter: all, positive, negative cursors
         // weights determine how many reviews to pull from each cursor type
-        var enumeratorList = new List<(IAsyncEnumerator<SteamReview> Enumerator, double Weight)>();
+        var enumeratorList = new List<(IAsyncEnumerator<SteamReview> Enumerator, double Weight, string Filter)>();
         foreach (var lang in Languages.Take(numLanguages))
         {
-            enumeratorList.Add((Scraper.FetchReviews(appId, "all", "all", null, lang, cancellationToken).GetAsyncEnumerator(cancellationToken), 1.0));
-            enumeratorList.Add((Scraper.FetchReviews(appId, "all", "positive", null, lang, cancellationToken).GetAsyncEnumerator(cancellationToken), positiveWeight));
-            enumeratorList.Add((Scraper.FetchReviews(appId, "all", "negative", null, lang, cancellationToken).GetAsyncEnumerator(cancellationToken), negativeWeight));
+            foreach (var filter in filters)
+            {
+                enumeratorList.Add((Scraper.FetchReviews(appId, filter, "all", null, lang, cancellationToken).GetAsyncEnumerator(cancellationToken), 1.0, filter));
+                enumeratorList.Add((Scraper.FetchReviews(appId, filter, "positive", null, lang, cancellationToken).GetAsyncEnumerator(cancellationToken), positiveWeight, filter));
+                enumeratorList.Add((Scraper.FetchReviews(appId, filter, "negative", null, lang, cancellationToken).GetAsyncEnumerator(cancellationToken), negativeWeight, filter));
+            }
         }
         
         var enumerators = enumeratorList.Select(x => x.Enumerator).ToArray();
         var weights = enumeratorList.Select(x => x.Weight).ToArray();
+        var cursorFilters = enumeratorList.Select(x => x.Filter).ToArray();
         var pullCounts = new double[enumerators.Length]; // track fractional pulls
         var alive = Enumerable.Range(0, enumerators.Length).ToHashSet();
         var currentIdx = -1;
+        var oneMonthAgo = EventDate.UtcNow.AddDays(-30);
 
         try
         {
@@ -163,6 +191,11 @@ public record SteamReviewRepository(IOptions<SteamReviewRepository.Configuration
 
                     pullCounts[currentIdx]++;
                     var review = enumerators[currentIdx].Current;
+
+                    // skip reviews younger than 1 month from "updated" cursor
+                    // (they're just new reviews, not re-evaluations)
+                    if (cursorFilters[currentIdx] == "updated" && review.PostedOn > oneMonthAgo)
+                        continue;
 
                     if (!seen.Add((review.AppId, review.AuthorId)))
                         continue;

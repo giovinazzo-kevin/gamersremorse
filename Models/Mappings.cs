@@ -22,6 +22,7 @@ public static class Mappings
         TimePlayedAtReview = TimeSpan.FromMinutes(dto.Author.PlaytimeAtReview),
         TimePlayedInTotal = TimeSpan.FromMinutes(dto.Author.PlaytimeForever),
         GamesOwned = dto.Author.NumGamesOwned,
-        Verdict = dto.VotedUp ? 1 : -1
+        Verdict = dto.VotedUp ? 1 : -1,
+        ReviewLength = dto.Review?.Length ?? 0
     };
 }
