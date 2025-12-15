@@ -20,29 +20,24 @@ const Metrics = {
         // Comparing positive vs negative groups
         // Thresholds are intuitive: 1.3x = "30% more", 0.7x = "30% less"
         // ============================================================
-        
         {
             id: 'HEALTHY',
-            // 80%+ positive AND negatives don't take significantly longer
             condition: (m) => m.positiveRatio > 0.80 && m.medianRatio < 1.3,
             reason: (m) => `${Math.round(m.positiveRatio * 100)}% positive reviews`,
             severity: -0.2,
-            color: '#2ecc71'
+            color: 'var(--color-tag-healthy)'
         },
         {
             id: 'HONEST',
-            // Negatives leave 30%+ earlier than positives - game shows its true colors fast
             condition: (m) => m.medianRatio < 0.7 && m.negativeRatio > 0.05,
             reason: (m) => `Negatives out at ${Math.round(m.negMedianReview / 60)}h vs positives at ${Math.round(m.posMedianReview / 60)}h (${Math.round((1 - m.medianRatio) * 100)}% earlier)`,
             severity: -0.15,
-            color: '#27ae60'
+            color: 'var(--color-tag-honest)'
         },
         {
             id: 'EXTRACTIVE',
-            // Significant mass of negatives at high playtime
-            // Not just outliers - actual pattern of people getting trapped
-            condition: (m) => m.medianRatio > 1.3 
-                && m.negativeRatio > 0.20  // At least 20% negative overall
+            condition: (m) => m.medianRatio > 1.3
+                && m.negativeRatio > 0.20
                 && m.temporalDriftZ <= 1,
             reason: (m) => `${Math.round(m.negativeRatio * 100)}% negative at ${Math.round(m.negMedianReview / 60)}h (${Math.round((m.medianRatio - 1) * 100)}% longer than positives)`,
             severity: (m) => Math.min(0.3, (m.medianRatio - 1) * 0.3),
@@ -50,18 +45,15 @@ const Metrics = {
         },
         {
             id: 'ENSHITTIFIED',
-            // Game got worse: sentiment declined AND now shows extraction pattern
-            // The extraction pattern is ACQUIRED, not designed
-            condition: (m) => m.medianRatio > 1.3 
+            condition: (m) => m.medianRatio > 1.3
                 && m.negativeRatio > 0.20
                 && m.temporalDriftZ > 1,
             reason: (m) => `Was good, got ruined: sentiment ${Math.round(m.firstHalfNegRatio * 100)}% → ${Math.round(m.secondHalfNegRatio * 100)}% negative, ${Math.round(m.negativeRatio * 100)}% now trapped`,
             severity: (m) => Math.min(0.35, (m.medianRatio - 1) * 0.3 + m.temporalDriftZ * 0.05),
-            color: '#8B4513'
+            color: 'var(--color-tag-enshittified)'
         },
         {
             id: 'PREDATORY',
-            // Extractive (50%+ longer) AND lots of people affected (30%+ negative)
             condition: (m) => m.medianRatio > 1.5 && m.negativeRatio > 0.30,
             reason: (m) => `${Math.round(m.negativeRatio * 100)}% negative after ${Math.round(m.negMedianReview / 60)}h median (${Math.round((m.medianRatio - 1) * 100)}% longer than positive)`,
             severity: 0.25,
@@ -69,199 +61,174 @@ const Metrics = {
         },
         {
             id: 'STOCKHOLM',
-            // Confirmed haters played 50%+ more AFTER leaving negative review
-            // AND they already had 200h+ invested
             condition: (m) => {
                 const certainNegRatio = m.counts.negative / Math.max(1, m.counts.negative + m.counts.uncertainNegative);
-                return m.stockholmIndex > 1.5 
-                    && m.negMedianReview > 200 * 60 
+                return m.stockholmIndex > 1.5
+                    && m.negMedianReview > 200 * 60
                     && certainNegRatio > 0.5;
             },
             reason: (m) => `Haters: ${Math.round(m.negMedianReview / 60)}h at review → ${Math.round(m.negMedianTotal / 60)}h total (${Math.round((m.stockholmIndex - 1) * 100)}% more after hating it)`,
             severity: (m) => Math.min(0.25, (m.stockholmIndex - 1) * 0.2),
-            color: '#9b59b6'
+            color: 'var(--color-tag-stockholm)'
         },
         {
             id: 'DIVISIVE',
-            // Close to 50/50 split (35-50% negative) AND people actually played it (20h+)
             condition: (m) => m.negativeRatio > 0.35 && m.negativeRatio < 0.50 && m.posMedianReview > 20 * 60,
             reason: (m) => `${Math.round(m.positiveRatio * 100)}/${Math.round(m.negativeRatio * 100)} split`,
             severity: 0.05,
-            color: '#9932CC'
+            color: 'var(--color-tag-divisive)'
         },
         {
             id: 'FLOP',
-            // Majority negative (50%+) AND negatives knew fast (30%+ earlier than positives)
             condition: (m) => m.negativeRatio > 0.50 && m.medianRatio < 0.7,
             reason: (m) => `${Math.round(m.negativeRatio * 100)}% negative at only ${Math.round(m.negMedianReview / 60)}h median`,
             severity: 0.2,
-            color: '#8B0000'
+            color: 'var(--color-tag-flop)'
         },
         {
             id: 'TROUBLED',
             condition: (m) => m.negativeRatio > 0.35 && m.medianRatio <= 1.0 && m.positiveRatio < 0.80,
             reason: (m) => `${Math.round(m.negativeRatio * 100)}% negative at ${Math.round(m.negMedianReview / 60)}h`,
             severity: 0.1,
-            color: '#a08060'
+            color: 'var(--color-tag-troubled)'
         },
         {
             id: 'REFUND_TRAP',
-            // Positives review early, but negatives don't
-            // At least 20% of positives before 2h, but less than 10% of negatives
             condition: (m) => m.refundPosRate !== null && m.refundPosRate >= 0.20 && m.refundNegRate < 0.10 && m.negativeRatio > 0.15,
             reason: (m) => `${Math.round(m.refundPosRate * 100)}% of positives before 2h, but only ${Math.round(m.refundNegRate * 100)}% of negatives`,
             severity: 0.15,
-            color: '#c0392b'
+            color: 'var(--color-tag-refund-trap)'
         },
-
         // ============================================================
         // STDDEV-BASED TAGS  
         // Detecting unusual patterns within a distribution
         // Thresholds: 1σ = unusual (outside 68%), 2σ = very unusual (outside 95%)
         // ============================================================
-        
+
         {
             id: 'DEAD',
-            // Was alive, now dead - activity declined from earlier in window
             condition: (m) => m.isEndDead,
             reason: (m) => `Activity declined - tail end is dead`,
             severity: 0.15,
-            color: '#444'
+            color: 'var(--color-tag-dead)'
         },
         {
             id: 'CULT',
-            // Fat tail: 2x+ more players at extreme playtimes than normal distribution predicts
-            // AND game is struggling or small
             condition: (m) => m.tailRatio > 0.05 && (m.isEndDead || m.total < 2000),
             reason: (m) => `${Math.round(m.tailRatio * 100)}% at extreme playtimes (expected ~2.5%)`,
             severity: 0,
-            color: '#8e44ad'
+            color: 'var(--color-tag-cult)'
         },
         {
             id: 'HONEYMOON',
-            // Sentiment got worse BUT not extractive - game is honest about getting worse
             condition: (m) => m.temporalDriftZ > 1 && m.medianRatio <= 1.3,
             reason: (m) => `Sentiment declined: ${Math.round(m.firstHalfNegRatio * 100)}% → ${Math.round(m.secondHalfNegRatio * 100)}% negative`,
             severity: 0.1,
-            color: '#DAA520'
+            color: 'var(--color-tag-honeymoon)'
         },
         {
             id: 'REDEMPTION',
-            // Sentiment got better: second half 1+ stddev less negative than first half (no revival)
             condition: (m) => m.temporalDriftZ < -1 && !m.hasRevival,
             reason: (m) => `Sentiment improved: ${Math.round(m.firstHalfNegRatio * 100)}% → ${Math.round(m.secondHalfNegRatio * 100)}% negative`,
             severity: -0.1,
-            color: '#228B22'
+            color: 'var(--color-tag-redemption)'
         },
         
         // ============================================================
         // REVIVAL TAGS (requires death gap + comeback)
         // 2x2x2 matrix: startedGood × endedGood × stillAlive
         // ============================================================
-        
+
         {
             id: 'PHOENIX',
-            // Good → died → came back good → still alive
             condition: (m) => m.hasRevival && m.firstWaveNegRatio < 0.5 && m.lastWaveNegRatio < 0.5 && m.isStillAlive,
             reason: (m) => `Rose from ashes: ${Math.round((1 - m.firstWaveNegRatio) * 100)}% → ${Math.round((1 - m.lastWaveNegRatio) * 100)}% positive, still flying`,
             severity: -0.1,
-            color: '#FF4500'
+            color: 'var(--color-tag-phoenix)'
         },
         {
             id: 'PRESS_F',
-            // Good → died → came back good → died again
             condition: (m) => m.hasRevival && m.firstWaveNegRatio < 0.5 && m.lastWaveNegRatio < 0.5 && !m.isStillAlive,
             reason: (m) => `Had a good run: ${Math.round((1 - m.firstWaveNegRatio) * 100)}% → ${Math.round((1 - m.lastWaveNegRatio) * 100)}% positive, died with honor`,
             severity: 0,
-            color: '#666'
+            color: 'var(--color-tag-press-f)'
         },
         {
             id: 'ZOMBIE',
-            // Good → died → came back bad → still shambling
             condition: (m) => m.hasRevival && m.firstWaveNegRatio < 0.5 && m.lastWaveNegRatio >= 0.5 && m.isStillAlive,
             reason: (m) => `Came back wrong: ${Math.round((1 - m.firstWaveNegRatio) * 100)}% → ${Math.round((1 - m.lastWaveNegRatio) * 100)}% positive, still shambling`,
             severity: 0.2,
-            color: '#2d5a27'
+            color: 'var(--color-tag-zombie)'
         },
         {
             id: 'RUGPULL',
-            // Good → died → came back bad → died again
             condition: (m) => m.hasRevival && m.firstWaveNegRatio < 0.5 && m.lastWaveNegRatio >= 0.5 && !m.isStillAlive,
             reason: (m) => `Came back wrong: ${Math.round((1 - m.firstWaveNegRatio) * 100)}% → ${Math.round((1 - m.lastWaveNegRatio) * 100)}% positive, died again`,
             severity: 0.2,
-            color: '#8B0000'
+            color: 'var(--color-tag-rugpull)'
         },
         {
             id: '180',
-            // Bad → died → came back good → still alive
             condition: (m) => m.hasRevival && m.firstWaveNegRatio >= 0.5 && m.lastWaveNegRatio < 0.5 && m.isStillAlive,
             reason: (m) => `Turned it around: ${Math.round(m.firstWaveNegRatio * 100)}% → ${Math.round(m.lastWaveNegRatio * 100)}% negative, redemption arc`,
             severity: -0.15,
-            color: '#228B22'
+            color: 'var(--color-tag-180)'
         },
         {
             id: 'HOPELESS',
-            // Bad → died → came back good → died anyway
             condition: (m) => m.hasRevival && m.firstWaveNegRatio >= 0.5 && m.lastWaveNegRatio < 0.5 && !m.isStillAlive,
             reason: (m) => `Fixed it too late: ${Math.round(m.firstWaveNegRatio * 100)}% → ${Math.round(m.lastWaveNegRatio * 100)}% negative, nobody came back`,
             severity: 0.05,
-            color: '#708090'
+            color: 'var(--color-tag-hopeless)'
         },
         {
             id: 'PLAGUE',
-            // Bad → died → came back bad → still alive
             condition: (m) => m.hasRevival && m.firstWaveNegRatio >= 0.5 && m.lastWaveNegRatio >= 0.5 && m.isStillAlive,
             reason: (m) => `Won't die, won't improve: ${Math.round(m.firstWaveNegRatio * 100)}% → ${Math.round(m.lastWaveNegRatio * 100)}% negative`,
             severity: 0.15,
-            color: '#556B2F'
+            color: 'var(--color-tag-plague)'
         },
         {
             id: 'CURSED',
-            // Bad → died → came back bad → died again
             condition: (m) => m.hasRevival && m.firstWaveNegRatio >= 0.5 && m.lastWaveNegRatio >= 0.5 && !m.isStillAlive,
             reason: (m) => `Born bad, died bad, twice: ${Math.round(m.firstWaveNegRatio * 100)}% → ${Math.round(m.lastWaveNegRatio * 100)}% negative`,
             severity: 0.1,
-            color: '#1a0d00'
+            color: 'var(--color-tag-cursed)'
         },
         {
             id: 'ADDICTIVE',
-            // Fat upper tail: 95th percentile is 5x+ the median AND 500h+ absolute
-            // This is a red flag - people are playing way more than the content justifies
             condition: (m) => m.p95Playtime > m.posMedianReview * 5 && m.p95Playtime > 500 * 60 && m.positiveRatio > 0.5,
             reason: (m) => `Top players at ${Math.round(m.p95Playtime / 60)}h vs ${Math.round(m.posMedianReview / 60)}h median (${Math.round(m.p95Playtime / m.posMedianReview)}x)`,
             severity: 0,
-            color: '#e67e22'
+            color: 'var(--color-tag-addictive)'
         },
 
         // ============================================================
         // DATA QUALITY TAGS
         // ============================================================
-        
         {
             id: 'HORNY',
-            // Game has sexual content
             condition: (m) => m.isSexual,
             reason: (m) => `Contains sexual content`,
             severity: 0,
-            color: '#ff69b4'
+            color: 'var(--color-tag-horny)'
         },
         {
             id: 'LOW_DATA',
             condition: (m) => m.confidence < 0.3,
             reason: (m) => `Only ${m.total} reviews - interpret with caution`,
             severity: 0,
-            color: '#999'
+            color: 'var(--color-tag-low-data)'
         },
         {
             id: 'CORRUPTED',
             condition: (m) => m.anomalyDensity > 0.2,
             reason: (m) => `${Math.round(m.anomalyDensity * 100)}% anomalous data points`,
             severity: 0,
-            color: '#666'
+            color: 'var(--color-tag-corrupted)'
         },
         {
             id: 'REVIEW_BOMBED',
-            // Any significant negative spike(s) detected
             condition: (m) => m.negativeSpikes?.length > 0 && m.negativeSpikes.some(s => s.z >= 3 && s.count >= 50),
             reason: (m) => {
                 const significant = m.negativeSpikes.filter(s => s.z >= 3 && s.count >= 50);
@@ -270,11 +237,10 @@ const Metrics = {
                 return `${significant.length} negative surge${significant.length > 1 ? 's' : ''} (${months}): ${totalCount} reviews excluded`;
             },
             severity: 0,
-            color: '#ff6600'
+            color: 'var(--color-tag-review-bombed)'
         },
         {
             id: 'SURGE',
-            // Positive spikes - could be viral moment, sale, streamer attention
             condition: (m) => m.positiveSpikes?.length > 0 && m.positiveSpikes.some(s => s.z >= 4 && s.count >= 100 && s.multiple >= 3),
             reason: (m) => {
                 const significant = m.positiveSpikes.filter(s => s.z >= 4 && s.count >= 100 && s.multiple >= 3);
@@ -282,7 +248,7 @@ const Metrics = {
                 return `Viral moment in ${months} (excluded from stats)`;
             },
             severity: 0,
-            color: '#00cc66'
+            color: 'var(--color-tag-surge)'
         }
     ],
 
@@ -891,7 +857,6 @@ const Metrics = {
     deriveVerdict(m) {
         let tags = [];
         let totalSeverity = 0;
-        const reasons = [];
 
         for (const def of this.tagDefinitions) {
             try {
@@ -907,7 +872,6 @@ const Metrics = {
                     });
                     
                     totalSeverity += severity;
-                    reasons.push(reason);
                 }
             } catch (e) {
                 console.warn(`Tag ${def.id} failed:`, e);
@@ -930,7 +894,7 @@ const Metrics = {
             primaryTag,
             severity: normalizedSeverity,
             rawSeverity: totalSeverity,
-            reasons
+            reasons: tags.map(t => t.reason)
         };
     },
 

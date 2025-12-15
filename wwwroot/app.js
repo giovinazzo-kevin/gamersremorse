@@ -111,7 +111,7 @@ const loadingMessages = [
     "Managing inventory...",
     "Identifying scrolls...",
     "Quaffing unidentified potions...",
-    "Receiving death threats...",
+    "Addressing death threats...",
     "Refunding within two hours...",
     "Wishlisting for later...",
     "Waiting for a sale...",
@@ -967,7 +967,7 @@ function updateOpinionPanel(metrics) {
                 <div class="opinion-verdict caution">⏳ Analysis in progress...</div>
                 <p>The data is still converging. Early patterns are forming but the verdict isn't stable yet.</p>
                 <p><strong>Sampled:</strong> ${sampled.toLocaleString()} reviews</p>
-                <p><strong>Confidence:</strong> ${pct}%</p>
+                <p><strong>Confidence:</strong> ${pct}%${pct == 69 ? " (nice)" : ""}</p>
                 <p class="opinion-hint">Once the tags settle, we'll have something to say.</p>
             </div>
         `;
