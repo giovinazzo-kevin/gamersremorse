@@ -54,7 +54,8 @@ public record SteamReviewAnalyzer(IOptions<SteamReviewAnalyzer.Configuration> Op
             positiveReviews.Count,
             negativeReviews.Count,
             meta.TotalPositive,
-            meta.TotalNegative
+            meta.TotalNegative,
+            meta.TargetSampleCount
         );
     }
 

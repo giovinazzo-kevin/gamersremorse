@@ -8,5 +8,6 @@ public record struct AnalysisSnapshot(
     int TotalPositive,
     int TotalNegative,
     int GameTotalPositive,
-    int GameTotalNegative
+    int GameTotalNegative,
+    int TargetSampleCount
 );

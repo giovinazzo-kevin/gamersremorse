@@ -150,6 +150,10 @@ const state = {
     shy: false,
     blush: 0,
     targetBlush: 0,
+    // Engrossed mode - locked on graph, ignores cursor
+    engrossed: false,
+    // Cumulative time spent being cornered (ms)
+    corneredTime: 0,
     // Derived states (computed each frame)
     lookingAtGraph: false,
     beingCornered: false,
@@ -182,6 +186,21 @@ function easeInOut(t) {
 
 function updateShyState(dt) {
     if (!state.shy) return;
+    
+    // Accumulate cornered time
+    if (state.beingCornered) {
+        state.corneredTime += dt * 1000;
+        
+        // After 5s of being cornered, give in
+        if (state.corneredTime >= 5000) {
+            state.shy = false;
+            state.engrossed = true;
+            state.targetBlush = 0.3;
+            state.targetDilation = 0.8;
+            setExpression('neutral');
+            return;
+        }
+    }
     
     // Dilation and expression based on what eye is looking at
     if (state.beingCornered) {
@@ -441,11 +460,12 @@ function updateCursorTracking() {
         state.lastInteraction = Date.now();
         if (vel > config.attentionThreshold) {
             state.attention = Math.min(1, state.attention + vel * config.attentionGain);
-        } else {
+        } else if (!state.beingCornered) {
+            // Don't decay attention while being cornered
             state.attention *= config.attentionDecay;
         }
 
-        if (state.attention < config.boredThreshold) state.attention = 0;
+        if (state.attention < config.boredThreshold && !state.beingCornered) state.attention = 0;
 
         const dx = state.cursorX - centerX;
         const dy = state.cursorY - centerY;
@@ -462,20 +482,60 @@ function updateCursorTracking() {
     state.lastCursorY = state.cursorY;
 }
 
+function getGraphCenter() {
+    const chart = document.getElementById('chart');
+    const eye = document.getElementById('eye');
+    if (!chart || !eye) return { x: 0, y: 0.2 }; // fallback
+    
+    const chartRect = chart.getBoundingClientRect();
+    const eyeRect = eye.getBoundingClientRect();
+    
+    // Center of chart relative to center of eye, normalized
+    const chartCenterX = chartRect.left + chartRect.width / 2;
+    const chartCenterY = chartRect.top + chartRect.height / 2;
+    const eyeCenterX = eyeRect.left + eyeRect.width / 2;
+    const eyeCenterY = eyeRect.top + eyeRect.height / 2;
+    
+    const dx = chartCenterX - eyeCenterX;
+    const dy = chartCenterY - eyeCenterY;
+    
+    // Normalize to -1 to 1 range (roughly)
+    const maxDist = Math.max(window.innerWidth, window.innerHeight) / 2;
+    return {
+        x: Math.max(-1, Math.min(1, dx / maxDist)),
+        y: Math.max(-1, Math.min(1, dy / maxDist))
+    };
+}
+
 function updateIrisPosition(dt) {
     if (!state.awake) return;
+
+    // Engrossed mode - locked on graph, ignores cursor
+    if (state.engrossed) {
+        const graphPos = getGraphCenter();
+        const lerpSpeed = 1.5;
+        const lerpFactor = 1 - Math.exp(-lerpSpeed * dt);
+        state.irisX += (graphPos.x - state.irisX) * lerpFactor;
+        state.irisY += (graphPos.y - state.irisY) * lerpFactor;
+        return;
+    }
 
     // Shy mode: look AWAY from cursor instead of at it
     const shyMultiplier = state.shy ? -1 : 1;
     const goalX = state.targetX * state.attention * shyMultiplier;
     const goalY = state.targetY * state.attention * shyMultiplier;
     
-    // Detect if cursor is "chasing" the eye into the corner
-    // Eye tries to look bottom-right when shy, so cursor in top-left corners it
-    state.beingCornered = state.shy && state.attention > 0.3 && state.targetX < -0.3 && state.targetY < -0.3;
+    // Detect if cursor is pushing eye toward the graph
+    const graphPos = getGraphCenter();
+    const eyeToGraph = { x: graphPos.x - state.irisX, y: graphPos.y - state.irisY };
+    const cursorPushDir = { x: -state.targetX, y: -state.targetY }; // shy mode inverts
+    // Cornered = cursor is pushing eye toward graph (dot product > 0)
+    const pushTowardGraph = eyeToGraph.x * cursorPushDir.x + eyeToGraph.y * cursorPushDir.y;
+    state.beingCornered = state.shy && state.attention > 0.3 && pushTowardGraph > 0;
     
-    // Detect if eye is looking at the graph (bottom-right)
-    state.lookingAtGraph = state.shy && state.irisX > 0.2 && state.irisY > 0.1;
+    // Detect if eye is looking at the graph (close to graph position)
+    const distToGraph = Math.sqrt((state.irisX - graphPos.x) ** 2 + (state.irisY - graphPos.y) ** 2);
+    state.lookingAtGraph = state.shy && distToGraph < 0.3;
 
     const lerpSpeed = 1.5;
     const lerpFactor = 1 - Math.exp(-lerpSpeed * dt);
@@ -570,11 +630,17 @@ requestAnimationFrame(tick);
 scheduleNextBlink();
 
 function setShy(isShy) {
-    state.shy = isShy;
-    state.targetBlush = isShy ? 1 : 0;
-    // Don't set dilation here - it's controlled by where the eye is looking
     if (isShy) {
+        state.shy = true;
+        state.engrossed = false;
+        state.corneredTime = 0;
+        state.targetBlush = 1;
         setExpression('flustered');
+    } else {
+        state.shy = false;
+        state.engrossed = false;
+        state.corneredTime = 0;
+        state.targetBlush = 0;
     }
 }
 

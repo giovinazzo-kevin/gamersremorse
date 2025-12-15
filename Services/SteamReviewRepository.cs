@@ -60,18 +60,23 @@ public record SteamReviewRepository(IOptions<SteamReviewRepository.Configuration
         var meta = await db.Metadatas.SingleOrDefaultAsync(x => x.AppId == appId, ct);
 
         var (totalPos, totalNeg) = await Scraper.FetchTotalReviewCount(appId, ct);
+        var totalReviews = totalPos + totalNeg;
+        var targetCount = (int)(totalReviews * Options.Value.LazyRefreshTargetPercent);
+        targetCount = Math.Clamp(targetCount, Options.Value.LazyRefreshMinItems, Options.Value.LazyRefreshMaxItems);
 
         if (meta is null) {
             meta = new Metadata {
                 AppId = appId,
                 // DON'T set UpdatedOn here - no data cached yet
                 TotalPositive = totalPos,
-                TotalNegative = totalNeg
+                TotalNegative = totalNeg,
+                TargetSampleCount = targetCount
             };
             db.Metadatas.Add(meta);
         } else {
             meta.TotalPositive = totalPos;
             meta.TotalNegative = totalNeg;
+            meta.TargetSampleCount = targetCount;
             // DON'T touch UpdatedOn
         }
 

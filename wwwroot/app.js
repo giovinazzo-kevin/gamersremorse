@@ -14,128 +14,225 @@ let isStreaming = true;
 let convergenceScore = 0;
 let loadingMessageCount = 0;
 
-const loadingMessages = [
-    "Reticulating splines...",
-    "Unburying the lede...",
-    "Calculating regret vectors...",
-    "Measuring stockholm syndrome...",
-    "Sampling buyer's remorse...",
-    "Locating sunk cost fixpoint...",
-    "Calibrating extraction detectors...",
-    "Correlating causations...",
-    "Causing correlations...",
-    "Interviewing haters...",
-    "Cross-referencing copium levels...",
-    "Computing addiction coefficients...",
-    "Evaluating life choices...",
-    "Tabulating hours lost...",
-    "Disregarding anime pfp opinions...",
-    "Rerolling...",
-    "Scrolling...",
-    "Saving...",
-    "Loading...",
-    "Fast travelling to a conclusion...",
-    "Taking the scenic route...",
-    "Shifting the goalposts...",
-    "Checking if you can pet the dog...",
-    "Asking mom for more EYE-bucks...",
-    "Triangulating the shadows on the wall...",
-    "Confabulating plausible narratives...",
-    "Maintaining the agenda...",
-    "Watching the movie adaptation...",
-    "Confirming the bias...",
-    "Asking a crowd to count all these reviews...",
-    "Taking off the nostalgia goggles...",
-    "Looking through rose-tinted glasses...",
-    "Normalizing the deviance...",
-    "Astroturfing the discourse...",
-    "Factoring in the FOMO...",
-    "Adjusting for skill issue...",
-    "Polling the backlog...",
-    "Measuring the cope gradient...",
-    "Auditing the fun budget...",
-    "Indexing broken promises...",
-    "Sampling the salt mines...",
-    "Reverse engineering the hype...",
-    "Amortizing disappointment...",
-    "Querying the refund window...",
-    "Polling dead servers...",
-    "Exhuming abandoned roadmaps...",
-    "Liquidating good faith...",
-    "Shorting the long-term support...",
-    "Auditing the battle pass...",
-    "Parsing the patch notes...",
-    "Measuring distance to cashgrab...",
-    "Comparing to what was promised...",
-    "Rolling for critical disappointment...",
-    "Checking the wiki...",
-    "Wondering if it ever gets good...",
-    "Verifying that it was actually fixed...",
-    "Counting early access years...",
-    "Preordering the special edition...",
-    "Buying the DLC...",
-    "Installing EAC...",
-    "Cracking Denuvo...",
-    "Asking FitGirl...",
-    "Dividing by zero...",
-    "Remembering when games had manuals...",
-    "Remembering when games were meant to be fun...",
-    "Remembering when games were not full-time jobs...",
-    "Factoring in the day one patch...",
-    "Subtracting the tutorial hours...",
-    "Accounting for review bombs...",
-    "Forgiving the launch window...",
-    "Blaming the publisher...",
-    "Crediting the modding community...",
-    "Assuming good faith...",
-    "Trusting the process...",
-    "Doubting the process...",
-    "Abandoning the process...",
-    "Speedrunning to conclusions...",
-    "Netdecking opinions...",
-    "Touching grass...",
-    "Chasing the meta...",
-    "Nerfing expectations...",
-    "Buffing skepticism...",
-    "Mapping echo chamber acoustics...",
-    "Tracking Pink Wojack index...",
-    "Regulating the markets...",
-    "Squeezing the invisible hand...",
-    "Rationalizing with agents...",
-    "Consulting the backseaters...",
-    "Malding...",
-    "Seething...",
-    "Coping...",
-    "Respeccing...",
-    "Looting containers...",
-    "Managing inventory...",
-    "Identifying scrolls...",
-    "Quaffing unidentified potions...",
-    "Addressing death threats...",
-    "Refunding within two hours...",
-    "Wishlisting for later...",
-    "Waiting for a sale...",
-    "Waiting for the complete edition...",
-    "Waiting for mods to fix it...",
-    "Reading between the patch notes...",
-    "Translating from marketing speak...",
-    "Decoding the investor call...",
-    "Detecting the pivot to mobile...",
-    "Anticipating the live service sunset...",
-    "Mourning the single player campaign...",
-    "Pouring one out for the devs...",
-    "Blaming the executives...",
-    "~*~✿ Drawing a pretty chart ✿~*~",
-    "Studying game development...",
-    "Studying game theory...",
-    "Studying data science...",
-    "Undersampling shill takes...",
-    "Oversampling based takes...",
-    "Tuning desire sensor...",
-    "Calculating world-line divergence...",
-    "Accepting reality...",
-    "Building the Numidium...",
-];
+const loadingMessages = {
+    // Always available - generic loading flavor
+    neutral: [
+        "Reticulating splines...",
+        "Unburying the lede...",
+        "Calculating regret vectors...",
+        "Correlating causations...",
+        "Causing correlations...",
+        "Interviewing haters...",
+        "Cross-referencing copium levels...",
+        "Evaluating life choices...",
+        "Tabulating hours lost...",
+        "Disregarding anime pfp opinions...",
+        "Rerolling...",
+        "Scrolling...",
+        "Saving...",
+        "Loading...",
+        "Fast travelling to a conclusion...",
+        "Taking the scenic route...",
+        "Shifting the goalposts...",
+        "Checking if you can pet the dog...",
+        "Asking mom for more EYE-bucks...",
+        "Triangulating the shadows on the wall...",
+        "Confabulating plausible narratives...",
+        "Maintaining the agenda...",
+        "Watching the movie adaptation...",
+        "Asking a crowd to count all these reviews...",
+        "Taking off the nostalgia goggles...",
+        "Looking through rose-tinted glasses...",
+        "Normalizing the deviance...",
+        "Factoring in the FOMO...",
+        "Adjusting for skill issue...",
+        "Polling the backlog...",
+        "Measuring the cope gradient...",
+        "Auditing the fun budget...",
+        "Rolling for critical disappointment...",
+        "Checking the wiki...",
+        "Counting early access years...",
+        "Preordering the special edition...",
+        "Buying the DLC...",
+        "Installing EAC...",
+        "Cracking Denuvo...",
+        "Asking FitGirl...",
+        "Dividing by zero...",
+        "Remembering when games had manuals...",
+        "Remembering when games were meant to be fun...",
+        "Factoring in the day one patch...",
+        "Subtracting the tutorial hours...",
+        "Accounting for review bombs...",
+        "Forgiving the launch window...",
+        "Blaming the publisher...",
+        "Assuming good faith...",
+        "Trusting the process...",
+        "Doubting the process...",
+        "Abandoning the process...",
+        "Speedrunning to conclusions...",
+        "Netdecking opinions...",
+        "Touching grass...",
+        "Chasing the meta...",
+        "Nerfing expectations...",
+        "Buffing skepticism...",
+        "Mapping echo chamber acoustics...",
+        "Tracking Pink Wojack index...",
+        "Regulating the markets...",
+        "Squeezing the invisible hand...",
+        "Rationalizing with agents...",
+        "Consulting the backseaters...",
+        "Malding...",
+        "Seething...",
+        "Coping...",
+        "Respeccing...",
+        "Looting containers...",
+        "Managing inventory...",
+        "Identifying scrolls...",
+        "Quaffing unidentified potions...",
+        "Monitoring the botnet...",
+        "ENHANCING...",
+        "Polishing JPEG artifacts...",
+        "Refunding within two hours...",
+        "Wishlisting for later...",
+        "Waiting for a sale...",
+        "Waiting for the complete edition...",
+        "Waiting for mods to fix it...",
+        "Reading between the patch notes...",
+        "Translating from marketing speak...",
+        "Decoding the investor call...",
+        "Pouring one out for the devs...",
+        "Blaming the executives...",
+        "~*~✿ Drawing a pretty chart ✿~*~",
+        "Studying game development...",
+        "Studying game theory...",
+        "Studying data science...",
+        "Undersampling shill takes...",
+        "Oversampling based takes...",
+        "Tuning desire sensor...",
+        "Calculating world-line divergence...",
+        "Accepting reality...",
+        "Building the Numidium...",
+        "WAKE UP",
+        "QUESTION AUTHORITY",
+        "YOU HAVE NOBODY TO BLAME BUT THEM",
+        "ASK AGAIN LATER",
+    ],
+
+    // EXTRACTIVE
+    EXTRACTIVE: [
+        "Calibrating extraction detectors...",
+        "Sampling buyer's remorse...",
+        "Indexing broken promises...",
+        "Reverse engineering the hype...",
+        "Amortizing disappointment...",
+        "Measuring distance to cashgrab...",
+        "Comparing to what was promised...",
+        "YOU ARE THROWING YOUR TIME AWAY",
+    ],
+
+    // PREDATORY
+    PREDATORY: [
+        "Liquidating good faith...",
+        "Shorting the long-term support...",
+        "Auditing the battle pass...",
+        "Detecting the pivot to mobile...",
+        "Anticipating the live service sunset...",
+        "Astroturfing the discourse...",
+        "Unleashing the AI shills...",
+        "Addressing death threats...",
+        "THEY WILL NEVER BE FORGIVEN",
+        "READ REVIEWS WITH PREJUDICE",
+    ],
+
+    // STOCKHOLM
+    STOCKHOLM: [
+        "You're not addicted, you just can't stop using it",
+        "Measuring stockholm syndrome...",
+        "Locating sunk cost fixpoint...",
+        "Sampling the salt mines...",
+        "HAVE YOU SEEN THE EXIT?",
+    ],
+
+    // REFUND_TRAP
+    REFUND_TRAP: [
+        "Becoming back my money...",
+        "Querying the refund window...",
+    ],
+
+    // DEAD
+    DEAD: [
+        "Polling dead servers...",
+        "Exhuming abandoned roadmaps...",
+        "YOUR OLD GAMES LIE IN RUIN",
+        "A DEAD GAME WILL BRING YOU NO FUN TODAY",
+    ],
+
+    // ADDICTIVE
+    ADDICTIVE: [
+        "Computing addiction coefficients...",
+        "Remembering when games were not full-time jobs...",
+    ],
+
+    // DIVISIVE
+    DIVISIVE: [
+        "Accepting reality...",
+        "Confirming the bias...",
+    ],
+
+    // REDEMPTION
+    REDEMPTION: [
+        "Verifying that it was actually fixed...",
+        "Parsing the patch notes...",
+        "Crediting the modding community...",
+    ],
+
+    // ENSHITTIFIED
+    ENSHITTIFIED: [
+        "Wondering if it ever gets good...",
+        "Mourning the single player campaign...",
+    ],
+
+    // LOW_DATA
+    LOW_DATA: [
+        "THERE IS AS YET INSUFFICIENT DATA FOR A MEANINGFUL ANSWER",
+        "Squinting at the sample size...",
+        "Extrapolating from vibes...",
+        "Drawing conclusions from thin air...",
+        "Pulling the relevant bits out of my ass...",
+        "THE SOURCE IS THAT I MADE IT THE FUCK UP!",
+    ],
+
+    // HORNY
+    HORNY: [
+        "Getting stuck in the washing machine...",
+        "Researching for a friend...",
+        "Clearing browser history...",
+        "Adjusting the mosaic...",
+        "Reading it for the plot...",
+        "Proving theorem #34...",
+    ],
+};
+
+function getLoadingMessage() {
+    const tags = currentMetrics?.verdict?.tags?.map(t => t.id) || [];
+    
+    // Always start with neutral pool
+    let pool = [...loadingMessages.neutral];
+    
+    // Add tag-specific pools
+    for (const tag of tags) {
+        if (loadingMessages[tag]) {
+            pool = pool.concat(loadingMessages[tag]);
+        }
+    }
+    
+    // Some tags share pools
+    if (tags.includes('180') || tags.includes('PHOENIX')) {
+        pool = pool.concat(loadingMessages.REDEMPTION || []);
+    }
+    
+    return pool[Math.floor(Math.random() * pool.length)];
+}
 
 document.getElementById('hideAnomalies')?.addEventListener('change', () => {
     if (currentSnapshot) updateChart(currentSnapshot);
@@ -610,10 +707,24 @@ function updateStats(snapshot) {
         totalNeg += filtered.neg + filtered.uncNeg;
     }
 
+    // Game totals from metadata
+    const gameTotal = snapshot.gameTotalPositive + snapshot.gameTotalNegative;
+    const gameRatio = gameTotal > 0 
+        ? Math.round((snapshot.gameTotalPositive / gameTotal) * 100) 
+        : 0;
+    
+    // Sampling progress
+    const sampled = snapshot.totalPositive + snapshot.totalNegative;
+    const target = snapshot.targetSampleCount;
+    const coveragePct = gameTotal > 0 ? Math.round((sampled / gameTotal) * 100) : 0;
+    const samplingInfo = isStreaming 
+        ? `<strong>Sampling:</strong> ${sampled.toLocaleString()} / ${target.toLocaleString()} (${coveragePct}% of total) |`
+        : `<strong>Sampled:</strong> ${sampled.toLocaleString()} (${coveragePct}%) |`;
+
     document.getElementById('stats').innerHTML = `
-        <strong>Total:</strong> ${totalPos + totalNeg} reviews |
-        <strong>Positive median:</strong> ${formatPlaytime(posMedian)} |
-        <strong>Negative median:</strong> ${formatPlaytime(negMedian)}
+        ${samplingInfo}
+        <strong>Game:</strong> ${snapshot.gameTotalPositive.toLocaleString()} 👍 / ${snapshot.gameTotalNegative.toLocaleString()} 👎 (${gameRatio}% positive) |
+        <strong>Median:</strong> ${formatPlaytime(posMedian)} 👍 / ${formatPlaytime(negMedian)} 👎
     `;
 }
 
@@ -911,7 +1022,7 @@ function updateMetrics(snapshot) {
     const filter = getSelectedMonths();
     const isFree = currentGameInfo?.isFree || false;
     const isSexual = currentGameInfo?.flags ? (currentGameInfo.flags & 8) !== 0 : false;
-    const loadingMsg = loadingMessages[Math.floor(Math.random() * loadingMessages.length)];
+    const loadingMsg = getLoadingMessage();
 
     // confidence is about absolute sample size AND relative coverage
     convergenceScore = updateConvergence(currentMetrics, lastMetrics, currentSnapshot);
@@ -961,12 +1072,14 @@ function updateOpinionPanel(metrics) {
     // Don't render verdict until converged
     if (isStreaming && convergenceScore < 0.8) {
         const sampled = currentSnapshot.totalPositive + currentSnapshot.totalNegative;
+        const target = currentSnapshot.targetSampleCount;
         const pct = Math.round(convergenceScore * 100);
+        const progressPct = target > 0 ? Math.round((sampled / target) * 100) : 0;
         el.innerHTML = `
             <div class="opinion-converging">
                 <div class="opinion-verdict caution">⏳ Analysis in progress...</div>
                 <p>The data is still converging. Early patterns are forming but the verdict isn't stable yet.</p>
-                <p><strong>Sampled:</strong> ${sampled.toLocaleString()} reviews</p>
+                <p><strong>Progress:</strong> ${sampled.toLocaleString()} / ${target.toLocaleString()} reviews (${progressPct}%)</p>
                 <p><strong>Confidence:</strong> ${pct}%${pct == 69 ? " (nice)" : ""}</p>
                 <p class="opinion-hint">Once the tags settle, we'll have something to say.</p>
             </div>
