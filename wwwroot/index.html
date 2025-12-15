@@ -11,6 +11,8 @@
             --color-negative: #c80064;
             --color-uncertain: #666666;
             --color-accent: #333333;
+            --color-tag-extractive: #cc4400;
+            --color-tag-predatory: #e74c3c;
         }
 
         * {
@@ -64,41 +66,56 @@
                     background: #f0f0f0;
                 }
 
+        /* === THREE COLUMN LAYOUT === */
         .main {
-            max-width: 1000px;
+            max-width: 1500px;
             margin: 15px auto;
             display: grid;
-            grid-template-columns: 1fr 280px;
-            gap: 15px;
-            padding: 0 15px;
+            grid-template-columns: 320px 1fr 320px;
+            gap: 20px;
+            padding: 0 20px;
         }
 
-        .content {
-            background: #fff;
-            border: 1px solid #ccc;
+        .col-left {
+            order: 1;
         }
 
-        .content-header {
-            background: #f5f5f5;
-            border-bottom: 1px solid #ddd;
-            padding: 8px 12px;
-            font-weight: bold;
-            color: #555;
-            text-transform: uppercase;
-            font-size: 10px;
+        .col-center {
+            order: 2;
         }
 
-        .content-body {
-            padding: 15px;
+        .col-right {
+            order: 3;
         }
 
-        .sidebar-box {
+        /* Mobile: stack with different order */
+        @media (max-width: 1000px) {
+            .main {
+                grid-template-columns: 1fr;
+            }
+
+            .col-center {
+                order: 1;
+            }
+            /* charts first */
+            .col-left {
+                order: 2;
+            }
+            /* methodology second */
+            .col-right {
+                order: 3;
+            }
+            /* opinion last */
+        }
+
+        /* === BOXES === */
+        .box {
             background: #fff;
             border: 1px solid #ccc;
             margin-bottom: 15px;
         }
 
-        .sidebar-header {
+        .box-header {
             background: var(--color-accent);
             color: #fff;
             padding: 8px 12px;
@@ -107,16 +124,59 @@
             text-transform: uppercase;
         }
 
-        .sidebar-body {
-            padding: 10px;
+            .box-header.light {
+                background: #f5f5f5;
+                color: #555;
+                border-bottom: 1px solid #ddd;
+            }
+
+        .box-body {
+            padding: 12px;
             font-size: 11px;
             line-height: 1.6;
         }
 
-            .sidebar-body p {
-                margin-bottom: 8px;
+            .box-body p {
+                margin-bottom: 10px;
             }
 
+                .box-body p:last-child {
+                    margin-bottom: 0;
+                }
+
+            .box-body h3 {
+                font-size: 11px;
+                color: #555;
+                text-transform: uppercase;
+                margin: 15px 0 8px 0;
+                padding-top: 10px;
+                border-top: 1px solid #eee;
+            }
+
+                .box-body h3:first-child {
+                    margin-top: 0;
+                    padding-top: 0;
+                    border-top: none;
+                }
+
+            .box-body strong {
+                color: var(--color-accent);
+            }
+
+            .box-body em {
+                font-style: italic;
+            }
+
+            .box-body ul {
+                margin: 8px 0;
+                padding-left: 18px;
+            }
+
+            .box-body li {
+                margin: 4px 0;
+            }
+
+        /* === SEARCH === */
         .search-row {
             display: flex;
             gap: 8px;
@@ -144,9 +204,10 @@
         }
 
             button:hover {
-                background: #a00;
+                background: #555;
             }
 
+        /* === STATS & METRICS === */
         #stats {
             font-size: 11px;
             color: #666;
@@ -181,40 +242,15 @@
             text-shadow: 0 1px 1px rgba(0,0,0,0.3);
         }
 
-        .verdict {
-            font-size: 14px;
-            margin-bottom: 8px;
-        }
-
-        .verdict-healthy { color: var(--color-positive); }
-        .verdict-neutral { color: #666; }
-        .verdict-insufficient { color: #999; }
-        .verdict-suspicious { color: #cc8800; }
-        .verdict-extractive { color: #cc4400; }
-        .verdict-predatory { color: var(--color-negative); }
-        .verdict-stockholm { color: var(--color-negative); }
-        .verdict-corrupted { color: #666; font-style: italic; }
-        .verdict-flop { color: #8B0000; font-weight: bold; }
-        .verdict-dead { color: #444; font-style: italic; }
-        .verdict-divisive { color: #9932CC; }
-        .verdict-honeymoon { color: #DAA520; }
-        .verdict-redemption { color: #228B22; }
-
-        .verdict .severity {
-            font-size: 11px;
-            font-weight: normal;
-            margin-left: 8px;
-        }
-
         .reasons {
             margin: 8px 0;
             padding-left: 20px;
         }
 
-        .reasons li {
-            margin: 4px 0;
-            color: #555;
-        }
+            .reasons li {
+                margin: 4px 0;
+                color: #555;
+            }
 
         .metrics-raw {
             font-size: 10px;
@@ -235,6 +271,7 @@
                 display: none;
             }
 
+        /* === CHARTS === */
         .chart-container {
             position: relative;
             background: #fafafa;
@@ -283,6 +320,12 @@
             padding-bottom: 0;
         }
 
+        .chart-title {
+            font-size: 11px;
+            color: #555;
+            margin: 15px 0 8px 0;
+        }
+
         .x-label {
             position: absolute;
             transform: translateX(-50%);
@@ -290,29 +333,76 @@
             font-size: 9px;
         }
 
-        .methodology h2 {
-            background: #f5f5f5;
-            border-bottom: 1px solid #ddd;
-            padding: 8px 12px;
-            font-size: 11px;
-            color: #555;
-            text-transform: uppercase;
-            margin: 0 -15px 12px -15px;
-        }
-
-        .methodology p {
+        .chart-controls {
             margin-bottom: 10px;
-            line-height: 1.6;
+            font-size: 10px;
         }
 
-        .methodology strong {
-            color: var(--color-accent);
-        }
+            .chart-controls label {
+                margin-right: 12px;
+            }
 
-        .methodology em {
+        /* === OPINION SECTION === */
+        .opinion-placeholder {
+            padding: 20px;
+            text-align: center;
+            color: #999;
             font-style: italic;
         }
 
+        .opinion-converging {
+            opacity: 0.8;
+        }
+
+        .opinion-hint {
+            color: #888;
+            font-style: italic;
+            font-size: 0.9em;
+        }
+
+        .opinion-verdict {
+            font-size: 16px;
+            font-weight: bold;
+            margin-bottom: 12px;
+            padding-bottom: 12px;
+            border-bottom: 2px solid #eee;
+        }
+
+            .opinion-verdict.healthy {
+                color: var(--color-positive);
+            }
+
+            .opinion-verdict.caution {
+                color: #cc8800;
+            }
+
+            .opinion-verdict.warning {
+                color: var(--color-negative);
+            }
+
+        .opinion-breakdown {
+            margin: 12px 0;
+        }
+
+            .opinion-breakdown dt {
+                font-weight: bold;
+                color: #555;
+                margin-top: 10px;
+            }
+
+            .opinion-breakdown dd {
+                margin: 4px 0 0 0;
+                color: #666;
+            }
+
+        .opinion-tldr {
+            background: #f5f5f5;
+            padding: 10px;
+            margin-top: 12px;
+            border-left: 3px solid var(--color-accent);
+        }
+
+        /* === FOOTER === */
         .footer {
             text-align: center;
             padding: 15px;
@@ -330,7 +420,7 @@
         <svg id="eye"></svg>
         <div>
             <h1>Gamer's Remorse</h1>
-            <div class="tagline">Redefining The Metrics</div>
+            <div class="tagline"><em>We are the metrics <strong>now</strong></em></div>
         </div>
     </div>
 
@@ -343,10 +433,78 @@
     </div>
 
     <div class="main">
-        <div class="content-area">
-            <div class="content">
-                <div class="content-header">Steam Review Analysis</div>
-                <div class="content-body">
+        <!-- LEFT COLUMN: Methodology -->
+        <div class="col-left">
+            <div class="box">
+                <div class="box-header">What Am I Looking At?</div>
+                <div class="box-body">
+                    <p>
+                        This chart shows <strong>when</strong> players leave reviews.
+                        X-axis is playtime (log scale), Y-axis is review count.
+                    </p>
+                    <p>
+                        <strong style="color: var(--color-positive)">Blue</strong> = positive.
+                        <strong style="color: var(--color-negative)">Pink</strong> = negative.
+                        <strong style="color: var(--color-uncertain)">Gray</strong> = edited after a week (fence-sitters).
+                    </p>
+
+                    <h3>Healthy vs Extractive</h3>
+                    <p>
+                        <strong>Healthy:</strong> Negative reviews cluster early. People who won't like it figure that out fast.
+                    </p>
+                    <p>
+                        <strong>Extractive:</strong> Negative reviews come <em>after</em> positive ones.
+                        Players get burned after investing significant time.
+                    </p>
+
+                    <h3>The Median Lines</h3>
+                    <p>
+                        Dashed lines show median playtime for each sentiment.
+                        When negative median sits <em>right</em> of positive, that's extraction.
+                    </p>
+                </div>
+            </div>
+
+            <div class="box">
+                <div class="box-header">How do the tags work?</div>
+                <div class="box-body">
+                    <p>
+                        TAGS are inferred from the shape of the chart, not from the content of the examined reviews.
+                        They do not (necessarily) represent the opinions of the players, and they are not to be taken or shared as objective statements (unless sourced from reddit and adequately padded with weasel words).
+                    </p>
+                    <p>
+                        Low-confidence charts might display overly negative tags. This is normal; it's an artifact of the sampling algorithm. As more reviews come in, the distribution converges and the tags eventually settle.
+                    </p>
+                    <p>
+                        Some tags are mutually exclusive, and some tags can level up. For example, PREDATORY is a stronger version of EXTRACTIVE.
+                    </p>
+                </div>
+            </div>
+
+            <div class="box">
+                <div class="box-header">Why is the refund threshold shown?</div>
+                <div class="box-body">
+                    <p>
+                        Steam lets you refund games under 2 hours.
+                        Sounds consumer-friendly until you realize what it incentivizes.
+                    </p>
+                    <p>
+                        Developers front-load the good stuff. First 2 hours: polished, exciting.
+                        The grind and paywalls come later. After you're locked in.
+                    </p>
+                    <p>
+                        The refund window isn't protection. It's a design constraint that teaches
+                        developers how long to keep up the illusion.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- CENTER COLUMN: Charts -->
+        <div class="col-center">
+            <div class="box">
+                <div class="box-header light">Steam Review Analysis</div>
+                <div class="box-body">
                     <div class="search-row">
                         <input type="text" id="appId" placeholder="Steam App ID or store URL">
                         <button onclick="analyze()">Analyze</button>
@@ -368,134 +526,69 @@
                         <div id="timeline-range"></div>
                         <canvas id="timeline"></canvas>
                     </div>
-                    <h3 class="chart-title">Post-Review Velocity (Excludes Anomalies)</h3>
+                    <h3 class="chart-title">How long do people keep playing after reviewing?</h3>
                     <div class="chart-container velocity">
                         <canvas id="velocity-chart"></canvas>
                     </div>
                 </div>
             </div>
-
-            <div class="content" style="margin-top: 15px;">
-                <div class="content-body methodology">
-                    <h2>What am I looking at?</h2>
-                    <p>
-                        This chart shows when players leave reviews. The x-axis is playtime on a log scale, the y-axis is review count.<br />
-                        <strong>Blue bars</strong> are positive reviews.
-                        <strong>Orange bars</strong> are negative. <br />
-                        <strong>Gray bars</strong> are reviews edited more than a week after posting
-                        (players came back to change their verdict, marking them as fence-sitters whose original opinion shifted).
-                        They're still binned by current sentiment, but treat them as uncertainty margins. <br />
-                    </p>
-                    <p>
-                        <strong>Healthy games</strong> have negative reviews clustered early. People who don't
-                        like it figure that out fast. Positive reviews spread across longer playtimes.
-                    </p>
-                    <p>
-                        <strong>Extractive games</strong> show the opposite. Negative reviews come <em>after</em>
-                        positive ones. Players feel burned after investing significant time.
-                    </p>
-                    <p>
-                        The dashed lines show <strong>median playtime</strong> for positive and negative reviews. <br />
-
-                        Half of positive reviews came before the blue line, half after. Same for orange.
-                        In a healthy game, the negative median sits LEFT of the positive median: the game is being honest about the audience it's for.
-                        When negative sits far to the RIGHT of positive, that's extraction.
-                        People played for hundreds of hours before admitting they weren't having fun. The "game" wasted their time successfully before letting them realize it.
-                    </p>
-
-                    <h2>The 2-hour refund window</h2>
-                    <p>
-                        Steam lets you refund a game if you've played less than 2 hours. Sounds
-                        consumer-friendly until you realize what it incentivizes.
-                    </p>
-                    <p>
-                        Developers know about the 2-hour window. So they front-load the good stuff.
-                        The first 2 hours are polished, exciting, full of promise. The extraction
-                        mechanics, the grind, the paywalls come later. After you're locked in.
-                    </p>
-                    <p>
-                        Look at any extraction game's curve. The negative reviews don't cluster before
-                        the refund threshold. They cluster at 10, 50, 500 hours. Long after you've
-                        lost the right to get your money back.
-                    </p>
-                    <p>
-                        The refund window isn't consumer protection. It's a design constraint that
-                        teaches developers exactly how long they need to keep up the illusion.
-                    </p>
-
-                    <h2>Why doesn't Steam show this?</h2>
-                    <p>
-                        Three reasons.
-                    </p>
-                    <p>
-                        <strong>Publisher leverage.</strong> Show data that makes EA look bad,
-                        EA threatens to leave. Steam can't afford that.
-                    </p>
-                    <p>
-                        <strong>Self-incrimination.</strong> Valve's own games are some of the worst
-                        offenders. Dota 2, CS2, TF2. They're not going to build a feature that puts
-                        themselves on the wall of shame. They want you to think that "Very Positive"
-                        means that it's a good game (whatever that means). And they want you to stop thinking right there.
-                    </p>
-                    <p>
-                        <strong>The market loop.</strong> Steam credits are denominated in dollars but can never become dollars again.
-                        Every market transaction takes 5% at best, over 15% at worst. Buy an item, sell an item, buy another...
-                        each cycle bleeds value to Valve until it all evaporates and players put new dollars in.
-                        Games that keep you playing longer generate more transactions.
-                        The extraction isn't just your time. It's infinite taxation on a closed loop. <em>That's</em> how one buys a yacht.
-                    </p>
-
-                    <h2>How do I use this?</h2>
-                    <p>
-                        Share this tool with your friends.
-                    </p>
-                    <p>
-                        Game companies optimize for metrics that matter. Right now they optimize for
-                        engagement, retention, time-to-first-purchase, ARPU. These are the metrics
-                        investors and executives look at.
-                    </p>
-                    <p>
-                        If enough players start checking games here before buying, the shape of the
-                        curve becomes a metric that matters. Games with healthy curves sell better.
-                        Games with extraction patterns get called out.
-                    </p>
-                    <p>
-                        You don't need to boycott anything. You don't need to write angry tweets.
-                        Just make the data visible. Natural selection does the rest.
-                    </p>
-                </div>
-            </div>
         </div>
 
-        <div class="sidebar">
-            <div class="sidebar-box">
-                <div class="sidebar-header">Quick Stats</div>
-                <div class="sidebar-body">
-                    <p><strong>Games analyzed:</strong> 1,247</p>
-                    <p><strong>Reviews processed:</strong> 12.4M</p>
-                    <p><strong>Extraction detected:</strong> 34%</p>
+        <!-- RIGHT COLUMN: Opinion / So What -->
+        <div class="col-right">
+            <div class="box">
+                <div class="box-header">How Do I Read The Charts?</div>
+                <div class="box-body" id="opinion-content">
+                    <p style="color: #999; font-style: italic;">
+                        Analyze a game to see the verdict.
+                    </p>
                 </div>
             </div>
 
-            <div class="sidebar-box">
-                <div class="sidebar-header">Worst Offenders</div>
-                <div class="sidebar-body">
-                    <p>1. Dota 2</p>
-                    <p>2. CS2</p>
-                    <p>3. Destiny 2</p>
-                    <p>4. Warframe</p>
-                    <p>5. Path of Exile</p>
+            <div class="box">
+                <div class="box-header">Why Doesn't Steam Show This?</div>
+                <div class="box-body">
+                    <p>
+                        <strong>Publisher leverage.</strong> Make EA look bad, EA threatens to leave.
+                    </p>
+                    <p>
+                        <strong>Self-incrimination.</strong> Valve's games are some of the worst offenders.
+                    </p>
+                    <p>
+                        <strong>The market loop.</strong> Steam credits can never become real dollars again.
+                        Every transaction bleeds value to Valve. Games that keep you playing generate more transactions even when they harm your mental health in the process.
+                    </p>
                 </div>
             </div>
 
-            <div class="sidebar-box">
-                <div class="sidebar-header">Healthiest Games</div>
-                <div class="sidebar-body">
-                    <p>1. Nuclear Throne</p>
-                    <p>2. Hades</p>
-                    <p>3. Slay the Spire</p>
-                    <p>4. Celeste</p>
-                    <p>5. Hollow Knight</p>
+            <div class="box">
+                <div class="box-header">The Last Question</div>
+                <div class="box-body">
+                    <p>
+                        We built the economy on the hopeful premise that rational agents making informed decisions would willingly participate in a fair market.
+                    </p>
+                    <p>
+                        But the agents are not rational, the decisions are not informed, the participation is not optional and the market is not fair.
+                    </p>
+                    <p>
+                        When the market is not fair (such as in a monopoly, an oligopoly or a cartel), the agents who hoard information have
+                        an explicit incentive to shape it in a way that benefits them, making them appear less extractive than they really are.
+                    </p>
+                    <p>
+                        The gaming market is not fair because distribution is mediated by a handful of publishers and store fronts.
+                        The former exist to spend millions advertising games to people who aren't their target audience.
+                        The latter exist because we are collectively too lazy to keep track of dozens of individual company websites and game launchers.
+                    </p>
+                    <p>
+                        The result is that whoever controls the store front gets to decide what "games" are supposed to be.
+                        And they do so by making you think that "Recent: Very Positive" is a complete sentence.
+                    </p>
+                    <p>
+                        How can you make an informed decision when the data you're being shown doesn't trust you to be literate enough to read it?
+                    </p>
+                    <p>
+                        <em>THERE IS AS YET INSUFFICIENT DATA FOR A MEANINGFUL ANSWER.</em>
+                    </p>
                 </div>
             </div>
         </div>

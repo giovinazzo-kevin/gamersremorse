@@ -16,6 +16,7 @@ public record SteamReviewAnalyzer(IOptions<SteamReviewAnalyzer.Configuration> Op
     public async IAsyncEnumerable<AnalysisSnapshot> VerdictByPlaytime(
         IAsyncEnumerable<SteamReview> source,
         bool streamSnapshots,
+        Metadata meta,
         [EnumeratorCancellation] CancellationToken stoppingToken)
     {
         var all = new List<SteamReview>();
@@ -26,14 +27,14 @@ public record SteamReviewAnalyzer(IOptions<SteamReviewAnalyzer.Configuration> Op
             all.Add(review);
 
             if (streamSnapshots && ++count % Options.Value.SnapshotEvery == 0)
-                yield return BuildSnapshot(all);
+                yield return BuildSnapshot(all, meta);
         }
 
         if (all.Count > 0)
-            yield return BuildSnapshot(all);
+            yield return BuildSnapshot(all, meta);
     }
 
-    private AnalysisSnapshot BuildSnapshot(List<SteamReview> reviews)
+    private AnalysisSnapshot BuildSnapshot(List<SteamReview> reviews, Metadata meta)
     {
         var bucketsByReview = BuildHistogram(reviews, r => r.TimePlayedAtReview.TotalMinutes);
         var bucketsByTotal = BuildHistogram(reviews, r => r.TimePlayedInTotal.TotalMinutes);
@@ -51,7 +52,9 @@ public record SteamReviewAnalyzer(IOptions<SteamReviewAnalyzer.Configuration> Op
             velocityBuckets,
             anomalies,
             positiveReviews.Count,
-            negativeReviews.Count
+            negativeReviews.Count,
+            meta.TotalPositive,
+            meta.TotalNegative
         );
     }
 

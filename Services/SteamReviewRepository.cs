@@ -54,22 +54,44 @@ public record SteamReviewRepository(IOptions<SteamReviewRepository.Configuration
         return info;
     }
 
+    public async Task<Metadata> GetMetadata(AppId appId, CancellationToken ct = default)
+    {
+        using var db = await DbContextFactory.CreateDbContextAsync(ct);
+        var meta = await db.Metadatas.SingleOrDefaultAsync(x => x.AppId == appId, ct);
+
+        var (totalPos, totalNeg) = await Scraper.FetchTotalReviewCount(appId, ct);
+
+        if (meta is null) {
+            meta = new Metadata {
+                AppId = appId,
+                // DON'T set UpdatedOn here - no data cached yet
+                TotalPositive = totalPos,
+                TotalNegative = totalNeg
+            };
+            db.Metadatas.Add(meta);
+        } else {
+            meta.TotalPositive = totalPos;
+            meta.TotalNegative = totalNeg;
+            // DON'T touch UpdatedOn
+        }
+
+        await db.SaveChangesAsync(ct);
+        return meta;
+    }
+
     public async IAsyncEnumerable<SteamReview> CacheAll(AppId appId, [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         var seen = new HashSet<(AppId, SteamId)>();
         using var db = await DbContextFactory.CreateDbContextAsync(cancellationToken);
-        var meta = await db.Metadatas.SingleOrDefaultAsync(x => x.AppId == appId, cancellationToken) 
-            ?? new Metadata() { AppId = appId };
-
+        var meta = await GetMetadata(appId, cancellationToken);
         // get total review count and calculate target
-        var (totalPositive, totalNegative) = await Scraper.FetchTotalReviewCount(appId, cancellationToken);
-        var totalReviews = totalPositive + totalNegative;
+        var totalReviews = meta.TotalPositive + meta.TotalNegative;
         var targetCount = (int)(totalReviews * Options.Value.LazyRefreshTargetPercent);
         targetCount = Math.Clamp(targetCount, Options.Value.LazyRefreshMinItems, Options.Value.LazyRefreshMaxItems);
 
         // calculate sentiment weights based on controversy
         // sigmoid curve: stays ~1 until very extreme ratios, then ramps to 2
-        var positiveRatio = totalReviews > 0 ? (double)totalPositive / totalReviews : 0.5;
+        var positiveRatio = totalReviews > 0 ? (double)meta.TotalPositive / totalReviews : 0.5;
         var distanceFrom50 = Math.Abs(positiveRatio - 0.5); // 0 at 50/50, 0.5 at 100/0
         // sigmoid: 1 + 1/(1 + e^(-k*(x-midpoint)))
         // k controls steepness, midpoint at 0.42 means only 92%+ games get weighted

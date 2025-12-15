@@ -1,5 +1,4 @@
-﻿using gamersremorse.Models;
-namespace gamersremorse.Models;
+﻿namespace gamersremorse.Models;
 
 public record struct AnalysisSnapshot(
     HistogramBucket[] BucketsByReviewTime,
@@ -7,5 +6,7 @@ public record struct AnalysisSnapshot(
     VelocityBucket[] VelocityBuckets,
     int[] AnomalyIndices,
     int TotalPositive,
-    int TotalNegative
+    int TotalNegative,
+    int GameTotalPositive,
+    int GameTotalNegative
 );

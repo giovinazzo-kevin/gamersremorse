@@ -26,10 +26,11 @@ app.Map("/ws/game/{appId}", async (HttpContext ctx, AppId appId, SteamReviewAnal
     Console.WriteLine($"WS connected for {appId}");
 
     using var ws = await ctx.WebSockets.AcceptWebSocketAsync();
+    var meta = await repo.GetMetadata(appId);
     var (reviews, isStreaming) = await repo.GetAll(appId, ctx.RequestAborted);
 
     var count = 0;
-    await foreach (var snapshot in analyzer.VerdictByPlaytime(reviews, isStreaming, ctx.RequestAborted)) {
+    await foreach (var snapshot in analyzer.VerdictByPlaytime(reviews, isStreaming, meta, ctx.RequestAborted)) {
         Console.WriteLine($"Sending snapshot with {snapshot.BucketsByTotalTime.Length} buckets");
         var json = JsonSerializer.SerializeToUtf8Bytes(snapshot, options);
         await ws.SendAsync(json, WebSocketMessageType.Text, true, ctx.RequestAborted);

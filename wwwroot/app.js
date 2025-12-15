@@ -9,6 +9,133 @@ let timelineSelection = { start: 0, end: 1 };
 let timelineDrag = null;
 let isFirstSnapshot = true;
 let currentMetrics = null;
+let lastMetrics = null;
+let isStreaming = true;
+let convergenceScore = 0;
+let loadingMessageCount = 0;
+
+const loadingMessages = [
+    "Reticulating splines...",
+    "Unburying the lede...",
+    "Calculating regret vectors...",
+    "Measuring stockholm syndrome...",
+    "Sampling buyer's remorse...",
+    "Locating sunk cost fixpoint...",
+    "Calibrating extraction detectors...",
+    "Correlating causations...",
+    "Causing correlations...",
+    "Interviewing haters...",
+    "Cross-referencing copium levels...",
+    "Computing addiction coefficients...",
+    "Evaluating life choices...",
+    "Tabulating hours lost...",
+    "Disregarding anime pfp opinions...",
+    "Rerolling...",
+    "Scrolling...",
+    "Saving...",
+    "Loading...",
+    "Fast travelling to a conclusion...",
+    "Taking the scenic route...",
+    "Shifting the goalposts...",
+    "Checking if you can pet the dog...",
+    "Asking mom for more EYE-bucks...",
+    "Triangulating the shadows on the wall...",
+    "Confabulating plausible narratives...",
+    "Maintaining the agenda...",
+    "Watching the movie adaptation...",
+    "Confirming the bias...",
+    "Asking a crowd to count all these reviews...",
+    "Taking off the nostalgia goggles...",
+    "Looking through rose-tinted glasses...",
+    "Normalizing the deviance...",
+    "Astroturfing the discourse...",
+    "Factoring in the FOMO...",
+    "Adjusting for skill issue...",
+    "Polling the backlog...",
+    "Measuring the cope gradient...",
+    "Auditing the fun budget...",
+    "Indexing broken promises...",
+    "Sampling the salt mines...",
+    "Reverse engineering the hype...",
+    "Amortizing disappointment...",
+    "Querying the refund window...",
+    "Polling dead servers...",
+    "Exhuming abandoned roadmaps...",
+    "Liquidating good faith...",
+    "Shorting the long-term support...",
+    "Auditing the battle pass...",
+    "Parsing the patch notes...",
+    "Measuring distance to cashgrab...",
+    "Comparing to what was promised...",
+    "Rolling for critical disappointment...",
+    "Checking the wiki...",
+    "Wondering if it ever gets good...",
+    "Verifying that it was actually fixed...",
+    "Counting early access years...",
+    "Preordering the special edition...",
+    "Buying the DLC...",
+    "Installing EAC...",
+    "Cracking Denuvo...",
+    "Asking FitGirl...",
+    "Dividing by zero...",
+    "Remembering when games had manuals...",
+    "Remembering when games were meant to be fun...",
+    "Remembering when games were not full-time jobs...",
+    "Factoring in the day one patch...",
+    "Subtracting the tutorial hours...",
+    "Accounting for review bombs...",
+    "Forgiving the launch window...",
+    "Blaming the publisher...",
+    "Crediting the modding community...",
+    "Assuming good faith...",
+    "Trusting the process...",
+    "Doubting the process...",
+    "Abandoning the process...",
+    "Speedrunning to conclusions...",
+    "Netdecking opinions...",
+    "Touching grass...",
+    "Chasing the meta...",
+    "Nerfing expectations...",
+    "Buffing skepticism...",
+    "Mapping echo chamber acoustics...",
+    "Tracking Pink Wojack index...",
+    "Regulating the markets...",
+    "Squeezing the invisible hand...",
+    "Rationalizing with agents...",
+    "Consulting the backseaters...",
+    "Malding...",
+    "Seething...",
+    "Coping...",
+    "Respeccing...",
+    "Looting containers...",
+    "Managing inventory...",
+    "Identifying scrolls...",
+    "Quaffing unidentified potions...",
+    "Receiving death threats...",
+    "Refunding within two hours...",
+    "Wishlisting for later...",
+    "Waiting for a sale...",
+    "Waiting for the complete edition...",
+    "Waiting for mods to fix it...",
+    "Reading between the patch notes...",
+    "Translating from marketing speak...",
+    "Decoding the investor call...",
+    "Detecting the pivot to mobile...",
+    "Anticipating the live service sunset...",
+    "Mourning the single player campaign...",
+    "Pouring one out for the devs...",
+    "Blaming the executives...",
+    "~*~✿ Drawing a pretty chart ✿~*~",
+    "Studying game development...",
+    "Studying game theory...",
+    "Studying data science...",
+    "Undersampling shill takes...",
+    "Oversampling based takes...",
+    "Tuning desire sensor...",
+    "Calculating world-line divergence...",
+    "Accepting reality...",
+    "Building the Numidium...",
+];
 
 document.getElementById('hideAnomalies')?.addEventListener('change', () => {
     if (currentSnapshot) updateChart(currentSnapshot);
@@ -34,6 +161,31 @@ async function analyze() {
     const appId = extractAppId(input);
     if (!appId) return alert('Invalid App ID');
 
+    // reset state
+    currentSnapshot = null;
+    currentMetrics = null;
+    lastMetrics = null;
+    convergenceScore = 0;
+    loadingMessageCount = 0;
+    isFirstSnapshot = true;
+    timelineData = { months: [], positive: {}, negative: {}, uncertainPos: {}, uncertainNeg: {}, volume: [], maxVolume: 0 };
+    timelineSelection = { start: 0, end: 1 };
+
+    // clear UI
+    if (chart) {
+        chart.destroy();
+        chart = null;
+    }
+    if (velocityChart) {
+        velocityChart.destroy();
+        velocityChart = null;
+    }
+    document.getElementById('stats').innerHTML = '';
+    document.getElementById('metrics-detail').innerHTML = '';
+    document.getElementById('opinion-content').innerHTML = '<div class="opinion-loading">⏳ Analyzing...</div>';
+    document.getElementById('game-title').textContent = '';
+    drawTimeline(); // clears the timeline canvas
+
     const infoRes = await fetch(`/game/${appId}`);
     if (infoRes.ok) {
         currentGameInfo = await infoRes.json();
@@ -50,6 +202,7 @@ async function analyze() {
     const ws = new WebSocket(`${protocol}//${location.host}/ws/game/${appId}`);
 
     ws.onmessage = (e) => {
+        isStreaming = true;
         state.lastInteraction = Date.now();
         const snapshot = JSON.parse(e.data);
         updateChart(snapshot);
@@ -64,7 +217,20 @@ async function analyze() {
 
     isFirstSnapshot = true;
     ws.onclose = () => {
+        isStreaming = false;
         console.log('Analysis complete');
+        if (currentSnapshot) {
+            const sampled = currentSnapshot.totalPositive + currentSnapshot.totalNegative;
+            const gameTotal = currentSnapshot.gameTotalPositive + currentSnapshot.gameTotalNegative;
+            const coverage = gameTotal > 0 ? sampled / gameTotal : 1;
+
+            if (coverage > 0.95 || convergenceScore > 0.9) {
+                convergenceScore = 1;
+            }
+
+            updateMetrics(currentSnapshot);
+        }
+
         if (window.setEyeLoading) window.setEyeLoading(false);
         // Final metrics update triggers eye emotion
         if (currentMetrics) {
@@ -202,9 +368,9 @@ function updateChart(snapshot) {
                 labels,
                 datasets: [
                     { label: 'Positive', data: positive, backgroundColor: positiveColors, stack: 'stack' },
-                    { label: 'Uncertain (Positive)', data: uncertainPos, backgroundColor: uncertainPosColors, stack: 'stack' },
+                    { label: 'Edited (Positive)', data: uncertainPos, backgroundColor: uncertainPosColors, stack: 'stack' },
                     { label: 'Negative', data: negative, backgroundColor: negativeColors, stack: 'stack' },
-                    { label: 'Uncertain (Negative)', data: uncertainNeg, backgroundColor: uncertainNegColors, stack: 'stack' }
+                    { label: 'Edited (Negative)', data: uncertainNeg, backgroundColor: uncertainNegColors, stack: 'stack' }
                 ]
             },
             options: {
@@ -283,9 +449,9 @@ function updateVelocityChart(snapshot) {
                 labels,
                 datasets: [
                     { label: 'Positive', data: positive, backgroundColor: hexToRgba(colors.positive, 0.7), stack: 'stack' },
-                    { label: 'Uncertain (Positive)', data: uncertainPos, backgroundColor: hexToRgba(colors.uncertain, 0.7), stack: 'stack' },
+                    { label: 'Edited (Positive)', data: uncertainPos, backgroundColor: hexToRgba(colors.uncertain, 0.7), stack: 'stack' },
                     { label: 'Negative', data: negative, backgroundColor: hexToRgba(colors.negative, 0.7), stack: 'stack' },
-                    { label: 'Uncertain (Negative)', data: uncertainNeg, backgroundColor: hexToRgba(colors.uncertain, 0.7), stack: 'stack' }
+                    { label: 'Edited (Negative)', data: uncertainNeg, backgroundColor: hexToRgba(colors.uncertain, 0.7), stack: 'stack' }
                 ]
             },
             options: {
@@ -711,25 +877,64 @@ function filterBucketByTime(bucket) {
     return { pos, neg, uncPos, uncNeg };
 }
 
+function updateConvergence(current, last, snapshot) {
+    const sampled = snapshot.totalPositive + snapshot.totalNegative;
+    const gameTotal = snapshot.gameTotalPositive + snapshot.gameTotalNegative;
+
+    // how much of target sample do we have?
+    // target is 10% of total, clamped to 5k-20k
+    const targetSample = Math.min(20000, Math.max(5000, gameTotal * 0.1));
+    const sampleProgress = Math.min(1, sampled / targetSample);
+
+    // fixpoint detection
+    if (!last) return sampleProgress * 0.5; // start at half of sample progress
+
+    const medianDrift = Math.abs(current.medianRatio - last.medianRatio);
+    const ratioDrift = Math.abs(current.positiveRatio - last.positiveRatio);
+    const totalDrift = medianDrift + ratioDrift;
+
+    const isStable = totalDrift < 0.05;
+
+    if (!isStable) {
+        // drifting - convergence can't exceed sample progress
+        return sampleProgress * 0.5;
+    } else {
+        // stable - approach sample progress asymptotically
+        const target = sampleProgress;
+        return convergenceScore + (target - convergenceScore) * 0.1;
+    }
+}
+
 function updateMetrics(snapshot) {
     if (!window.Metrics) return;
     
     const filter = getSelectedMonths();
     const isFree = currentGameInfo?.isFree || false;
     const isSexual = currentGameInfo?.flags ? (currentGameInfo.flags & 8) !== 0 : false;
-    currentMetrics = Metrics.compute(snapshot, { timelineFilter: filter, isFree, isSexual });
+    const loadingMsg = loadingMessages[Math.floor(Math.random() * loadingMessages.length)];
+
+    // confidence is about absolute sample size AND relative coverage
+    convergenceScore = updateConvergence(currentMetrics, lastMetrics, currentSnapshot);
+    lastMetrics = currentMetrics;
+
+    currentMetrics = Metrics.compute(snapshot, { timelineFilter: filter, isFree, isSexual, convergenceScore });
     
     const metricsEl = document.getElementById('metrics-detail');
     if (metricsEl && currentMetrics) {
         const v = currentMetrics.verdict;
         const severityPct = Math.round(v.severity * 100);
-        
-        // Build tag pills
-        const tagPills = v.tags.map(t => 
-            `<span class="tag-pill" style="background:${t.color}">${t.id}</span>`
+        const opacity = isStreaming ? (0.3 + convergenceScore * 0.7) : 1;
+        const tagPills = v.tags.map(t =>
+            `<span class="tag-pill" style="background:${t.color}; opacity:${opacity}">${t.id}</span>`
         ).join(' ');
-        
+        const preliminaryIcon = loadingMessageCount++ % 2 == 0 ? '⌛' : '⏳';
+        const preliminaryWarning = isStreaming && convergenceScore < 0.8
+            ? `<div class="loading">${preliminaryIcon} ${loadingMsg}</div>`
+            : isStreaming
+                ? `<div class="loading">✅ ${loadingMsg}</div>`
+                : '';
         metricsEl.innerHTML = `
+            ${preliminaryWarning}
             <div class="verdict-tags">
                 ${tagPills || '<span class="tag-pill" style="background:#666">NEUTRAL</span>'}
             </div>
@@ -740,14 +945,114 @@ function updateMetrics(snapshot) {
                 Median ratio: ${currentMetrics.medianRatio.toFixed(2)} |
                 Refund honesty: ${currentMetrics.refundNegRate !== null ? Math.round(currentMetrics.refundNegRate * 100) + '%' : 'N/A (F2P)'} |
                 Stockholm: ${currentMetrics.stockholmIndex.toFixed(2)}x |
-                Confidence: ${Math.round(currentMetrics.confidence * 100)}%
-                <br>
-                <small style="color:#aaa">Ratios: median=${currentMetrics.medianRatio?.toFixed(2)}x, stockholm=${currentMetrics.stockholmIndex?.toFixed(2)}x | Stddev: drift=${currentMetrics.temporalDriftZ?.toFixed(1)}σ, endAct=${currentMetrics.windowEndActivityZ?.toFixed(1)}σ</small>
-                <br>
-                <small style="color:#aaa">Spikes: negZ=${currentMetrics.negativeBombZ?.toFixed(1)}σ negCount=${currentMetrics.negativeBombCount} negPct=${Math.round((currentMetrics.negativeBombCount / currentMetrics.total) * 100)}% | posZ=${currentMetrics.positiveBombZ?.toFixed(1)}σ posCount=${currentMetrics.positiveBombCount} posPct=${Math.round((currentMetrics.positiveBombCount / currentMetrics.total) * 100)}%</small>
+                Confidence: ${Math.round(convergenceScore * 100)}%
             </div>
         `;
     }
+
+    // Update opinion panel
+    updateOpinionPanel(currentMetrics);
+}
+
+function updateOpinionPanel(metrics) {
+    const el = document.getElementById('opinion-content');
+    if (!el || !metrics) return;
+
+    // Don't render verdict until converged
+    if (isStreaming && convergenceScore < 0.8) {
+        const sampled = currentSnapshot.totalPositive + currentSnapshot.totalNegative;
+        const pct = Math.round(convergenceScore * 100);
+        el.innerHTML = `
+            <div class="opinion-converging">
+                <div class="opinion-verdict caution">⏳ Analysis in progress...</div>
+                <p>The data is still converging. Early patterns are forming but the verdict isn't stable yet.</p>
+                <p><strong>Sampled:</strong> ${sampled.toLocaleString()} reviews</p>
+                <p><strong>Confidence:</strong> ${pct}%</p>
+                <p class="opinion-hint">Once the tags settle, we'll have something to say.</p>
+            </div>
+        `;
+        return;
+    }
+    
+    const tags = metrics.verdict.tags.map(t => t.id);
+    const posMedianHours = Math.round(metrics.posMedianReview / 60);
+    const negMedianHours = Math.round(metrics.negMedianReview / 60);
+    const positivePct = Math.round(metrics.positiveRatio * 100);
+    const negativePct = Math.round(metrics.negativeRatio * 100);
+    
+    // Determine overall verdict class and message
+    let verdictClass = 'caution';
+    let verdictText = 'Proceed with awareness';
+    let verdictExplain = '';
+    
+    if (tags.includes('PREDATORY') || tags.includes('REFUND_TRAP')) {
+        verdictClass = 'warning';
+        verdictText = 'High risk of regret';
+        verdictExplain = `This game shows patterns associated with buyer's remorse. ${negativePct}% of reviews are negative, and they come after significant time investment.`;
+    } else if (tags.includes('EXTRACTIVE') || tags.includes('STOCKHOLM')) {
+        verdictClass = 'warning';
+        verdictText = 'Time extraction detected';
+        verdictExplain = `People who dislike this game figure it out at ${negMedianHours}h—after those who like it (${posMedianHours}h). The game takes before it reveals.`;
+    } else if (tags.includes('HEALTHY') || tags.includes('HONEST')) {
+        verdictClass = 'healthy';
+        verdictText = 'Respects your time';
+        verdictExplain = `${positivePct}% positive. People who won't like it figure that out by ${negMedianHours}h. The game is honest about what it is.`;
+    } else if (tags.includes('FLOP')) {
+        verdictClass = 'warning';
+        verdictText = 'Most people bounce';
+        verdictExplain = `${negativePct}% negative reviews, and they knew fast (${negMedianHours}h median). This might not be for you either.`;
+    } else if (tags.includes('DIVISIVE')) {
+        verdictClass = 'caution';
+        verdictText = 'Love it or hate it';
+        verdictExplain = `Near 50/50 split. Some people adore this, others don't. Worth researching if it's your kind of thing.`;
+    } else if (tags.includes('REDEMPTION') || tags.includes('180') || tags.includes('PHOENIX')) {
+        verdictClass = 'healthy';
+        verdictText = 'Redemption arc';
+        verdictExplain = `This game improved over time. Earlier reviews may not reflect current state. Recent sentiment is more positive.`;
+    } else if (tags.includes('ENSHITTIFIED') || tags.includes('HONEYMOON')) {
+        verdictClass = 'caution';
+        verdictText = 'Getting worse';
+        verdictExplain = `Sentiment has declined over time. What you read in old reviews may not match current experience.`;
+    }
+    
+    // Build the time commitment section
+    let timeCommitment = '';
+    if (negMedianHours < 10) {
+        timeCommitment = `<strong>Quick read:</strong> You'll know if it's for you within ${negMedianHours} hours.`;
+    } else if (negMedianHours < 50) {
+        timeCommitment = `<strong>Medium investment:</strong> Expect to put in ${negMedianHours}+ hours before you really know.`;
+    } else if (negMedianHours < 200) {
+        timeCommitment = `<strong>Significant commitment:</strong> People who dislike it played ${negMedianHours} hours first. That's a lot of time to risk.`;
+    } else {
+        timeCommitment = `<strong>Lifestyle game:</strong> ${negMedianHours} hours before people decided they didn't like it. This isn't a game, it's a relationship.`;
+    }
+    
+    // Stockholm warning
+    let stockholmWarning = '';
+    if (metrics.stockholmIndex > 1.5 && negMedianHours > 100) {
+        const extraHours = Math.round((metrics.negMedianTotal - metrics.negMedianReview) / 60);
+        stockholmWarning = `
+            <div class="opinion-tldr" style="border-left-color: var(--color-negative);">
+                <strong>Stockholm alert:</strong> People who left negative reviews played ${extraHours} MORE hours after saying they hated it. 
+                The game is designed to keep you playing even when you're not having fun.
+            </div>
+        `;
+    }
+    
+    el.innerHTML = `
+        <div class="opinion-verdict ${verdictClass}">${verdictText}</div>
+        <p>${verdictExplain}</p>
+        <p>${timeCommitment}</p>
+        ${stockholmWarning}
+        <div class="opinion-tldr">
+            <strong>TL;DR:</strong> 
+            ${positivePct}% positive at ${posMedianHours}h, 
+            ${negativePct}% negative at ${negMedianHours}h.
+            ${metrics.medianRatio > 1.3 ? 'Red flag: negatives take longer to form.' : 
+              metrics.medianRatio < 0.7 ? 'Good sign: negatives bounce early.' : 
+              'Neutral: similar time to verdict either way.'}
+        </div>
+    `;
 }
 
 function updateEyeFromMetrics(metrics) {

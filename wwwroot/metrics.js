@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Metrics module for gamersremorse
  * Pure analysis functions - no UI, no side effects
  * 
@@ -8,6 +8,12 @@
  */
 
 const Metrics = {
+    hierarchies: {
+        // Key beats Values
+        'PREDATORY': ['EXTRACTIVE'],
+        'EXTRACTIVE': ['TROUBLED'],
+        'TROUBLED': ['HONEST'],
+    },
     tagDefinitions: [
         // ============================================================
         // RATIO-BASED TAGS
@@ -40,7 +46,7 @@ const Metrics = {
                 && m.temporalDriftZ <= 1,
             reason: (m) => `${Math.round(m.negativeRatio * 100)}% negative at ${Math.round(m.negMedianReview / 60)}h (${Math.round((m.medianRatio - 1) * 100)}% longer than positives)`,
             severity: (m) => Math.min(0.3, (m.medianRatio - 1) * 0.3),
-            color: '#cc4400'
+            color: 'var(--color-tag-extractive)'
         },
         {
             id: 'ENSHITTIFIED',
@@ -59,7 +65,7 @@ const Metrics = {
             condition: (m) => m.medianRatio > 1.5 && m.negativeRatio > 0.30,
             reason: (m) => `${Math.round(m.negativeRatio * 100)}% negative after ${Math.round(m.negMedianReview / 60)}h median (${Math.round((m.medianRatio - 1) * 100)}% longer than positive)`,
             severity: 0.25,
-            color: '#e74c3c'
+            color: 'var(--color-tag-predatory)'
         },
         {
             id: 'STOCKHOLM',
@@ -92,12 +98,11 @@ const Metrics = {
             color: '#8B0000'
         },
         {
-            id: 'BAD',
-            // Significant negativity, negatives aren't being trapped (knew fast or same time)
+            id: 'TROUBLED',
             condition: (m) => m.negativeRatio > 0.35 && m.medianRatio <= 1.0 && m.positiveRatio < 0.80,
-            reason: (m) => `${Math.round(m.negativeRatio * 100)}% negative at ${Math.round(m.negMedianReview / 60)}h - positive median isn't any better (${Math.round(m.posMedianReview / 60)}h)`,
-            severity: 0.15,
-            color: '#a04030'
+            reason: (m) => `${Math.round(m.negativeRatio * 100)}% negative at ${Math.round(m.negMedianReview / 60)}h`,
+            severity: 0.1,
+            color: '#a08060'
         },
         {
             id: 'REFUND_TRAP',
@@ -884,7 +889,7 @@ const Metrics = {
      * Run all tag conditions and stack results
      */
     deriveVerdict(m) {
-        const tags = [];
+        let tags = [];
         let totalSeverity = 0;
         const reasons = [];
 
@@ -908,6 +913,12 @@ const Metrics = {
                 console.warn(`Tag ${def.id} failed:`, e);
             }
         }
+
+        tags = tags.filter(t => {
+            const dominated_by = Object.entries(Metrics.hierarchies)
+                .filter(([superior, inferiors]) => inferiors.includes(t.id) && tags.some(x => x.id === superior));
+            return dominated_by.length === 0;
+        });
 
         tags.sort((a, b) => Math.abs(b.severity) - Math.abs(a.severity));
 
