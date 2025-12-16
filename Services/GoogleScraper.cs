@@ -47,30 +47,37 @@ public class GoogleScraper(IDbContextFactory<AppDbContext> dbFactory) : IAsyncDi
         ");
     }
 
-    public async Task<string?> GetAIOverview(string query, CancellationToken ct = default)
+    public async Task<string?> GetAIOverview(string query, CancellationToken ct = default, int maxRetries = 2)
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
         var cached = await db.ControversyCaches.FindAsync([query], ct);
         if (cached != null && DateTime.UtcNow - cached.CachedAt < CacheDuration)
             return cached.Overview;
-        
-        try {
-            var browser = await GetBrowser();
-            await using var page = await browser.NewPageAsync();
-            
-            await ApplyStealthScripts(page);
-            await page.SetViewportAsync(new ViewPortOptions { Width = 1920, Height = 1080 });
-            await page.SetUserAgentAsync("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36");
-            await page.SetExtraHttpHeadersAsync(new Dictionary<string, string> {
-                ["Accept-Language"] = "en-US,en;q=0.9",
-                ["sec-ch-ua"] = "\"Google Chrome\";v=\"131\", \"Chromium\";v=\"131\"",
-                ["sec-ch-ua-platform"] = "\"Windows\""
-            });
-            
-            await page.GoToAsync($"https://www.google.com/search?q={Uri.EscapeDataString(query)}&hl=en", WaitUntilNavigation.Networkidle0);
-            await Task.Delay(1000, ct);
-            
-            var overview = await page.EvaluateFunctionAsync<string?>(@"
+
+        string? overview = null;
+
+        for (int attempt = 0; attempt <= maxRetries && overview == null; attempt++) {
+            if (attempt > 0) {
+                await Task.Delay(1000 * attempt, ct); // backoff: 1s, 2s
+            }
+
+            try {
+                var browser = await GetBrowser();
+                await using var page = await browser.NewPageAsync();
+
+                await ApplyStealthScripts(page);
+                await page.SetViewportAsync(new ViewPortOptions { Width = 1920, Height = 1080 });
+                await page.SetUserAgentAsync("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36");
+                await page.SetExtraHttpHeadersAsync(new Dictionary<string, string> {
+                    ["Accept-Language"] = "en-US,en;q=0.9",
+                    ["sec-ch-ua"] = "\"Google Chrome\";v=\"131\", \"Chromium\";v=\"131\"",
+                    ["sec-ch-ua-platform"] = "\"Windows\""
+                });
+
+                await page.GoToAsync($"https://www.google.com/search?q={Uri.EscapeDataString(query)}&hl=en", WaitUntilNavigation.Networkidle0);
+                await Task.Delay(1000, ct);
+
+                overview = await page.EvaluateFunctionAsync<string?>(@"
                 () => {
                     const mainCol = document.querySelector('[data-container-id=""main-col""]');
                     if (!mainCol) return null;
@@ -85,30 +92,32 @@ public class GoogleScraper(IDbContextFactory<AppDbContext> dbFactory) : IAsyncDi
                     return items.length ? items.join('\n\n') : null;
                 }
             ");
-            if (overview != null) {
-                overview = Regex.Replace(overview, @"\.[a-zA-Z0-9_-]+\{[^}]*\}", "");
-                overview = Regex.Replace(overview, @"\.[a-zA-Z0-9]{6,}\b", ""); // naked class names (6+ char gibberish)
-                overview = overview.Trim();
-            }
 
-            
-            if (cached != null) {
-                cached.Overview = overview;
-                cached.CachedAt = DateTime.UtcNow;
-            } else {
-                db.ControversyCaches.Add(new ControversyCache {
-                    Query = query,
-                    Overview = overview,
-                    CachedAt = DateTime.UtcNow
-                });
+                if (overview != null) {
+                    overview = Regex.Replace(overview, @"([\.\:\;\@\#\(,\)%]+[\w\d\-_~]+\s*)+[\)]?|\{+[^\}]*?\}+(div|span|a|p|mark|ul|li)?\s*", "");
+                    overview = overview.Trim();
+                    if (string.IsNullOrWhiteSpace(overview)) overview = null;
+                }
             }
-            await db.SaveChangesAsync(ct);
-            
-            return overview;
+            catch {
+                // retry
+            }
         }
-        catch {
-            return null;
+
+        // Cache result (even null to avoid hammering)
+        if (cached != null) {
+            cached.Overview = overview;
+            cached.CachedAt = DateTime.UtcNow;
+        } else {
+            db.ControversyCaches.Add(new ControversyCache {
+                Query = query,
+                Overview = overview,
+                CachedAt = DateTime.UtcNow
+            });
         }
+        await db.SaveChangesAsync(ct);
+
+        return overview;
     }
 
     public async ValueTask DisposeAsync()

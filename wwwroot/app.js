@@ -1861,7 +1861,8 @@ async function fetchControversyContext(gameName, metrics, snapshot) {
 
     const allEvents = events.slice(0, 4);
     const months = allEvents.map(e => e.month).join(',');
-    const res = await fetch(`/controversies?game=${encodeURIComponent(gameName)}&months=${months}`);
+    const types = allEvents.map(e => e.type).join(',');
+    const res = await fetch(`/controversies?game=${encodeURIComponent(gameName)}&months=${months}&types=${types}`);
     // In fetchControversyContext, map the response
     const data = await res.json();
     const contexts = data
@@ -1910,11 +1911,11 @@ function detectNotableEvents(metrics, snapshot) {
     }
 
     events.push({
-        type: 'launch',
+        type: launchWasNegative ? (tags.includes('FLOP') ? 'launch_flop' : 'launch_troubled') : 'launch',
         month: 'launch',
         year: sortedMonths[0] || '',
         severity: 0,
-        tag: launchWasNegative ? (tags.includes('FLOP') ? 'FLOP' : 'TROUBLED') : null
+        tag: launchWasNegative ? (tags.includes('FLOP') ? 'FLOP' : 'LAUNCH') : 'LAUNCH'
     });
 
     // Review bombs
@@ -1929,6 +1930,41 @@ function detectNotableEvents(metrics, snapshot) {
                     severity: spike.z,
                     count: spike.count,
                     tag: 'REVIEW_BOMBED'
+                });
+            }
+        }
+    }
+
+    // DEAD GAME
+    if (tags.includes('DEAD') || tags.includes('ZOMBIE') || tags.includes('PRESS_F') || tags.includes('RUGPULL') || tags.includes('CURSED') || tags.includes('HOPELESS')) {
+        // Find when activity dropped off - reuse the same logic as computeWindowEndActivity
+        const activityData = Metrics.getMonthlyActivityData(snapshot.bucketsByReviewTime, null);
+        const activity = activityData.activity;
+
+        if (activity.length >= 6) {
+            // Find last month before activity dropped to <20% of first half average
+            const firstHalfCount = Math.floor(activity.length / 2);
+            const firstHalf = activity.slice(0, firstHalfCount);
+            const avgActivity = firstHalf.reduce((sum, m) => sum + m.count, 0) / firstHalf.length;
+            const threshold = avgActivity * 0.2;
+
+            // Walk backwards to find last "alive" month
+            let deathMonth = null;
+            for (let i = activity.length - 1; i >= 0; i--) {
+                if (activity[i].count >= threshold) {
+                    deathMonth = activity[i].month;
+                    break;
+                }
+            }
+
+            if (deathMonth) {
+                const year = deathMonth.split('-')[0];
+                events.push({
+                    type: 'death',
+                    year,
+                    month: deathMonth,
+                    severity: 2,
+                    tag: tags.find(t => ['DEAD', 'ZOMBIE', 'PRESS_F', 'RUGPULL', 'CURSED', 'HOPELESS'].includes(t))
                 });
             }
         }

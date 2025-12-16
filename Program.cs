@@ -15,6 +15,8 @@ builder.Services.AddOptions<SteamReviewAnalyzer.Configuration>();
 builder.Services.AddTransient<SteamReviewAnalyzer>();
 builder.Services.AddSingleton<AnalysisHub>();
 builder.Services.AddSingleton<GoogleScraper>();
+builder.Services.AddOptions<CursorPool.Configuration>();
+builder.Services.AddSingleton<CursorPool>();
 builder.Logging.AddFilter("System.Net.Http.HttpClient", LogLevel.None);
 var app = builder.Build();
 
@@ -29,42 +31,53 @@ app.UseHttpsRedirection();
 app.MapGet("/game/{appId}", async (HttpContext ctx, AppId appId, SteamReviewRepository repo) => {
     return await repo.GetInfo(appId);
 });
-app.MapGet("/controversies", async (string game, string months, GoogleScraper google, CancellationToken ct) => {
+app.MapGet("/controversies", async (string game, string months, string? types, GoogleScraper google, CancellationToken ct) => {
+
     var monthList = months.Split(',', StringSplitOptions.RemoveEmptyEntries);
+    var typeList = types?.Split(',', StringSplitOptions.RemoveEmptyEntries) ?? monthList.Select(_ => "unknown").ToArray();
+
     var monthNames = new[] { "", "January", "February", "March", "April", "May", "June",
                              "July", "August", "September", "October", "November", "December" };
 
-    var tasks = monthList.Select(async month => {
+    var tasks = monthList.Zip(typeList).Select(async pair => {
+        var (month, eventType) = pair;
         string query;
         string? overview = null;
 
-        if (month == "launch") {
-            query = $"{game} launch reception bullet points";
+        const string bullets = " bullet points";
+
+        var parts = month.Split('-');
+        var year = parts[0];
+        var monthNumber = (parts.Length > 1 && int.TryParse(parts[1], out var m) && m >= 1 && m <= 12) ? (int?)m : null;
+        var monthName = monthNumber != null
+            ? monthNames[monthNumber.Value] : "";
+
+        query = eventType switch {
+            "launch" => $"{game} (video game) launch reception",
+            "launch_troubled" => $"{game} (video game) launch controversy",
+            "launch_flop" => $"Why did {game} (video game) flop",
+            "death" => $"Why did {game} (video game) die in {year}",
+            "review_bomb" when !string.IsNullOrEmpty(monthName)
+                => $"What was the {game} (video game) controversy in {monthName} {year}",
+            "review_bomb" => $"What was the {game} (video game) controversy in {year}",
+            "mass_edits" => $"What happened to {game} (video game) in {year} that made players angry",
+            _ => $"What was the {game} (video game) controversy in {year}"
+        } + bullets;
+
+        overview = await google.GetAIOverview(query, ct);
+
+        // Fallback to year-only if month-specific returned nothing
+        if (overview == null && !string.IsNullOrEmpty(monthName) && eventType != "death") {
+            query = $"What happened to {game} (video game) in {year}" + bullets;
             overview = await google.GetAIOverview(query, ct);
-        } else {
-            var parts = month.Split('-');
-            var year = parts[0];
-            var monthName = parts.Length > 1 && int.TryParse(parts[1], out var m) && m >= 1 && m <= 12
-                ? monthNames[m] : "";
-
-            if (!string.IsNullOrEmpty(monthName)) {
-                query = $"What was the {game} controversy in {monthName} {year} bullet points";
-                overview = await google.GetAIOverview(query, ct);
-            }
-
-            if (overview == null) {
-                query = $"What was the {game} controversy in {year} bullet points";
-                overview = await google.GetAIOverview(query, ct);
-            } else {
-                query = $"What was the {game} controversy in {monthName} {year} bullet points";
-            }
         }
-
-        return new { month, query, overview };
+        var orderBy = int.TryParse(year, out var y) ? y : 0;
+        var thenBy = monthNumber ?? 0;
+        return new { orderBy, thenBy, month, query, overview };
     });
 
     var results = await Task.WhenAll(tasks);
-    return results.Where(r => r.overview != null);
+    return results.OrderByDescending(r => r.orderBy).ThenByDescending(r => r.thenBy).Where(r => r.overview != null);
 });
 app.Map("/ws/game/{appId}", async (HttpContext ctx, AppId appId, AnalysisHub hub) => {
     if (!ctx.WebSockets.IsWebSocketRequest)

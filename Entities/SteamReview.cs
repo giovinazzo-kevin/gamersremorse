@@ -1,4 +1,5 @@
 ﻿using Microsoft.EntityFrameworkCore;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace gamersremorse.Entities;
 
@@ -18,6 +19,8 @@ public class SteamReview
     public byte SlurCount { get; set; }       // racial/homophobic/ableist
     public byte BanterCount { get; set; }     // git gud, skill issue, cope
     public byte ComplaintCount { get; set; }  // predatory, cashgrab, p2w
+    [NotMapped]
+    public string? Text { get; set; }
 
     public PlayTime TimePlayedAtReview { get; set; }
     public PlayTime TimePlayedInTotal { get; set; }

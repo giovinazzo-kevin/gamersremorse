@@ -18,7 +18,7 @@ public record SteamScraper(IOptions<SteamScraper.Configuration> Options, IHttpCl
         public string Language { get; set; } = "all";
         public bool FilterOffTopicActivity { get; set; } = false;
         public long MaxDayRange { get; set; } = 9223372036854775807;
-        public int RateLimitMs { get; set; } = 500;
+        public int RateLimitMs { get; set; } = 1000;
         public int NumPerPage { get; set; } = 100;
     }
     
@@ -45,17 +45,17 @@ public record SteamScraper(IOptions<SteamScraper.Configuration> Options, IHttpCl
         return (res.QuerySummary.TotalPositive, res.QuerySummary.TotalNegative);
     }
 
+    // Services/SteamScraper.cs - simplified FetchReviews
+
     public async IAsyncEnumerable<SteamReview> FetchReviews(
-        AppId appId, 
-        string? filter = null, 
+        AppId appId,
+        string? filter = null,
         string? reviewType = null,
         int? dayRange = null,
         string? language = null,
         [EnumeratorCancellation] CancellationToken stoppingToken = default)
     {
         const string URL = "https://store.steampowered.com/appreviews/";
-        const int maxRetries = 3;
-        const int retryDelayMs = 2000;
 
         var query = $"{URL}/{appId}";
         query = QueryHelpers.AddQueryString(query, "day_range", (dayRange ?? Options.Value.MaxDayRange).ToString());
@@ -72,30 +72,23 @@ public record SteamScraper(IOptions<SteamScraper.Configuration> Options, IHttpCl
             cursor = nextCursor;
             var then = EventDate.UtcNow;
             var paginated = QueryHelpers.AddQueryString(query, "cursor", cursor);
-            
-            SteamReviewsResponseDTO? res = null;
-            for (int attempt = 0; attempt < maxRetries; attempt++) {
-                try {
-                    res = await HttpClient.GetFromJsonAsync<SteamReviewsResponseDTO>(paginated, stoppingToken);
-                    break; // success
-                }
-                catch (HttpRequestException ex) when (attempt < maxRetries - 1) {
-                    var delay = retryDelayMs * (1 << attempt); // 2s, 4s, 8s
-                    Console.WriteLine($"Steam API error (attempt {attempt + 1}/{maxRetries}): {ex.StatusCode} - retrying in {delay}ms");
-                    await Task.Delay(delay, stoppingToken);
-                }
-            }
-            
+
+            var res = await HttpClient.GetFromJsonAsync<SteamReviewsResponseDTO>(paginated, stoppingToken);
+
             if (res is not { Success: 1 })
                 yield break;
+
             nextCursor = res.Cursor;
             if (cursor == nextCursor || nextCursor is null)
                 yield break;
+
             foreach (var review in res.Reviews)
                 yield return review.MapToDomain(appId);
-            var cooldown = (int)(Options.Value.RateLimitMs - (EventDate.UtcNow - then).TotalMilliseconds);
-            if (cooldown > 0)
+
+            var cooldown = (int)(Options.Value.RateLimitMs - (EventDate.UtcNow - then).TotalMilliseconds) + Random.Shared.Next(100, 250);
+            if (cooldown > 0) {
                 await Task.Delay(cooldown, stoppingToken);
+            }
         }
     }
 
