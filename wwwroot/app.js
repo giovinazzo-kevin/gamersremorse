@@ -596,21 +596,40 @@ function updateLanguageChart(snapshot) {
     const stats = snapshot.languageStats;
     if (!stats) return;
 
-    const totalReviews = snapshot.totalPositive + snapshot.totalNegative;
-    if (totalReviews === 0) return;
+    const range = getSelectedMonths();
+    
+    // Sum monthly dictionaries, respecting timeline filter
+    const sumByMonth = (dict) => {
+        if (!dict) return 0;
+        let total = 0;
+        for (const [month, count] of Object.entries(dict)) {
+            if (!range || (month >= range.from && month <= range.to)) {
+                total += count;
+            }
+        }
+        return total;
+    };
+    
+    // Count reviews in selected range for rate calculation
+    let reviewsInRange = 0;
+    for (const bucket of snapshot.bucketsByReviewTime) {
+        const filtered = filterBucketByTime(bucket);
+        reviewsInRange += filtered.pos + filtered.neg + filtered.uncPos + filtered.uncNeg;
+    }
+    if (reviewsInRange === 0) return;
 
-    const profanity = stats.profanity?.total || 0;
-    const insults = stats.insults?.total || 0;
-    const slurs = stats.slurs?.total || 0;
-    const banter = stats.banter?.total || 0;
-    const complaints = stats.complaints?.total || 0;
+    const profanity = sumByMonth(stats.profanityByMonth);
+    const insults = sumByMonth(stats.insultsByMonth);
+    const slurs = sumByMonth(stats.slursByMonth);
+    const banter = sumByMonth(stats.banterByMonth);
+    const complaints = sumByMonth(stats.complaintsByMonth);
 
-    // calculate rate per review, show as percentage
-    const profanityRate = (profanity / totalReviews * 100).toFixed(1);
-    const insultsRate = (insults / totalReviews * 100).toFixed(1);
-    const slursRate = (slurs / totalReviews * 100).toFixed(1);
-    const banterRate = (banter / totalReviews * 100).toFixed(1);
-    const complaintsRate = (complaints / totalReviews * 100).toFixed(1);
+    // calculate rate per review in range, show as percentage
+    const profanityRate = (profanity / reviewsInRange * 100).toFixed(1);
+    const insultsRate = (insults / reviewsInRange * 100).toFixed(1);
+    const slursRate = (slurs / reviewsInRange * 100).toFixed(1);
+    const banterRate = (banter / reviewsInRange * 100).toFixed(1);
+    const complaintsRate = (complaints / reviewsInRange * 100).toFixed(1);
 
     const labels = [
         `Slurs (${slursRate}%)`,
@@ -1072,6 +1091,7 @@ function applyTimelineFilter() {
     if (currentSnapshot) {
         updateChart(currentSnapshot);
         updateVelocityChart(currentSnapshot);
+        updateLanguageChart(currentSnapshot);
         updateStats(currentSnapshot);
         updateMetrics(currentSnapshot);
         if (currentMetrics) {
