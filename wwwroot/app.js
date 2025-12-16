@@ -1747,7 +1747,13 @@ if (document.readyState === 'loading') {
 
 async function fetchControversyContext(gameName, metrics, snapshot) {
     const events = detectNotableEvents(metrics, snapshot);
-    if (events.length === 0) return;
+    
+    // Always add launch query
+    const launchEvent = {
+        type: 'launch',
+        month: 'launch',
+        year: 'launch'
+    };
     
     console.log('Detected events:', events);
     
@@ -1764,9 +1770,11 @@ async function fetchControversyContext(gameName, metrics, snapshot) {
         `;
     }
     
-    // Fetch context for each event (limit to 3 to avoid hammering Google)
+    // Fetch context for events + launch (limit to 4 total)
+    const allEvents = [launchEvent, ...events].slice(0, 4);
     const contexts = [];
-    for (const event of events.slice(0, 3)) {
+    
+    for (const event of allEvents) {
         try {
             const url = `/controversy?game=${encodeURIComponent(gameName)}&month=${event.month}`;
             console.log('Fetching:', url);
@@ -1853,7 +1861,17 @@ function displayControversyContext(contexts) {
     html += '<h4>📰 What Happened?</h4>';
     
     for (const ctx of contexts) {
-        const typeLabel = ctx.event.type === 'review_bomb' ? '💣 Review Bomb' : '✏️ Mass Edits';
+        let typeLabel, yearLabel;
+        if (ctx.event.type === 'launch') {
+            typeLabel = '📦 Launch';
+            yearLabel = '';
+        } else if (ctx.event.type === 'review_bomb') {
+            typeLabel = '💣 Review Bomb';
+            yearLabel = ctx.event.year;
+        } else {
+            typeLabel = '✏️ Mass Edits';
+            yearLabel = ctx.event.year;
+        }
         // Escape HTML in overview to prevent breaking
         const safeOverview = ctx.overview
             .replace(/&/g, '&amp;')
@@ -1864,7 +1882,7 @@ function displayControversyContext(contexts) {
             <div class="controversy-item">
                 <div class="controversy-header">
                     <span class="controversy-type">${typeLabel}</span>
-                    <span class="controversy-year">${ctx.event.year}</span>
+                    <span class="controversy-year">${yearLabel}</span>
                 </div>
                 <div class="controversy-text">${safeOverview}</div>
             </div>

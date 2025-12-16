@@ -30,28 +30,34 @@ app.MapGet("/game/{appId}", async (HttpContext ctx, AppId appId, SteamReviewRepo
     return await repo.GetInfo(appId);
 });
 app.MapGet("/controversy", async (string game, string month, GoogleScraper google, CancellationToken ct) => {
-    // Parse month like "2024-10" into "October 2024"
-    var monthNames = new[] { "", "January", "February", "March", "April", "May", "June", 
-                             "July", "August", "September", "October", "November", "December" };
-    var parts = month.Split('-');
-    var year = parts[0];
-    var monthName = parts.Length > 1 && int.TryParse(parts[1], out var m) && m >= 1 && m <= 12 
-        ? monthNames[m] 
-        : "";
-    
-    // Try month-specific query first
+    string query = "";
     string? overview = null;
-    var query = "";
     
-    if (!string.IsNullOrEmpty(monthName)) {
-        query = $"What was the {game} controversy in {monthName} {year}";
+    if (month == "launch") {
+        // Special case: query for launch reception
+        query = $"What was the {game} launch reception";
         overview = await google.GetAIOverview(query, ct);
-    }
-    
-    // Fall back to year-only if month query failed
-    if (overview == null) {
-        query = $"What was the {game} controversy in {year}";
-        overview = await google.GetAIOverview(query, ct);
+    } else {
+        // Parse month like "2024-10" into "October 2024"
+        var monthNames = new[] { "", "January", "February", "March", "April", "May", "June", 
+                                 "July", "August", "September", "October", "November", "December" };
+        var parts = month.Split('-');
+        var year = parts[0];
+        var monthName = parts.Length > 1 && int.TryParse(parts[1], out var m) && m >= 1 && m <= 12 
+            ? monthNames[m] 
+            : "";
+        
+        // Try month-specific query first
+        if (!string.IsNullOrEmpty(monthName)) {
+            query = $"What was the {game} controversy in {monthName} {year}";
+            overview = await google.GetAIOverview(query, ct);
+        }
+        
+        // Fall back to year-only if month query failed
+        if (overview == null) {
+            query = $"What was the {game} controversy in {year}";
+            overview = await google.GetAIOverview(query, ct);
+        }
     }
     
     return new { query, overview };
