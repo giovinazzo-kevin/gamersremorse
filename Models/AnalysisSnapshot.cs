@@ -10,8 +10,18 @@ public record struct AnalysisSnapshot(
     int GameTotalPositive,
     int GameTotalNegative,
     int TargetSampleCount,
-    LanguageStats LanguageStats
+    LanguageStats LanguageStats,
+    EditHeatmap EditHeatmap
 );
+
+// Heatmap of when reviews were posted vs when they were edited
+// Key format: "postedMonth|editedMonth" -> {positive, negative}
+public record struct EditHeatmap(
+    string[] Months,  // sorted list of all months
+    Dictionary<string, EditCell> Cells  // "2023-01|2024-06" -> counts
+);
+
+public record struct EditCell(int Positive, int Negative);
 
 public record struct LanguageStats(
     Dictionary<string, int> ProfanityByMonth,

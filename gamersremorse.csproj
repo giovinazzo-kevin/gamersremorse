@@ -9,6 +9,7 @@
   <ItemGroup>
     <Content Remove="wwwroot\app.js" />
     <Content Remove="wwwroot\index.html" />
+    <PackageReference Include="PuppeteerSharp" Version="20.1.0" />
   </ItemGroup>
 
   <ItemGroup>

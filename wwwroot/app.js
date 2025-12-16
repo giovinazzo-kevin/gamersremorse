@@ -130,6 +130,7 @@ const loadingMessages = {
         "Measuring distance to cashgrab...",
         "Comparing to what was promised...",
         "YOU ARE THROWING YOUR TIME AWAY",
+        "YOU WILL NEVER BE GOOD ENOUGH",
     ],
 
     // PREDATORY
@@ -142,8 +143,18 @@ const loadingMessages = {
         "Astroturfing the discourse...",
         "Unleashing the AI shills...",
         "Addressing death threats...",
-        "THEY WILL NEVER BE FORGIVEN",
-        "READ REVIEWS WITH PREJUDICE",
+        "Beating the allegations...",
+        "I HAVE SEEN ENOUGH!",
+        "THEY TARGETED GAMERS. GAMERS.",
+        "DO THESE PEOPLE HAVE NO IDEA",
+        "I AM MAD ON YOUR BEHALF",
+        "THE PRIDE. THE ACCOMPLISHMENT. THE FUCKING GALL OF THESE PEOPLE.",
+        "THEY CAN'T KEEP GETTING AWAY WITH THIS",
+        "I SHALL READ EACH AND EVERY REVIEW WITH EXTREME PREJUDICE",
+        "THEY WILL NEVER BE FORGIVEN FOR WHAT THEY DID",
+        "EVERYONE CAN SEE WHAT'S GOING ON HERE",
+        "THEIR DENIABILITY STOPPED BEING PLAUSIBLE A LONG TIME AGO",
+        "THIS IS WHAT THEY TOOK FROM US",
     ],
 
     // STOCKHOLM
@@ -152,7 +163,10 @@ const loadingMessages = {
         "Measuring stockholm syndrome...",
         "Locating sunk cost fixpoint...",
         "Sampling the salt mines...",
+        "YOU'RE LOCKED IN HERE WITH ME!",
         "HAVE YOU SEEN THE EXIT?",
+        "DOES IT GET BETTER BEFORE IT GETS WORSE?",
+        "I STILL LOVE YOU",
     ],
 
     // REFUND_TRAP
@@ -165,6 +179,8 @@ const loadingMessages = {
     DEAD: [
         "Polling dead servers...",
         "Exhuming abandoned roadmaps...",
+        "Beating a dead horse...",
+        "HE'S DEAD, JIM",
         "YOUR OLD GAMES LIE IN RUIN",
         "A DEAD GAME WILL BRING YOU NO FUN TODAY",
     ],
@@ -173,6 +189,10 @@ const loadingMessages = {
     ADDICTIVE: [
         "Computing addiction coefficients...",
         "Remembering when games were not full-time jobs...",
+        "Getting the next fix...",
+        "Texting the pusher...",
+        "SMOKING KILLS, AND YET",
+        "I NEED MORE OF THIS",
     ],
 
     // DIVISIVE
@@ -192,6 +212,8 @@ const loadingMessages = {
     ENSHITTIFIED: [
         "Wondering if it ever gets good...",
         "Mourning the single player campaign...",
+        "WHY WOULD YOU DO THIS TO ME",
+        ""
     ],
 
     // LOW_DATA
@@ -212,6 +234,12 @@ const loadingMessages = {
         "Adjusting the mosaic...",
         "Reading it for the plot...",
         "Proving theorem #34...",
+        "Failing NNN...",
+        "Comparing 2D to 3D...",
+        "Measuring chest curvature...",
+        "Measuring butt curvature...",
+        "AWOOGA",
+        "I'M COOMING",
     ],
 };
 
@@ -231,6 +259,13 @@ function getLoadingMessage() {
     // Some tags share pools
     if (tags.includes('180') || tags.includes('PHOENIX')) {
         pool = pool.concat(loadingMessages.REDEMPTION || []);
+    }
+
+    // Filter based on unhinged state
+    // ALL CAPS messages only allowed when unhinged
+    const isUnhinged = window.isEyeUnhinged?.() || false;
+    if (!isUnhinged) {
+        pool = pool.filter(msg => msg !== msg.toUpperCase());
     }
 
     return pool[Math.floor(Math.random() * pool.length)];
@@ -285,6 +320,10 @@ async function analyze() {
         languageChart.destroy();
         languageChart = null;
     }
+    if (heatmapCtx && heatmapCanvas) {
+        heatmapCtx.clearRect(0, 0, heatmapCanvas.width, heatmapCanvas.height);
+        heatmapCanvas._layout = null;
+    }
     document.getElementById('stats').innerHTML = '';
     document.getElementById('metrics-detail').innerHTML = '';
     document.getElementById('opinion-content').innerHTML = '<div class="opinion-loading">⏳ Analyzing...</div>';
@@ -314,6 +353,7 @@ async function analyze() {
         updateTimelineData(snapshot, isFirstSnapshot);
         updateVelocityChart(snapshot);
         updateLanguageChart(snapshot);
+        updateEditHeatmap(snapshot);
         updateStats(snapshot);
         updateMetrics(snapshot);
         isFirstSnapshot = false;
@@ -344,6 +384,11 @@ async function analyze() {
                 const tagTimeline = Metrics.computeTimeline(currentSnapshot, 3, { isFree, isSexual });
                 console.log('Tag timeline:', tagTimeline);
                 updateTagTimeline(tagTimeline);
+            }
+            
+            // Fetch controversy context for any detected events
+            if (currentMetrics && currentGameInfo) {
+                fetchControversyContext(currentGameInfo.name, currentMetrics, currentSnapshot);
             }
         }
 
@@ -1335,6 +1380,14 @@ function updateEyeFromMetrics(metrics) {
         window.setEyeDilation(tags.includes('ADDICTIVE') ? 1 : 0);
     }
 
+    // Unhinged mode for really bad games
+    const unhingedTags = ['PREDATORY', 'ENSHITTIFIED', 'PLAGUE', 'CURSED'];
+    const isUnhinged = unhingedTags.some(t => tags.includes(t)) ||
+                       (tags.includes('FLOP') && tags.includes('REVISIONIST'));
+    if (window.setEyeUnhinged) {
+        window.setEyeUnhinged(isUnhinged);
+    }
+
     // Priority-based expression
     if (tags.includes('PREDATORY') || tags.includes('REFUND_TRAP')) {
         window.setEyeExpression('angry');
@@ -1375,4 +1428,449 @@ function filterVelocityBucketByTime(bucket) {
         if ((!range || (month >= range.from && month <= range.to)) && !excludeMonths.has(month)) uncNeg += count;
     }
     return { pos, neg, uncPos, uncNeg };
+}
+
+// ============================================================
+// EDIT HEATMAP
+// X = when posted, Y = when edited, color = sentiment
+// ============================================================
+
+let heatmapCanvas = null;
+let heatmapCtx = null;
+
+function initHeatmap() {
+    heatmapCanvas = document.getElementById('edit-heatmap');
+    if (!heatmapCanvas) return;
+    heatmapCtx = heatmapCanvas.getContext('2d');
+    
+    // Handle mouse hover for tooltip
+    heatmapCanvas.addEventListener('mousemove', onHeatmapMouseMove);
+    heatmapCanvas.addEventListener('mouseleave', () => {
+        document.getElementById('heatmap-tooltip').style.display = 'none';
+    });
+}
+
+function updateEditHeatmap(snapshot) {
+    if (!heatmapCanvas) {
+        console.log('Heatmap: no canvas');
+        initHeatmap();
+        if (!heatmapCanvas) return;
+    }
+    
+    if (!snapshot.editHeatmap) {
+        console.log('Heatmap: no editHeatmap in snapshot', Object.keys(snapshot));
+        return;
+    }
+    
+    const heatmap = snapshot.editHeatmap;
+    let months = heatmap.months || [];
+    let cells = heatmap.cells || {};
+    
+    console.log('Heatmap:', months.length, 'months,', Object.keys(cells).length, 'cells');
+    
+    // If too many months, aggregate to quarters or years
+    if (months.length > 96) {
+        // >8 years: aggregate to years
+        const aggregated = aggregateToYears(months, cells);
+        months = aggregated.periods;
+        cells = aggregated.cells;
+        console.log('Heatmap: aggregated to', months.length, 'years');
+    } else if (months.length > 48) {
+        // >4 years: aggregate to quarters
+        const aggregated = aggregateToQuarters(months, cells);
+        months = aggregated.periods;
+        cells = aggregated.cells;
+        console.log('Heatmap: aggregated to', months.length, 'quarters');
+    }
+    
+    if (months.length < 2) {
+        // Not enough data
+        heatmapCtx.clearRect(0, 0, heatmapCanvas.width, heatmapCanvas.height);
+        heatmapCtx.fillStyle = '#999';
+        heatmapCtx.font = '12px Verdana';
+        heatmapCtx.textAlign = 'center';
+        heatmapCtx.fillText('Not enough edit data', heatmapCanvas.width / 2, heatmapCanvas.height / 2);
+        return;
+    }
+    
+    // Resize canvas to container
+    const rect = heatmapCanvas.parentElement.getBoundingClientRect();
+    heatmapCanvas.width = rect.width - 20;
+    heatmapCanvas.height = rect.height - 20;
+    
+    const w = heatmapCanvas.width;
+    const h = heatmapCanvas.height;
+    const padding = { left: 50, right: 10, top: 10, bottom: 40 };
+    const chartW = w - padding.left - padding.right;
+    const chartH = h - padding.top - padding.bottom;
+    
+    const n = months.length;
+    const cellW = chartW / n;
+    const cellH = chartH / n;
+    
+    // Find max count for color scaling
+    let maxCount = 1;
+    for (const cell of Object.values(cells)) {
+        maxCount = Math.max(maxCount, cell.positive + cell.negative);
+    }
+    
+    // Store layout for tooltip
+    heatmapCanvas._layout = { months, cells, padding, cellW, cellH, n };
+    
+    // Clear
+    heatmapCtx.clearRect(0, 0, w, h);
+    
+    // Draw cells
+    for (let xi = 0; xi < n; xi++) {
+        for (let yi = 0; yi < n; yi++) {
+            const postedMonth = months[xi];
+            const editedMonth = months[yi];
+            
+            // Only show cells where edit is after post
+            if (editedMonth < postedMonth) continue;
+            
+            const key = `${postedMonth}|${editedMonth}`;
+            const cell = cells[key];
+            
+            const x = padding.left + xi * cellW;
+            const y = padding.top + (n - 1 - yi) * cellH; // flip Y so newer edits are at top
+            
+            if (cell) {
+                const total = cell.positive + cell.negative;
+                const intensity = Math.sqrt(total / maxCount); // sqrt for better visual scaling
+                const negRatio = total > 0 ? cell.negative / total : 0;
+                
+                // Color: blend between positive (blue) and negative (pink) based on ratio
+                const colors = getColors();
+                const color = negRatio > 0.5 
+                    ? hexToRgba(colors.negative, 0.3 + intensity * 0.7)
+                    : hexToRgba(colors.positive, 0.3 + intensity * 0.7);
+                
+                heatmapCtx.fillStyle = color;
+            } else {
+                // Empty cell on diagonal or above - light gray
+                heatmapCtx.fillStyle = postedMonth === editedMonth ? 'rgba(100,100,100,0.1)' : 'rgba(0,0,0,0.02)';
+            }
+            
+            heatmapCtx.fillRect(x, y, cellW - 1, cellH - 1);
+        }
+    }
+    
+    // Draw diagonal line (same month = no real edit)
+    heatmapCtx.strokeStyle = 'rgba(0,0,0,0.2)';
+    heatmapCtx.setLineDash([2, 2]);
+    heatmapCtx.beginPath();
+    heatmapCtx.moveTo(padding.left, padding.top + chartH);
+    heatmapCtx.lineTo(padding.left + chartW, padding.top);
+    heatmapCtx.stroke();
+    heatmapCtx.setLineDash([]);
+    
+    // X axis labels (posted month) - show every Nth
+    heatmapCtx.fillStyle = '#666';
+    heatmapCtx.font = '9px Verdana';
+    heatmapCtx.textAlign = 'center';
+    const labelStep = Math.ceil(n / 10);
+    for (let i = 0; i < n; i += labelStep) {
+        const x = padding.left + i * cellW + cellW / 2;
+        heatmapCtx.fillText(months[i], x, h - padding.bottom + 15);
+    }
+    
+    // Y axis labels (edited month)
+    heatmapCtx.textAlign = 'right';
+    for (let i = 0; i < n; i += labelStep) {
+        const y = padding.top + (n - 1 - i) * cellH + cellH / 2 + 3;
+        heatmapCtx.fillText(months[i], padding.left - 5, y);
+    }
+    
+    // Axis titles
+    heatmapCtx.fillStyle = '#333';
+    heatmapCtx.font = '10px Verdana';
+    heatmapCtx.textAlign = 'center';
+    heatmapCtx.fillText('Posted', padding.left + chartW / 2, h - 5);
+    
+    heatmapCtx.save();
+    heatmapCtx.translate(12, padding.top + chartH / 2);
+    heatmapCtx.rotate(-Math.PI / 2);
+    heatmapCtx.fillText('Edited', 0, 0);
+    heatmapCtx.restore();
+}
+
+function onHeatmapMouseMove(e) {
+    const layout = heatmapCanvas._layout;
+    if (!layout) return;
+    
+    const rect = heatmapCanvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    
+    const { months, cells, padding, cellW, cellH, n } = layout;
+    
+    // Convert to cell indices
+    const xi = Math.floor((x - padding.left) / cellW);
+    const yi = n - 1 - Math.floor((y - padding.top) / cellH); // flip Y back
+    
+    if (xi < 0 || xi >= n || yi < 0 || yi >= n) {
+        document.getElementById('heatmap-tooltip').style.display = 'none';
+        return;
+    }
+    
+    const postedMonth = months[xi];
+    const editedMonth = months[yi];
+    
+    if (editedMonth < postedMonth) {
+        document.getElementById('heatmap-tooltip').style.display = 'none';
+        return;
+    }
+    
+    const key = `${postedMonth}|${editedMonth}`;
+    const cell = cells[key];
+    
+    const tooltip = document.getElementById('heatmap-tooltip');
+    if (cell && (cell.positive > 0 || cell.negative > 0)) {
+        const total = cell.positive + cell.negative;
+        // Handle months (2023-01), quarters (2023-Q1), and years (2023)
+        const isQuarter = postedMonth.includes('Q');
+        const isYear = postedMonth.length === 4;
+        let timeLater = '';
+        if (isYear) {
+            const yDiff = parseInt(editedMonth) - parseInt(postedMonth);
+            timeLater = yDiff > 0 ? `(${yDiff}y later)` : '';
+        } else if (isQuarter) {
+            const pq = parseInt(postedMonth.split('Q')[1]) + (parseInt(postedMonth.split('-')[0]) * 4);
+            const eq = parseInt(editedMonth.split('Q')[1]) + (parseInt(editedMonth.split('-')[0]) * 4);
+            const qDiff = eq - pq;
+            timeLater = qDiff > 0 ? `(${qDiff}q later)` : '';
+        } else {
+            const monthsLater = monthDiff(postedMonth, editedMonth);
+            timeLater = `(${monthsLater}mo later)`;
+        }
+        tooltip.innerHTML = `
+            <strong>Posted:</strong> ${postedMonth}<br>
+            <strong>Edited:</strong> ${editedMonth} ${timeLater}<br>
+            <strong>Positive:</strong> ${cell.positive}<br>
+            <strong>Negative:</strong> ${cell.negative}
+        `;
+        tooltip.style.display = 'block';
+        tooltip.style.left = (x + 15) + 'px';
+        tooltip.style.top = (y + 15) + 'px';
+    } else {
+        tooltip.style.display = 'none';
+    }
+}
+
+function monthDiff(m1, m2) {
+    const [y1, mo1] = m1.split('-').map(Number);
+    const [y2, mo2] = m2.split('-').map(Number);
+    return (y2 - y1) * 12 + (mo2 - mo1);
+}
+
+/**
+ * Convert month to quarter string (e.g., "2023-01" -> "2023-Q1")
+ */
+function monthToQuarter(month) {
+    const [year, mo] = month.split('-');
+    const q = Math.ceil(parseInt(mo) / 3);
+    return `${year}-Q${q}`;
+}
+
+/**
+ * Aggregate monthly heatmap data to years
+ */
+function aggregateToYears(months, cells) {
+    const yearSet = new Set();
+    const newCells = {};
+    
+    // First pass: collect all years
+    for (const month of months) {
+        yearSet.add(month.split('-')[0]);
+    }
+    
+    // Second pass: aggregate cells
+    for (const [key, cell] of Object.entries(cells)) {
+        const [postedMonth, editedMonth] = key.split('|');
+        const postedY = postedMonth.split('-')[0];
+        const editedY = editedMonth.split('-')[0];
+        const newKey = `${postedY}|${editedY}`;
+        
+        if (!newCells[newKey]) {
+            newCells[newKey] = { positive: 0, negative: 0 };
+        }
+        newCells[newKey].positive += cell.positive;
+        newCells[newKey].negative += cell.negative;
+    }
+    
+    const periods = [...yearSet].sort();
+    return { periods, cells: newCells };
+}
+
+/**
+ * Aggregate monthly heatmap data to quarters
+ */
+function aggregateToQuarters(months, cells) {
+    const quarterSet = new Set();
+    const newCells = {};
+    
+    // First pass: collect all quarters
+    for (const month of months) {
+        quarterSet.add(monthToQuarter(month));
+    }
+    
+    // Second pass: aggregate cells
+    for (const [key, cell] of Object.entries(cells)) {
+        const [postedMonth, editedMonth] = key.split('|');
+        const postedQ = monthToQuarter(postedMonth);
+        const editedQ = monthToQuarter(editedMonth);
+        const newKey = `${postedQ}|${editedQ}`;
+        
+        if (!newCells[newKey]) {
+            newCells[newKey] = { positive: 0, negative: 0 };
+        }
+        newCells[newKey].positive += cell.positive;
+        newCells[newKey].negative += cell.negative;
+    }
+    
+    const periods = [...quarterSet].sort();
+    return { periods, cells: newCells };
+}
+
+// Initialize heatmap on load
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initHeatmap);
+} else {
+    initHeatmap();
+}
+
+// ============================================================
+// CONTROVERSY CONTEXT
+// Fetch Google AI Overview for detected events
+// ============================================================
+
+async function fetchControversyContext(gameName, metrics, snapshot) {
+    const events = detectNotableEvents(metrics, snapshot);
+    if (events.length === 0) return;
+    
+    console.log('Detected events:', events);
+    
+    // Show status in the controversy section
+    const container = document.getElementById('metrics-detail');
+    if (container) {
+        container.innerHTML += `
+            <div class="controversy-section" id="controversy-loading">
+                <h4>📰 What Happened?</h4>
+                <div class="controversy-item">
+                    <div class="controversy-text">🔍 Searching for context...</div>
+                </div>
+            </div>
+        `;
+    }
+    
+    // Fetch context for each event (limit to 3 to avoid hammering Google)
+    const contexts = [];
+    for (const event of events.slice(0, 3)) {
+        try {
+            const url = `/controversy?game=${encodeURIComponent(gameName)}&month=${event.month}`;
+            console.log('Fetching:', url);
+            const res = await fetch(url);
+            if (res.ok) {
+                const data = await res.json();
+                console.log('Response:', data);
+                if (data.overview) {
+                    contexts.push({
+                        event,
+                        overview: data.overview
+                    });
+                }
+            }
+        } catch (e) {
+            console.warn('Failed to fetch controversy:', e);
+        }
+    }
+    
+    // Remove loading indicator
+    document.getElementById('controversy-loading')?.remove();
+    
+    console.log('Contexts found:', contexts.length);
+    if (contexts.length > 0) {
+        displayControversyContext(contexts);
+    }
+}
+
+function detectNotableEvents(metrics, snapshot) {
+    const events = [];
+    
+    // Review bombs
+    if (metrics.negativeSpikes) {
+        for (const spike of metrics.negativeSpikes) {
+            if (spike.z >= 3 && spike.count >= 50) {
+                const year = spike.month.split('-')[0];
+                events.push({
+                    type: 'review_bomb',
+                    year,
+                    month: spike.month,
+                    severity: spike.z,
+                    count: spike.count
+                });
+            }
+        }
+    }
+    
+    // Mass edit events (from heatmap analysis)
+    if (metrics.recentNegativeEditRatio >= 0.5 && metrics.totalEdits >= 20) {
+        // Find the year with most edit activity
+        const editHeatmap = snapshot.editHeatmap;
+        if (editHeatmap?.months?.length > 0) {
+            // Get most recent year with significant edits
+            const recentMonths = editHeatmap.months.slice(-12);
+            if (recentMonths.length > 0) {
+                const year = recentMonths[recentMonths.length - 1].split('-')[0];
+                events.push({
+                    type: 'mass_edits',
+                    year,
+                    severity: metrics.recentNegativeEditRatio
+                });
+            }
+        }
+    }
+    
+    // Dedupe by year - only keep most severe event per year
+    const byYear = {};
+    for (const event of events) {
+        if (!byYear[event.year] || event.severity > byYear[event.year].severity) {
+            byYear[event.year] = event;
+        }
+    }
+    
+    return Object.values(byYear).sort((a, b) => b.year.localeCompare(a.year));
+}
+
+function displayControversyContext(contexts) {
+    const container = document.getElementById('metrics-detail');
+    if (!container) return;
+    
+    let html = container.innerHTML;
+    
+    html += '<div class="controversy-section">';
+    html += '<h4>📰 What Happened?</h4>';
+    
+    for (const ctx of contexts) {
+        const typeLabel = ctx.event.type === 'review_bomb' ? '💣 Review Bomb' : '✏️ Mass Edits';
+        // Escape HTML in overview to prevent breaking
+        const safeOverview = ctx.overview
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+        html += `
+            <div class="controversy-item">
+                <div class="controversy-header">
+                    <span class="controversy-type">${typeLabel}</span>
+                    <span class="controversy-year">${ctx.event.year}</span>
+                </div>
+                <div class="controversy-text">${safeOverview}</div>
+            </div>
+        `;
+    }
+    
+    html += '</div>';
+    container.innerHTML = html;
 }

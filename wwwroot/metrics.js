@@ -12,7 +12,9 @@ const Metrics = {
         // Key beats Values
         'PREDATORY': ['EXTRACTIVE'],
         'EXTRACTIVE': ['TROUBLED'],
+        'FLOP': ['TROUBLED'],
         'TROUBLED': ['HONEST'],
+        'ENSHITTIFIED': ['REVISIONIST', 'HONEYMOON'],
     },
     tagDefinitions: [
         // ============================================================
@@ -45,10 +47,19 @@ const Metrics = {
         },
         {
             id: 'ENSHITTIFIED',
-            condition: (m) => m.medianRatio > 1.3
-                && m.negativeRatio > 0.20
-                && m.temporalDriftZ > 1,
-            reason: (m) => `Was good, got ruined: sentiment ${Math.round(m.firstHalfNegRatio * 100)}% → ${Math.round(m.secondHalfNegRatio * 100)}% negative, ${Math.round(m.negativeRatio * 100)}% now trapped`,
+            condition: (m) => {
+                // Strong version: extraction pattern + declining sentiment OR mass negative revisions
+                const hasExtraction = m.medianRatio > 1.3 && m.negativeRatio > 0.20;
+                const hasDecline = m.temporalDriftZ > 1;
+                const hasMassRevisions = m.recentNegativeEditRatio >= 0.6 && m.oldReviewsEditedRatio >= 0.3;
+                return hasExtraction && (hasDecline || hasMassRevisions);
+            },
+            reason: (m) => {
+                if (m.recentNegativeEditRatio >= 0.6 && m.oldReviewsEditedRatio >= 0.3) {
+                    return `Veterans flipping negative: ${Math.round(m.recentNegativeEditRatio * 100)}% of recent edits are thumbs down`;
+                }
+                return `Was good, got ruined: sentiment ${Math.round(m.firstHalfNegRatio * 100)}% → ${Math.round(m.secondHalfNegRatio * 100)}% negative`;
+            },
             severity: (m) => Math.min(0.35, (m.medianRatio - 1) * 0.3 + m.temporalDriftZ * 0.05),
             color: 'var(--color-tag-enshittified)'
         },
@@ -170,7 +181,7 @@ const Metrics = {
         {
             id: '180',
             condition: (m) => m.hasRevival && m.firstWaveNegRatio >= 0.5 && m.lastWaveNegRatio < 0.5 && m.isStillAlive,
-            reason: (m) => `Turned it around: ${Math.round(m.firstWaveNegRatio * 100)}% → ${Math.round(m.lastWaveNegRatio * 100)}% negative, redemption arc`,
+            reason: (m) => `Started bad (${Math.round(m.firstWaveNegRatio * 100)}% negative), now good (${Math.round(m.lastWaveNegRatio * 100)}% negative)`,
             severity: -0.15,
             color: 'var(--color-tag-180)'
         },
@@ -249,6 +260,17 @@ const Metrics = {
             },
             severity: 0,
             color: 'var(--color-tag-surge)'
+        },
+        // ============================================================
+        // EDIT PATTERN TAGS
+        // Detecting sentiment shifts via review edits
+        // ============================================================
+        {
+            id: 'REVISIONIST',
+            condition: (m) => m.recentNegativeEditRatio >= 0.5 && m.oldReviewsEditedRatio >= 0.15 && m.totalEdits >= 20,
+            reason: (m) => `${Math.round(m.recentNegativeEditRatio * 100)}% of recent edits negative, ${Math.round(m.oldReviewsEditedRatio * 100)}% of old reviews revised`,
+            severity: 0.1,
+            color: 'var(--color-tag-revisionist)'
         }
     ],
 
@@ -262,9 +284,22 @@ const Metrics = {
         const isFree = options.isFree || false;
         const isSexual = options.isSexual || false;
 
+        // Compute sampling weights to correct for oversampling bias
+        const gameTotal = snapshot.gameTotalPositive + snapshot.gameTotalNegative;
+        const sampledTotal = snapshot.totalPositive + snapshot.totalNegative;
+        const actualNegRatio = gameTotal > 0 ? snapshot.gameTotalNegative / gameTotal : 0.5;
+        const sampledNegRatio = sampledTotal > 0 ? snapshot.totalNegative / sampledTotal : 0.5;
+        
+        // Weight = (actual ratio) / (sampled ratio)
+        // If we oversampled negatives, negativeWeight < 1 to compensate
+        const weights = {
+            positive: (1 - sampledNegRatio) > 0 ? (1 - actualNegRatio) / (1 - sampledNegRatio) : 1,
+            negative: sampledNegRatio > 0 ? actualNegRatio / sampledNegRatio : 1
+        };
+
         // Detect spikes on FULL timeline (not filtered window)
         // A spike is a spike regardless of what slice you're viewing
-        const spikeData = this.detectSpikes(buckets, null);
+        const spikeData = this.detectSpikes(buckets, null, weights);
         
         // Filter spikes to only those within the selected window
         const filterSpikesToWindow = (spikes) => {
@@ -298,15 +333,15 @@ const Metrics = {
             ? { ...filter, excludeMonths } 
             : filter;
 
-        // Review counts (organic)
-        const counts = this.computeCounts(buckets, organicFilter);
+        // Review counts (organic, weighted)
+        const counts = this.computeCounts(buckets, organicFilter, weights);
         const organicTotal = Math.max(1, counts.total);
         
         // Mass ratios
         const positiveRatio = (counts.positive + counts.uncertainPositive) / organicTotal;
         const negativeRatio = (counts.negative + counts.uncertainNegative) / organicTotal;
 
-        // Playtime distributions (organic)
+        // Playtime distributions (organic, NOT weighted - medians are about shape)
         const posPlaytimes = this.getPlaytimeArray(buckets, 'positive', organicFilter);
         const negPlaytimes = this.getPlaytimeArray(buckets, 'negative', organicFilter);
         const allPlaytimes = [...posPlaytimes, ...negPlaytimes];
@@ -319,7 +354,7 @@ const Metrics = {
         const posMedianReview = posStats.median;
         const negMedianReview = negStats.median;
         
-        // Total playtime for stockholm (organic)
+        // Total playtime for stockholm (organic, NOT weighted)
         const negTotalPlaytimes = this.getPlaytimeArray(totalBuckets, 'negative', organicFilter);
         const negTotalStats = this.computeStats(negTotalPlaytimes);
         const negMedianTotal = negTotalStats.median;
@@ -329,7 +364,7 @@ const Metrics = {
         const stockholmIndex = negMedianReview > 0 ? negMedianTotal / negMedianReview : 1;
         const refundData = isFree ? null : this.computeRefundHonesty(buckets, organicFilter);
         
-        // Bimodality detection for negatives
+        // Bimodality detection for negatives (not weighted - internal to negatives)
         const negBimodal = this.detectBimodality(buckets, organicFilter);
 
         // === STDDEV-BASED METRICS ===
@@ -344,7 +379,7 @@ const Metrics = {
         const p95Playtime = posStats.p95;
         
         // Temporal drift (with stddev context) - use organic filter to exclude spikes
-        const temporalData = this.computeTemporalDrift(buckets, organicFilter);
+        const temporalData = this.computeTemporalDrift(buckets, organicFilter, weights);
         const temporalDriftZ = temporalData.stddev > 0 
             ? (temporalData.secondHalfNegRatio - temporalData.firstHalfNegRatio) / temporalData.stddev 
             : 0;
@@ -360,6 +395,9 @@ const Metrics = {
         // Confidence
         const confidence = this.computeConfidence(counts.total);
         const anomalyDensity = snapshot.anomalyIndices.length / buckets.length;
+
+        // Edit heatmap analysis
+        const editAnalysis = this.analyzeEditHeatmap(snapshot.editHeatmap);
 
         // Bundle
         const metricsBundle = {
@@ -387,6 +425,9 @@ const Metrics = {
             p95Playtime,
             tailRatio,
             
+            // Sampling weights (for debugging)
+            samplingWeights: weights,
+            
             // Temporal
             firstHalfNegRatio: temporalData.firstHalfNegRatio,
             secondHalfNegRatio: temporalData.secondHalfNegRatio,
@@ -411,7 +452,12 @@ const Metrics = {
             positiveBombMonth: windowPositiveSpikes[0]?.month || null,
             positiveBombMultiple: windowPositiveSpikes[0]?.multiple || 0,
             positiveBombCount: windowPositiveSpikes[0]?.count || 0,
-            excludedMonths: excludeMonths
+            excludedMonths: excludeMonths,
+            
+            // Edit analysis
+            recentNegativeEditRatio: editAnalysis.recentNegativeEditRatio,
+            oldReviewsEditedRatio: editAnalysis.oldReviewsEditedRatio,
+            totalEdits: editAnalysis.totalEdits
         };
 
         // Derive tags
@@ -425,6 +471,7 @@ const Metrics = {
 
     /**
      * Get array of playtimes for statistical analysis
+     * NOT weighted - medians reflect actual sample shape, not corrected ratios
      */
     getPlaytimeArray(buckets, type, filter) {
         const values = [];
@@ -470,6 +517,7 @@ const Metrics = {
      * Detect bimodal distribution in negatives
      * Extraction signature: some bounce early (<20h), some get trapped late (>100h)
      * Both clusters need significant mass (>15% each) to count as bimodal
+     * NOT weighted - this is about shape within negatives, not pos/neg ratio
      */
     detectBimodality(buckets, filter) {
         const earlyThreshold = 20 * 60;  // 20 hours in minutes
@@ -518,7 +566,7 @@ const Metrics = {
      * Compute temporal drift - compare RECENT (last 12 months) vs EARLIER
      * This catches "game is getting worse NOW" better than arbitrary halves
      */
-    computeTemporalDrift(buckets, filter) {
+    computeTemporalDrift(buckets, filter, weights = null) {
         const allMonths = new Set();
         for (const bucket of buckets) {
             for (const month of Object.keys(bucket.positiveByMonth || {})) allMonths.add(month);
@@ -540,13 +588,16 @@ const Metrics = {
             return { firstHalfNegRatio: 0, secondHalfNegRatio: 0, stddev: 0 };
         }
 
-        // Compute monthly negative ratios for stddev
+        const posWeight = weights?.positive || 1;
+        const negWeight = weights?.negative || 1;
+
+        // Compute monthly negative ratios for stddev (weighted)
         const monthlyRatios = [];
         for (const month of sortedMonths) {
             let pos = 0, neg = 0;
             for (const bucket of buckets) {
-                pos += (bucket.positiveByMonth?.[month] || 0) + (bucket.uncertainPositiveByMonth?.[month] || 0);
-                neg += (bucket.negativeByMonth?.[month] || 0) + (bucket.uncertainNegativeByMonth?.[month] || 0);
+                pos += ((bucket.positiveByMonth?.[month] || 0) + (bucket.uncertainPositiveByMonth?.[month] || 0)) * posWeight;
+                neg += ((bucket.negativeByMonth?.[month] || 0) + (bucket.uncertainNegativeByMonth?.[month] || 0)) * negWeight;
             }
             if (pos + neg > 0) {
                 monthlyRatios.push(neg / (pos + neg));
@@ -559,8 +610,8 @@ const Metrics = {
         const earlierPeriod = { from: sortedMonths[0], to: sortedMonths[cutoff - 1] || sortedMonths[0], excludeMonths: filter?.excludeMonths };
         const recentPeriod = { from: sortedMonths[cutoff], to: sortedMonths[sortedMonths.length - 1], excludeMonths: filter?.excludeMonths };
 
-        const earlierCounts = this.computeCounts(buckets, earlierPeriod);
-        const recentCounts = this.computeCounts(buckets, recentPeriod);
+        const earlierCounts = this.computeCounts(buckets, earlierPeriod, weights);
+        const recentCounts = this.computeCounts(buckets, recentPeriod, weights);
         
         const firstHalfNegRatio = earlierCounts.total > 0 
             ? (earlierCounts.negative + earlierCounts.uncertainNegative) / earlierCounts.total 
@@ -744,7 +795,7 @@ const Metrics = {
      * Uses LOCAL comparison: each month vs its ±3 month neighbors
      * Returns ALL spikes above threshold, not just the biggest
      */
-    detectSpikes(buckets, filter) {
+    detectSpikes(buckets, filter, weights = null) {
         const allMonths = new Set();
         for (const bucket of buckets) {
             for (const month of Object.keys(bucket.positiveByMonth || {})) allMonths.add(month);
@@ -899,17 +950,19 @@ const Metrics = {
     },
 
     /**
-     * Compute total review counts
+     * Compute total review counts (weighted)
      */
-    computeCounts(buckets, filter = null) {
+    computeCounts(buckets, filter = null, weights = null) {
         let pos = 0, neg = 0, uncPos = 0, uncNeg = 0;
+        const posWeight = weights?.positive || 1;
+        const negWeight = weights?.negative || 1;
 
         for (const bucket of buckets) {
             const filtered = this.filterBucket(bucket, filter);
-            pos += filtered.pos;
-            neg += filtered.neg;
-            uncPos += filtered.uncPos;
-            uncNeg += filtered.uncNeg;
+            pos += filtered.pos * posWeight;
+            neg += filtered.neg * negWeight;
+            uncPos += filtered.uncPos * posWeight;
+            uncNeg += filtered.uncNeg * negWeight;
         }
 
         return {
@@ -1005,6 +1058,67 @@ const Metrics = {
         if (filter.from && month < filter.from) return false;
         if (filter.to && month > filter.to) return false;
         return true;
+    },
+
+    /**
+     * Analyze edit heatmap for sentiment revision patterns
+     * Returns: recentNegativeEditRatio, oldReviewsEditedRatio, totalEdits
+     */
+    analyzeEditHeatmap(editHeatmap) {
+        if (!editHeatmap || !editHeatmap.months || editHeatmap.months.length < 6) {
+            return { recentNegativeEditRatio: 0, oldReviewsEditedRatio: 0, totalEdits: 0 };
+        }
+        
+        const months = editHeatmap.months;
+        const cells = editHeatmap.cells || {};
+        const n = months.length;
+        
+        // "Recent" = last 6 months of edit times
+        const recentEditMonths = new Set(months.slice(-6));
+        // "Old reviews" = posted in first half of timeline
+        const oldPostMonths = new Set(months.slice(0, Math.floor(n / 2)));
+        
+        let totalEdits = 0;
+        let recentEdits = 0;
+        let recentNegativeEdits = 0;
+        let oldReviewsEdited = 0;
+        let totalOldReviews = 0; // We don't have this, so we approximate
+        
+        for (const [key, cell] of Object.entries(cells)) {
+            const [postedMonth, editedMonth] = key.split('|');
+            const count = cell.positive + cell.negative;
+            
+            // Skip same-month edits (not really "revisions")
+            if (postedMonth === editedMonth) continue;
+            
+            totalEdits += count;
+            
+            // Recent edits = edited in last 6 months
+            if (recentEditMonths.has(editedMonth)) {
+                recentEdits += count;
+                recentNegativeEdits += cell.negative;
+            }
+            
+            // Old reviews being edited = posted in first half, edited later
+            if (oldPostMonths.has(postedMonth) && editedMonth > postedMonth) {
+                oldReviewsEdited += count;
+            }
+        }
+        
+        // Approximate old reviews count (we use totalEdits as proxy - not perfect)
+        // Better: count cells where postedMonth is in first half
+        for (const [key, cell] of Object.entries(cells)) {
+            const [postedMonth] = key.split('|');
+            if (oldPostMonths.has(postedMonth)) {
+                totalOldReviews += cell.positive + cell.negative;
+            }
+        }
+        
+        return {
+            recentNegativeEditRatio: recentEdits > 0 ? recentNegativeEdits / recentEdits : 0,
+            oldReviewsEditedRatio: totalOldReviews > 0 ? oldReviewsEdited / totalOldReviews : 0,
+            totalEdits
+        };
     },
 
     /**

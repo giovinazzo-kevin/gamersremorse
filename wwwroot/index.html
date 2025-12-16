@@ -43,6 +43,7 @@
             --color-tag-low-data: #999;
             --color-tag-corrupted: #666;
             --color-tag-review-bombed: #ff6600;
+            --color-tag-revisionist: #8B4513;
         }
 
         * {
@@ -355,6 +356,69 @@
             padding-bottom: 0;
         }
 
+        .chart-container.heatmap {
+            height: 300px;
+            padding: 10px;
+            position: relative;
+        }
+
+        #edit-heatmap {
+            width: 100%;
+            height: 100%;
+        }
+
+        .heatmap-tooltip {
+            display: none;
+            position: absolute;
+            background: rgba(0,0,0,0.85);
+            color: white;
+            padding: 6px 10px;
+            border-radius: 3px;
+            font-size: 10px;
+            pointer-events: none;
+            z-index: 100;
+        }
+
+        .controversy-section {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid #ddd;
+        }
+
+        .controversy-section h4 {
+            margin: 0 0 10px 0;
+            font-size: 12px;
+            color: #333;
+        }
+
+        .controversy-item {
+            background: #f9f9f9;
+            border-left: 3px solid var(--color-negative);
+            padding: 8px 12px;
+            margin-bottom: 10px;
+            font-size: 11px;
+        }
+
+        .controversy-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+
+        .controversy-type {
+            color: var(--color-negative);
+        }
+
+        .controversy-year {
+            color: #666;
+        }
+
+        .controversy-text {
+            color: #444;
+            line-height: 1.5;
+        }
+
         .chart-row {
             display: flex;
             gap: 20px;
@@ -552,11 +616,12 @@
                 <div class="box-header">How do the tags work?</div>
                 <div class="box-body">
                     <p>
-                        TAGS are inferred from the shape of the chart, not from the content of the examined reviews.
+                        TAGS are inferred from the shape of the charts and from the contents of the examined reviews.
                         They do not (necessarily) represent the opinions of the players, and they are not to be taken or shared as objective statements (unless sourced from reddit and adequately padded with weasel words).
                     </p>
                     <p>
-                        Low-confidence charts might display overly negative tags. This is normal; it's an artifact of the sampling algorithm. As more reviews come in, the distribution converges and the tags eventually settle.
+                        The sampling algorithm does not strive to represent the current recommended/not recommended ratio faithfully; 
+                        it tries to find as many different opinions as possible and then it weighs them against the nominal ratio when it makes sense to do so.
                     </p>
                     <p>
                         Some tags are mutually exclusive, and some tags can level up. For example, PREDATORY is a stronger version of EXTRACTIVE.
@@ -605,6 +670,11 @@
                                 <canvas id="language-chart"></canvas>
                             </div>
                         </div>
+                    </div>
+                    <h3 class="chart-title">Who Changed Their Mind When?</h3>
+                    <div class="chart-container heatmap">
+                        <canvas id="edit-heatmap"></canvas>
+                        <div id="heatmap-tooltip" class="heatmap-tooltip"></div>
                     </div>
                 </div>
             </div>

@@ -70,6 +70,30 @@ public record SteamReviewAnalyzer(IOptions<SteamReviewAnalyzer.Configuration> Op
             complaintsByMonth
         );
 
+        // Build edit heatmap - only include reviews that were actually edited
+        var editedReviews = reviews.Where(r => r.EditedOn > r.PostedOn.AddHours(1)).ToList();
+        var editCells = new Dictionary<string, EditCell>();
+        var allEditMonths = new HashSet<string>();
+        
+        foreach (var r in editedReviews) {
+            var postedMonth = r.PostedOn.ToString("yyyy-MM");
+            var editedMonth = r.EditedOn.ToString("yyyy-MM");
+            allEditMonths.Add(postedMonth);
+            allEditMonths.Add(editedMonth);
+            
+            var key = $"{postedMonth}|{editedMonth}";
+            var existing = editCells.GetValueOrDefault(key);
+            editCells[key] = new EditCell(
+                existing.Positive + (r.Verdict > 0 ? 1 : 0),
+                existing.Negative + (r.Verdict < 0 ? 1 : 0)
+            );
+        }
+        
+        var editHeatmap = new EditHeatmap(
+            allEditMonths.OrderBy(m => m).ToArray(),
+            editCells
+        );
+
         return new AnalysisSnapshot(
             bucketsByReview,
             bucketsByTotal,
@@ -80,7 +104,8 @@ public record SteamReviewAnalyzer(IOptions<SteamReviewAnalyzer.Configuration> Op
             meta.TotalPositive,
             meta.TotalNegative,
             meta.TargetSampleCount,
-            languageStats
+            languageStats,
+            editHeatmap
         );
     }
 

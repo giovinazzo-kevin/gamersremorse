@@ -644,8 +644,18 @@ function setShy(isShy) {
     }
 }
 
+function setUnhinged(isUnhinged) {
+    state.unhinged = isUnhinged;
+}
+
+function isUnhinged() {
+    return state.unhinged || false;
+}
+
 // Expose for other modules
 window.setEyeExpression = setExpression;
 window.setEyeDilation = setDilation;
 window.setEyeLoading = setLoading;
 window.setEyeShy = setShy;
+window.setEyeUnhinged = setUnhinged;
+window.isEyeUnhinged = isUnhinged;
