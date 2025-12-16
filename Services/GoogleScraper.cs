@@ -73,25 +73,15 @@ public class GoogleScraper(IDbContextFactory<AppDbContext> dbFactory) : IAsyncDi
                 () => {
                     const mainCol = document.querySelector('[data-container-id=""main-col""]');
                     if (!mainCol) return null;
-                    
-                    // Find first div that contains a list (that's the summary + bullet container)
-                    const divWithList = mainCol.querySelector('div:has(ul, ol)');
-                    if (!divWithList) return null;
-                    
-                    // Clone and remove lists/junk to get just prose
-                    const clone = divWithList.cloneNode(true);
-                    clone.querySelectorAll('ul, ol, style, script, svg').forEach(x => x.remove());
-                    let text = (clone.textContent || '').replace(/\s+/g, ' ').trim();
-                    
-                    if (text.length < 100 || !/^[A-Z]/.test(text)) return null;
-                    
-                    // End at last complete sentence
-                    const lastPeriod = text.lastIndexOf('.');
-                    if (lastPeriod > 100) {
-                        text = text.substring(0, lastPeriod + 1);
-                    }
-                    
-                    return text;
+    
+                    const ul = mainCol.querySelector('ul');
+                    if (!ul) return null;
+    
+                    const items = [...ul.querySelectorAll('li')]
+                        .map(li => li.textContent?.trim())
+                        .filter(t => t && t.length > 20);
+    
+                    return items.length ? items.join('\n\n') : null;
                 }
             ");
             

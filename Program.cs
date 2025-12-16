@@ -35,7 +35,7 @@ app.MapGet("/controversy", async (string game, string month, GoogleScraper googl
     
     if (month == "launch") {
         // Special case: query for launch reception
-        query = $"What was the {game} launch reception";
+        query = $"What was the {game} launch reception key points";
         overview = await google.GetAIOverview(query, ct);
     } else {
         // Parse month like "2024-10" into "October 2024"
@@ -49,13 +49,13 @@ app.MapGet("/controversy", async (string game, string month, GoogleScraper googl
         
         // Try month-specific query first
         if (!string.IsNullOrEmpty(monthName)) {
-            query = $"What was the {game} controversy in {monthName} {year}";
+            query = $"What was the {game} controversy in {monthName} {year} key points";
             overview = await google.GetAIOverview(query, ct);
         }
         
         // Fall back to year-only if month query failed
         if (overview == null) {
-            query = $"What was the {game} controversy in {year}";
+            query = $"What was the {game} controversy in {year} key points";
             overview = await google.GetAIOverview(query, ct);
         }
     }

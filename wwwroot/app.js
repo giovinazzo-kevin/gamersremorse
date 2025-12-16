@@ -11,6 +11,7 @@ let timelineDrag = null;
 let isFirstSnapshot = true;
 let currentMetrics = null;
 let lastMetrics = null;
+let cachedControversyHtml = null;
 let isStreaming = true;
 let convergenceScore = 0;
 let loadingMessageCount = 0;
@@ -297,6 +298,7 @@ async function analyze() {
     if (!appId) return alert('Invalid App ID');
 
     // reset state
+    cachedControversyHtml = null;
     currentSnapshot = null;
     currentMetrics = null;
     lastMetrics = null;
@@ -1256,6 +1258,9 @@ function updateMetrics(snapshot) {
                 Confidence: ${Math.round(convergenceScore * 100)}%
             </div>
         `;
+        if (cachedControversyHtml) {
+            metricsEl.innerHTML += cachedControversyHtml;
+        }
     }
 
     // Update opinion panel
@@ -1747,14 +1752,6 @@ if (document.readyState === 'loading') {
 
 async function fetchControversyContext(gameName, metrics, snapshot) {
     const events = detectNotableEvents(metrics, snapshot);
-    
-    // Always add launch query
-    const launchEvent = {
-        type: 'launch',
-        month: 'launch',
-        year: 'launch'
-    };
-    
     console.log('Detected events:', events);
     
     // Show status in the controversy section
@@ -1771,7 +1768,7 @@ async function fetchControversyContext(gameName, metrics, snapshot) {
     }
     
     // Fetch context for events + launch (limit to 4 total)
-    const allEvents = [launchEvent, ...events].slice(0, 4);
+    const allEvents = events.slice(0, 4);
     const contexts = [];
     
     for (const event of allEvents) {
@@ -1805,9 +1802,42 @@ async function fetchControversyContext(gameName, metrics, snapshot) {
 
 function detectNotableEvents(metrics, snapshot) {
     const events = [];
-    
+    const tags = metrics.verdict.tags.map(t => t.id);
+
+    // Launch is always notable
+    // Check first few months of timeline for sentiment
+    const months = Object.keys(metrics.counts).length > 0 ? [] : [];
+    let launchWasNegative = false;
+
+    // Get first 3 months of data to determine launch sentiment
+    const allMonths = new Set();
+    for (const bucket of snapshot.bucketsByReviewTime) {
+        for (const month of Object.keys(bucket.positiveByMonth || {})) allMonths.add(month);
+        for (const month of Object.keys(bucket.negativeByMonth || {})) allMonths.add(month);
+    }
+    const sortedMonths = [...allMonths].sort();
+    const launchMonths = sortedMonths.slice(0, 3);
+
+    if (launchMonths.length > 0) {
+        let launchPos = 0, launchNeg = 0;
+        for (const bucket of snapshot.bucketsByReviewTime) {
+            for (const month of launchMonths) {
+                launchPos += (bucket.positiveByMonth?.[month] || 0) + (bucket.uncertainPositiveByMonth?.[month] || 0);
+                launchNeg += (bucket.negativeByMonth?.[month] || 0) + (bucket.uncertainNegativeByMonth?.[month] || 0);
+            }
+        }
+        launchWasNegative = launchNeg > launchPos;
+    }
+
+    events.push({
+        type: 'launch',
+        month: launchWasNegative ? 'launch controversy' : 'launch',
+        year: sortedMonths[0]?.split('-')[0] || '',
+        severity: 0
+    });
+
     // Review bombs
-    if (metrics.negativeSpikes) {
+    if (tags.includes('REVIEW_BOMBED') && metrics.negativeSpikes) {
         for (const spike of metrics.negativeSpikes) {
             if (spike.z >= 3 && spike.count >= 50) {
                 const year = spike.month.split('-')[0];
@@ -1821,25 +1851,76 @@ function detectNotableEvents(metrics, snapshot) {
             }
         }
     }
-    
-    // Mass edit events (from heatmap analysis)
-    if (metrics.recentNegativeEditRatio >= 0.5 && metrics.totalEdits >= 20) {
-        // Find the year with most edit activity
+
+    // Mass edit events
+    if (tags.includes('REVISIONIST') || tags.includes('ENSHITTIFIED')) {
         const editHeatmap = snapshot.editHeatmap;
         if (editHeatmap?.months?.length > 0) {
-            // Get most recent year with significant edits
-            const recentMonths = editHeatmap.months.slice(-12);
-            if (recentMonths.length > 0) {
-                const year = recentMonths[recentMonths.length - 1].split('-')[0];
-                events.push({
-                    type: 'mass_edits',
-                    year,
-                    severity: metrics.recentNegativeEditRatio
-                });
+            // Count edits by month (when edited, not when posted)
+            const editsByMonth = {};
+            for (const [key, cell] of Object.entries(editHeatmap.cells || {})) {
+                const [posted, edited] = key.split('|');
+                if (edited !== posted) {
+                    editsByMonth[edited] = (editsByMonth[edited] || 0) + cell.positive + cell.negative;
+                }
+            }
+
+            const sortedMonths = Object.keys(editsByMonth).sort();
+            if (sortedMonths.length > 0) {
+                // Find largest contiguous period above threshold
+                const avgEdits = Object.values(editsByMonth).reduce((a, b) => a + b, 0) / sortedMonths.length;
+                const threshold = avgEdits * 0.5;  // At least half of average
+
+                let bestStart = null, bestEnd = null, bestSum = 0;
+                let currStart = null, currSum = 0;
+
+                for (let i = 0; i < sortedMonths.length; i++) {
+                    const month = sortedMonths[i];
+                    const count = editsByMonth[month];
+
+                    if (count >= threshold) {
+                        if (currStart === null) currStart = month;
+                        currSum += count;
+
+                        // Check if contiguous (next month follows)
+                        const nextMonth = sortedMonths[i + 1];
+                        const isContiguous = nextMonth && isNextMonth(month, nextMonth);
+
+                        if (!isContiguous || i === sortedMonths.length - 1) {
+                            // End of run
+                            if (currSum > bestSum) {
+                                bestStart = currStart;
+                                bestEnd = month;
+                                bestSum = currSum;
+                            }
+                            currStart = null;
+                            currSum = 0;
+                        }
+                    } else {
+                        if (currSum > bestSum) {
+                            bestStart = currStart;
+                            bestEnd = sortedMonths[i - 1];
+                            bestSum = currSum;
+                        }
+                        currStart = null;
+                        currSum = 0;
+                    }
+                }
+                if (bestStart && bestEnd) {
+                    const periodStr = bestStart === bestEnd
+                        ? bestStart
+                        : `${bestStart} to ${bestEnd}`;
+                    events.push({
+                        type: 'mass_edits',
+                        year: periodStr,  // For display: "2024-09 to 2024-12"
+                        month: periodStr, // For query: just the dates, no "controversy" prefix
+                        severity: metrics.recentNegativeEditRatio
+                    });
+                }
             }
         }
     }
-    
+
     // Dedupe by year - only keep most severe event per year
     const byYear = {};
     for (const event of events) {
@@ -1847,17 +1928,24 @@ function detectNotableEvents(metrics, snapshot) {
             byYear[event.year] = event;
         }
     }
-    
+
     return Object.values(byYear).sort((a, b) => b.year.localeCompare(a.year));
+}
+
+function isNextMonth(m1, m2) {
+    const [y1, mo1] = m1.split('-').map(Number);
+    const [y2, mo2] = m2.split('-').map(Number);
+    if (mo1 === 12) {
+        return y2 === y1 + 1 && mo2 === 1;
+    }
+    return y2 === y1 && mo2 === mo1 + 1;
 }
 
 function displayControversyContext(contexts) {
     const container = document.getElementById('metrics-detail');
     if (!container) return;
     
-    let html = container.innerHTML;
-    
-    html += '<div class="controversy-section">';
+    let html = '<div class="controversy-section">';
     html += '<h4>📰 What Happened?</h4>';
     
     for (const ctx of contexts) {
@@ -1890,5 +1978,6 @@ function displayControversyContext(contexts) {
     }
     
     html += '</div>';
-    container.innerHTML = html;
+    container.innerHTML += html;
+    cachedControversyHtml = html;
 }
