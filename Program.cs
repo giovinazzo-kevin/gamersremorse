@@ -29,38 +29,42 @@ app.UseHttpsRedirection();
 app.MapGet("/game/{appId}", async (HttpContext ctx, AppId appId, SteamReviewRepository repo) => {
     return await repo.GetInfo(appId);
 });
-app.MapGet("/controversy", async (string game, string month, GoogleScraper google, CancellationToken ct) => {
-    string query = "";
-    string? overview = null;
-    
-    if (month == "launch") {
-        // Special case: query for launch reception
-        query = $"What was the {game} launch reception key points";
-        overview = await google.GetAIOverview(query, ct);
-    } else {
-        // Parse month like "2024-10" into "October 2024"
-        var monthNames = new[] { "", "January", "February", "March", "April", "May", "June", 
-                                 "July", "August", "September", "October", "November", "December" };
-        var parts = month.Split('-');
-        var year = parts[0];
-        var monthName = parts.Length > 1 && int.TryParse(parts[1], out var m) && m >= 1 && m <= 12 
-            ? monthNames[m] 
-            : "";
-        
-        // Try month-specific query first
-        if (!string.IsNullOrEmpty(monthName)) {
-            query = $"What was the {game} controversy in {monthName} {year} key points";
+app.MapGet("/controversies", async (string game, string months, GoogleScraper google, CancellationToken ct) => {
+    var monthList = months.Split(',', StringSplitOptions.RemoveEmptyEntries);
+    var monthNames = new[] { "", "January", "February", "March", "April", "May", "June",
+                             "July", "August", "September", "October", "November", "December" };
+
+    var tasks = monthList.Select(async month => {
+        string query;
+        string? overview = null;
+
+        if (month == "launch") {
+            query = $"{game} launch reception bullet points";
             overview = await google.GetAIOverview(query, ct);
+        } else {
+            var parts = month.Split('-');
+            var year = parts[0];
+            var monthName = parts.Length > 1 && int.TryParse(parts[1], out var m) && m >= 1 && m <= 12
+                ? monthNames[m] : "";
+
+            if (!string.IsNullOrEmpty(monthName)) {
+                query = $"What was the {game} controversy in {monthName} {year} bullet points";
+                overview = await google.GetAIOverview(query, ct);
+            }
+
+            if (overview == null) {
+                query = $"What was the {game} controversy in {year} bullet points";
+                overview = await google.GetAIOverview(query, ct);
+            } else {
+                query = $"What was the {game} controversy in {monthName} {year} bullet points";
+            }
         }
-        
-        // Fall back to year-only if month query failed
-        if (overview == null) {
-            query = $"What was the {game} controversy in {year} key points";
-            overview = await google.GetAIOverview(query, ct);
-        }
-    }
-    
-    return new { query, overview };
+
+        return new { month, query, overview };
+    });
+
+    var results = await Task.WhenAll(tasks);
+    return results.Where(r => r.overview != null);
 });
 app.Map("/ws/game/{appId}", async (HttpContext ctx, AppId appId, AnalysisHub hub) => {
     if (!ctx.WebSockets.IsWebSocketRequest)

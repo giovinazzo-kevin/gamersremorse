@@ -71,7 +71,7 @@ public record SteamReviewAnalyzer(IOptions<SteamReviewAnalyzer.Configuration> Op
         );
 
         // Build edit heatmap - only include reviews that were actually edited
-        var editedReviews = reviews.Where(r => r.EditedOn > r.PostedOn.AddHours(1)).ToList();
+        var editedReviews = reviews.Where(IsUncertain).ToList();
         var editCells = new Dictionary<string, EditCell>();
         var allEditMonths = new HashSet<string>();
         
@@ -182,7 +182,8 @@ public record SteamReviewAnalyzer(IOptions<SteamReviewAnalyzer.Configuration> Op
         return anomalies.ToArray();
     }
 
-    private static bool IsUncertain(SteamReview r) => (r.EditedOn - r.PostedOn) > TimeSpan.FromDays(7);
+    private static readonly TimeSpan EditThreshold = TimeSpan.FromDays(7);
+    private static bool IsUncertain(SteamReview r) => (r.EditedOn - r.PostedOn) > EditThreshold;
 
     private static VelocityBucket[] BuildVelocityBuckets(List<SteamReview> reviews)
     {

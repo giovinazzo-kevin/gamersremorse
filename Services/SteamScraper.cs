@@ -89,7 +89,7 @@ public record SteamScraper(IOptions<SteamScraper.Configuration> Options, IHttpCl
             if (res is not { Success: 1 })
                 yield break;
             nextCursor = res.Cursor;
-            if (cursor == nextCursor)
+            if (cursor == nextCursor || nextCursor is null)
                 yield break;
             foreach (var review in res.Reviews)
                 yield return review.MapToDomain(appId);

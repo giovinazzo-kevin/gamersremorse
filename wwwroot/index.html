@@ -21,7 +21,7 @@
             /* Tag colors - negative */
             --color-tag-extractive: #cc4400;
             --color-tag-predatory: #e74c3c;
-            --color-tag-enshittified: #8B4513;  
+            --color-tag-enshittified: #8B4513;
             --color-tag-stockholm: #9b59b6;
             --color-tag-flop: #8B0000;
             --color-tag-troubled: #a08060;
@@ -31,6 +31,7 @@
             --color-tag-plague: #556B2F;
             --color-tag-cursed: #1a0d00;
             /* Tag colors - neutral/warning */
+            --color-tag-launch: #666666;
             --color-tag-divisive: #9932CC;
             --color-tag-honeymoon: #DAA520;
             --color-tag-addictive: #e67e22;
@@ -76,6 +77,7 @@
             .header .tagline {
                 color: var(--color-positive);
                 font-size: 9px;
+                font-variant: small-caps;
             }
 
         .nav {
@@ -263,6 +265,7 @@
 
         .tag-pill {
             display: inline-block;
+            user-select: none;
             padding: 3px 10px;
             border-radius: 12px;
             color: white;
@@ -378,6 +381,11 @@
             pointer-events: none;
             z-index: 100;
         }
+        .controversy-icon {
+            display: inline-block;
+            width: 1.2em;
+            text-align: center;
+        }
 
         .controversy-section {
             margin-top: 15px;
@@ -399,6 +407,10 @@
             font-size: 11px;
         }
 
+        strong {
+            color: var(--color-negative);
+        }
+
         .controversy-header {
             display: flex;
             justify-content: space-between;
@@ -418,6 +430,44 @@
             color: #444;
             line-height: 1.5;
             white-space: pre-line;
+        }
+
+        .controversy-item summary {
+            cursor: pointer;
+            list-style: none;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+            .controversy-item summary::-webkit-details-marker {
+                display: none;
+            }
+
+            .controversy-item summary .tag-pill::after {
+                content: '';
+                display: inline-block;
+                width: 6px;
+                height: 6px;
+                margin-left: 0.5em;
+                border-right: 2px solid currentColor;
+                border-bottom: 2px solid currentColor;
+                transform: rotate(-45deg);
+                position: relative;
+                left: -2px;
+                top: -1px;
+            }
+
+        .controversy-item[open] summary .tag-pill::after {
+            transform: rotate(45deg);
+            top: -2px;
+            left: 0px;
+        }
+
+        .controversy-item summary .controversy-header {
+            display: flex;
+            justify-content: space-between;
+            flex: 1;
         }
 
         .chart-row {
@@ -568,7 +618,7 @@
         <svg id="eye"></svg>
         <div>
             <h1>Gamer's Remorse</h1>
-            <div class="tagline"><em>We are the metrics <strong>now</strong></em></div>
+            <div class="tagline">We are the metrics <strong>now</strong></div>
         </div>
     </div>
 

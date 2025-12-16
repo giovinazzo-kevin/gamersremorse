@@ -115,10 +115,17 @@ const loadingMessages = {
         "Calculating world-line divergence...",
         "Accepting reality...",
         "Building the Numidium...",
-        "WAKE UP",
-        "QUESTION AUTHORITY",
-        "YOU HAVE NOBODY TO BLAME BUT THEM",
+        "NOTHING EVER HAPPENS",
         "ASK AGAIN LATER",
+        "WAIT",
+        "WAKE UP",
+        "IT'S HAPPENING",
+        "QUESTION AUTHORITY",
+    ],
+
+    REVISIONIST: [
+        "LITERALLY 1984",
+        "THIS IS RETCONNING",
     ],
 
     // EXTRACTIVE
@@ -131,7 +138,24 @@ const loadingMessages = {
         "Measuring distance to cashgrab...",
         "Comparing to what was promised...",
         "YOU ARE THROWING YOUR TIME AWAY",
+        "YOU HAVE NOBODY TO BLAME BUT THEM",
         "YOU WILL NEVER BE GOOD ENOUGH",
+        "NOW INSTALL THIS DRM",
+        "BUY THE BATTLE PASS",
+        "BUY THE LIMITED TIME OFFER",
+        "BUY THE DLC",
+        "BUY THE HATS",
+        "BUY THE NEW CHARACTER",
+        "BUY THE SKINS",
+        "BUY THE SPECIAL BUNDLE",
+        "BUY STORE CREDITS",
+        "BUY A LIFE",
+        "BUY A KEY",
+        "OPEN MORE LOOTBOXES",
+        "PULL THE LEVER YOU STUPID RAT",
+        "TRY AGAIN?",
+        "YOU CAN SELL IT ON THE MARKET",
+        "THIS IS SOULLESS"
     ],
 
     // PREDATORY
@@ -145,6 +169,20 @@ const loadingMessages = {
         "Unleashing the AI shills...",
         "Addressing death threats...",
         "Beating the allegations...",
+        "NOW INSTALL THIS KERNEL LEVEL ROOTKIT",
+        "THE TPM IS FOR YOUR OWN GOOD",
+        "BUY ALL THE BATTLE PASSES",
+        "BUY ALL THE LIMITED TIME OFFERS",
+        "BUY ALL THE DLC",
+        "BUY ALL THE HATS",
+        "BUY ALL THE NEW CHARACTERS",
+        "BUY ALL THE SKINS",
+        "BUY ALL THE SPECIAL BUNDLES",
+        "BUY MORE STORE CREDITS",
+        "BUY MORE LIVES",
+        "BUY MORE KEYS",
+        "BUY THE PRESS",
+        "BUY THE MEDIA",
         "I HAVE SEEN ENOUGH!",
         "THEY TARGETED GAMERS. GAMERS.",
         "DO THESE PEOPLE HAVE NO IDEA",
@@ -164,16 +202,51 @@ const loadingMessages = {
         "Measuring stockholm syndrome...",
         "Locating sunk cost fixpoint...",
         "Sampling the salt mines...",
+        "Waiting in queue...",
+        "Waiting in queue...",
+        "Waiting in queue...",
+        "Waiting in queue...",
+        "Waiting in queue...",
+        "Waiting in queue...",
         "YOU'RE LOCKED IN HERE WITH ME!",
         "HAVE YOU SEEN THE EXIT?",
         "DOES IT GET BETTER BEFORE IT GETS WORSE?",
         "I STILL LOVE YOU",
+        "I AM BETTER THAN THEM",
+    ],
+
+    // CULT
+    CULT: [
+        "Drawing a pentagram...",
+        "Lighting candles...",
+        "Sacrificing a goat...",
+        "Stoking the bonfire...",
+        "Drinking the kool-aid...",
+        "Learning 2 play...",
+        "Gitting gud...",
+        "Scrubbing the floor...",
+        "Pwning n00bz...",
+        "Raising the skill floor...",
+        "Raising the skill ceiling...",
+        "Waiting in queue...",
+        "Waiting in queue...",
+        "Waiting in queue...",
+        "Waiting in queue...",
+        "Waiting in queue...",
+        "Waiting in queue...",
+        "I CAN STOP WHENEVER I WANT",
+        "I AM IN THE TOP 0.001% OF ALL PLAYERS",
+        "WATCH ME ON TWITCH",
+        "SKILL ISSUE",
+        "GIT GUD",
     ],
 
     // REFUND_TRAP
     REFUND_TRAP: [
         "Becoming back my money...",
         "Querying the refund window...",
+        "WHERE'S THE MONEY LEBOWSKI??",
+        "THIS THRESHOLD IS COMPLETELY ARBITRARY",
     ],
 
     // DEAD
@@ -181,9 +254,17 @@ const loadingMessages = {
         "Polling dead servers...",
         "Exhuming abandoned roadmaps...",
         "Beating a dead horse...",
+        "DEAD GAME",
         "HE'S DEAD, JIM",
+        "LOOK HOW THEY MASSACRED MY BOY",
         "YOUR OLD GAMES LIE IN RUIN",
         "A DEAD GAME WILL BRING YOU NO FUN TODAY",
+        "SHAZBOT",
+        "I MISS YOU SO MUCH",
+        "PLEASE COME BACK TO ME",
+        "THIS GAME WAS MY ENTIRE CHILDHOOD",
+        "IT WAS INEVITABLE",
+        "YOU COULD HAVE STOPPED THIS",
     ],
 
     // ADDICTIVE
@@ -192,14 +273,29 @@ const loadingMessages = {
         "Remembering when games were not full-time jobs...",
         "Getting the next fix...",
         "Texting the pusher...",
-        "SMOKING KILLS, AND YET",
+        "SMOKING KILLS",
         "I NEED MORE OF THIS",
+        "MORE! MORE! MORE!",
+        "WHY DO I ALWAYS FEEL LIKE SHIT",
+        "HEY BRO YOU WANNA PLAY",
+        "SORRY WE'RE FULL",
+        "PLEASE ACCEPT THE PARTY INVITE",
+        "WHERE WE DROPPING BOYS",
+        "JUST ONE MORE TURN",
+        "I'M QUITTING AFTER THIS ONE",
+        "WE'RE DONE WHEN I SAY WE'RE DONE",
+        "WHAT YEAR IS IT",
     ],
 
     // DIVISIVE
     DIVISIVE: [
         "Accepting reality...",
         "Confirming the bias...",
+        "BUT THEY SAID-",
+        "THIS IS GASLIGHTING",
+        "WHY WON'T YOU STOP FIGHTING",
+        "MAKE UP YOUR MIND ALREADY",
+        "NOW KISS"
     ],
 
     // REDEMPTION
@@ -207,6 +303,18 @@ const loadingMessages = {
         "Verifying that it was actually fixed...",
         "Parsing the patch notes...",
         "Crediting the modding community...",
+        "WAIT, THEY'RE ACTUALLY LISTENING??",
+        "(X) DOUBT",
+        "ERROR ERROR ERROR",
+        "WHAT? IMPOSSIBLE!",
+        "THIS CAN'T BE",
+        "THIS GOES AGAINST THE NARRATIVE",
+        "THE PROBABILITY OF THIS BEING TRUE IS ASTRONOMICALLY LOW",
+        "DO NOT BELIEVE THEIR LIES",
+        "I SEE THE LIGHT AT THE END OF THE TUNNEL",
+        "NATURE IS HEALING",
+        "I FEEL SO MUCH BETTER ALREADY",
+        "THANK YOU THANK YOU THANK YOU"
     ],
 
     // ENSHITTIFIED
@@ -214,17 +322,24 @@ const loadingMessages = {
         "Wondering if it ever gets good...",
         "Mourning the single player campaign...",
         "WHY WOULD YOU DO THIS TO ME",
-        ""
+        "THIS USED TO BE THE BEST GAME EVER",
+        "IT'S NOT THE NOSTALGIA IT REALLY DID GET WORSE",
+        "YOU'RE NOT OLD AND BITTER YOU'RE JUST RIGHT",
+        "THEY WERE RIGHT ALL ALONG",
+        "AIR CONDITIONING BROUGHT DOWN THE ROMAN EMPIRE",
+        "ABYSMAL GLORPSHIT"
     ],
 
     // LOW_DATA
     LOW_DATA: [
-        "THERE IS AS YET INSUFFICIENT DATA FOR A MEANINGFUL ANSWER",
         "Squinting at the sample size...",
         "Extrapolating from vibes...",
         "Drawing conclusions from thin air...",
         "Pulling the relevant bits out of my ass...",
+        "Googling that for you...",
+        "THERE IS AS YET INSUFFICIENT DATA FOR A MEANINGFUL ANSWER",
         "THE SOURCE IS THAT I MADE IT THE FUCK UP!",
+        "LOOK IT UP SWEATY",
     ],
 
     // HORNY
@@ -240,7 +355,10 @@ const loadingMessages = {
         "Measuring chest curvature...",
         "Measuring butt curvature...",
         "AWOOGA",
-        "I'M COOMING",
+        "WIFE MATERIAL",
+        "I AM COOMING",
+        "THIS IS SO FUCKING HOT",
+        "HEY THAT'S MY WAIFU YOU'RE LUSTING OVER",
     ],
 };
 
@@ -934,38 +1052,10 @@ function updateTimelineData(snapshot, reset = false) {
 
     drawTimeline();
 }
-
-// Map tag IDs to their CSS variable colors
-const tagColorMap = {
-    'HEALTHY': '#4ade80',
-    'HONEST': '#22c55e',
-    'EXTRACTIVE': '#f97316',
-    'PREDATORY': '#ef4444',
-    'STOCKHOLM': '#a855f7',
-    'DIVISIVE': '#eab308',
-    'FLOP': '#dc2626',
-    'TROUBLED': '#f59e0b',
-    'REFUND_TRAP': '#be123c',
-    'DEAD': '#6b7280',
-    'CULT': '#8b5cf6',
-    'HONEYMOON': '#fbbf24',
-    'REDEMPTION': '#34d399',
-    'ENSHITTIFIED': '#b45309',
-    'PHOENIX': '#10b981',
-    'PRESS_F': '#9ca3af',
-    'ZOMBIE': '#84cc16',
-    '180': '#22d3ee',
-    'HOPELESS': '#64748b',
-    'PLAGUE': '#991b1b',
-    'CURSED': '#7f1d1d',
-    'ADDICTIVE': '#e879f9',
-    'RUGPULL': '#c2410c',
-    'HORNY': '#ec4899',
-    'LOW_DATA': '#9ca3af',
-    'CORRUPTED': '#71717a',
-    'REVIEW_BOMBED': '#f43f5e',
-    'SURGE': '#06b6d4'
-};
+function getTagColor(tag) {
+    const varName = `--color-tag-${(tag || "start").toLowerCase().replace(/_/g, '-')}`;
+    return getComputedStyle(document.documentElement).getPropertyValue(varName).trim() || '#666';
+}
 
 function drawTimeline() {
     const w = timelineCanvas.width;
@@ -1033,7 +1123,7 @@ function drawTimeline() {
                 !['LOW_DATA', 'CORRUPTED', 'HORNY'].includes(t)
             );
             const primaryTag = significantTags[0] || entry.tags[0];
-            const color = tagColorMap[primaryTag] || '#666';
+            const color = getTagColor(primaryTag);
 
             timelineCtx.fillStyle = color;
             timelineCtx.fillRect(x, stripY, barW, tagStripH - 2);
@@ -1244,13 +1334,13 @@ function updateMetrics(snapshot) {
                 ? `<div class="loading">✅ ${loadingMsg}</div>`
                 : '';
         metricsEl.innerHTML = `
-            ${preliminaryWarning}
             <div class="verdict-tags">
                 ${tagPills || '<span class="tag-pill" style="background:#666">NEUTRAL</span>'}
             </div>
             <ul class="reasons">
                 ${v.reasons.map(r => `<li>${r}</li>`).join('')}
             </ul>
+            ${preliminaryWarning}
             <div class="metrics-raw">
                 Median ratio: ${currentMetrics.medianRatio.toFixed(2)} |
                 Refund honesty: ${currentMetrics.refundNegRate !== null ? Math.round(currentMetrics.refundNegRate * 100) + '%' : 'N/A (F2P)'} |
@@ -1768,28 +1858,18 @@ async function fetchControversyContext(gameName, metrics, snapshot) {
     }
     
     // Fetch context for events + launch (limit to 4 total)
+
     const allEvents = events.slice(0, 4);
-    const contexts = [];
-    
-    for (const event of allEvents) {
-        try {
-            const url = `/controversy?game=${encodeURIComponent(gameName)}&month=${event.month}`;
-            console.log('Fetching:', url);
-            const res = await fetch(url);
-            if (res.ok) {
-                const data = await res.json();
-                console.log('Response:', data);
-                if (data.overview) {
-                    contexts.push({
-                        event,
-                        overview: data.overview
-                    });
-                }
-            }
-        } catch (e) {
-            console.warn('Failed to fetch controversy:', e);
-        }
-    }
+    const months = allEvents.map(e => e.month).join(',');
+    const res = await fetch(`/controversies?game=${encodeURIComponent(gameName)}&months=${months}`);
+    // In fetchControversyContext, map the response
+    const data = await res.json();
+    const contexts = data
+        .filter(d => d.overview)
+        .map(d => ({
+            event: allEvents.find(e => e.month === d.month) || { type: 'unknown', month: d.month, year: d.month.split('-')[0] },
+            overview: d.overview
+        }));
     
     // Remove loading indicator
     document.getElementById('controversy-loading')?.remove();
@@ -1831,9 +1911,10 @@ function detectNotableEvents(metrics, snapshot) {
 
     events.push({
         type: 'launch',
-        month: launchWasNegative ? 'launch controversy' : 'launch',
-        year: sortedMonths[0]?.split('-')[0] || '',
-        severity: 0
+        month: 'launch',
+        year: sortedMonths[0] || '',
+        severity: 0,
+        tag: launchWasNegative ? (tags.includes('FLOP') ? 'FLOP' : 'TROUBLED') : null
     });
 
     // Review bombs
@@ -1846,7 +1927,8 @@ function detectNotableEvents(metrics, snapshot) {
                     year,
                     month: spike.month,
                     severity: spike.z,
-                    count: spike.count
+                    count: spike.count,
+                    tag: 'REVIEW_BOMBED'
                 });
             }
         }
@@ -1912,9 +1994,10 @@ function detectNotableEvents(metrics, snapshot) {
                         : `${bestStart} to ${bestEnd}`;
                     events.push({
                         type: 'mass_edits',
-                        year: periodStr,  // For display: "2024-09 to 2024-12"
-                        month: periodStr, // For query: just the dates, no "controversy" prefix
-                        severity: metrics.recentNegativeEditRatio
+                        year: periodStr,
+                        month: periodStr,
+                        severity: metrics.recentNegativeEditRatio,
+                        tag: tags.includes('REVISIONIST') ? 'REVISIONIST' : 'ENSHITTIFIED'
                     });
                 }
             }
@@ -1940,43 +2023,34 @@ function isNextMonth(m1, m2) {
     }
     return y2 === y1 && mo2 === mo1 + 1;
 }
-
 function displayControversyContext(contexts) {
     const container = document.getElementById('metrics-detail');
     if (!container) return;
-    
+
     let html = '<div class="controversy-section">';
     html += '<h4>📰 What Happened?</h4>';
-    
+
     for (const ctx of contexts) {
-        let typeLabel, yearLabel;
-        if (ctx.event.type === 'launch') {
-            typeLabel = '📦 Launch';
-            yearLabel = '';
-        } else if (ctx.event.type === 'review_bomb') {
-            typeLabel = '💣 Review Bomb';
-            yearLabel = ctx.event.year;
-        } else {
-            typeLabel = '✏️ Mass Edits';
-            yearLabel = ctx.event.year;
-        }
-        // Escape HTML in overview to prevent breaking
+        const tag = ctx.event.tag;
+        const tagClass = tag ? tag.toLowerCase().replace(/_/g, '-') : 'launch';
+        const yearLabel = ctx.event.year;
+
         const safeOverview = ctx.overview
             .replace(/&/g, '&amp;')
             .replace(/</g, '&lt;')
             .replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;');
         html += `
-            <div class="controversy-item">
-                <div class="controversy-header">
-                    <span class="controversy-type">${typeLabel}</span>
+            <details class="controversy-item">
+                <summary>
+                    <span class="tag-pill" style="background: var(--color-tag-${tagClass})">${tag || 'LAUNCH'}</span>
                     <span class="controversy-year">${yearLabel}</span>
-                </div>
+                </summary>
                 <div class="controversy-text">${safeOverview}</div>
-            </div>
+            </details>
         `;
     }
-    
+
     html += '</div>';
     container.innerHTML += html;
     cachedControversyHtml = html;

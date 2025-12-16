@@ -1,6 +1,7 @@
 using gamersremorse.Entities;
 using Microsoft.EntityFrameworkCore;
 using PuppeteerSharp;
+using System.Text.RegularExpressions;
 
 namespace gamersremorse.Services;
 
@@ -75,7 +76,7 @@ public class GoogleScraper(IDbContextFactory<AppDbContext> dbFactory) : IAsyncDi
                     if (!mainCol) return null;
     
                     const ul = mainCol.querySelector('ul');
-                    if (!ul) return null;
+                    if (!ul) return mainCol.textContent.trim();
     
                     const items = [...ul.querySelectorAll('li')]
                         .map(li => li.textContent?.trim())
@@ -84,6 +85,12 @@ public class GoogleScraper(IDbContextFactory<AppDbContext> dbFactory) : IAsyncDi
                     return items.length ? items.join('\n\n') : null;
                 }
             ");
+            if (overview != null) {
+                overview = Regex.Replace(overview, @"\.[a-zA-Z0-9_-]+\{[^}]*\}", "");
+                overview = Regex.Replace(overview, @"\.[a-zA-Z0-9]{6,}\b", ""); // naked class names (6+ char gibberish)
+                overview = overview.Trim();
+            }
+
             
             if (cached != null) {
                 cached.Overview = overview;

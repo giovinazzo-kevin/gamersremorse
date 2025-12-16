@@ -27,7 +27,7 @@ public static class Mappings
             TimePlayedInTotal = TimeSpan.FromMinutes(dto.Author.PlaytimeForever),
             GamesOwned = dto.Author.NumGamesOwned,
             Verdict = dto.VotedUp ? 1 : -1,
-            ReviewLength = dto.Review?.Length ?? 0,
+            ReviewLength = dto.Review?.Trim().Length ?? 0,
             ProfanityCount = profanity,
             InsultCount = insults,
             SlurCount = slurs,
