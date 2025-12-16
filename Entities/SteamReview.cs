@@ -14,8 +14,10 @@ public class SteamReview
 
     // language signals
     public byte ProfanityCount { get; set; }  // fuck, shit, etc
-    public byte InsultCount { get; set; }     // trash, garbage, scam
+    public byte InsultCount { get; set; }     // trash, garbage, idiot
     public byte SlurCount { get; set; }       // racial/homophobic/ableist
+    public byte BanterCount { get; set; }     // git gud, skill issue, cope
+    public byte ComplaintCount { get; set; }  // predatory, cashgrab, p2w
 
     public PlayTime TimePlayedAtReview { get; set; }
     public PlayTime TimePlayedInTotal { get; set; }

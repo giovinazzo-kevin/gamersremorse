@@ -54,6 +54,8 @@ public record SteamScraper(IOptions<SteamScraper.Configuration> Options, IHttpCl
         [EnumeratorCancellation] CancellationToken stoppingToken = default)
     {
         const string URL = "https://store.steampowered.com/appreviews/";
+        const int maxRetries = 3;
+        const int retryDelayMs = 2000;
 
         var query = $"{URL}/{appId}";
         query = QueryHelpers.AddQueryString(query, "day_range", (dayRange ?? Options.Value.MaxDayRange).ToString());
@@ -70,7 +72,20 @@ public record SteamScraper(IOptions<SteamScraper.Configuration> Options, IHttpCl
             cursor = nextCursor;
             var then = EventDate.UtcNow;
             var paginated = QueryHelpers.AddQueryString(query, "cursor", cursor);
-            var res = await HttpClient.GetFromJsonAsync<SteamReviewsResponseDTO>(paginated, stoppingToken);
+            
+            SteamReviewsResponseDTO? res = null;
+            for (int attempt = 0; attempt < maxRetries; attempt++) {
+                try {
+                    res = await HttpClient.GetFromJsonAsync<SteamReviewsResponseDTO>(paginated, stoppingToken);
+                    break; // success
+                }
+                catch (HttpRequestException ex) when (attempt < maxRetries - 1) {
+                    var delay = retryDelayMs * (1 << attempt); // 2s, 4s, 8s
+                    Console.WriteLine($"Steam API error (attempt {attempt + 1}/{maxRetries}): {ex.StatusCode} - retrying in {delay}ms");
+                    await Task.Delay(delay, stoppingToken);
+                }
+            }
+            
             if (res is not { Success: 1 })
                 yield break;
             nextCursor = res.Cursor;

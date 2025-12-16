@@ -46,11 +46,28 @@ public record SteamReviewAnalyzer(IOptions<SteamReviewAnalyzer.Configuration> Op
         var positiveReviews = reviews.Where(r => r.Verdict > 0).ToList();
         var negativeReviews = reviews.Where(r => r.Verdict < 0).ToList();
 
-        // aggregate language stats
+        // aggregate language stats by month
+        var profanityByMonth = new Dictionary<string, int>();
+        var insultsByMonth = new Dictionary<string, int>();
+        var slursByMonth = new Dictionary<string, int>();
+        var banterByMonth = new Dictionary<string, int>();
+        var complaintsByMonth = new Dictionary<string, int>();
+        
+        foreach (var r in reviews) {
+            var month = r.PostedOn.ToString("yyyy-MM");
+            profanityByMonth[month] = profanityByMonth.GetValueOrDefault(month) + r.ProfanityCount;
+            insultsByMonth[month] = insultsByMonth.GetValueOrDefault(month) + r.InsultCount;
+            slursByMonth[month] = slursByMonth.GetValueOrDefault(month) + r.SlurCount;
+            banterByMonth[month] = banterByMonth.GetValueOrDefault(month) + r.BanterCount;
+            complaintsByMonth[month] = complaintsByMonth.GetValueOrDefault(month) + r.ComplaintCount;
+        }
+        
         var languageStats = new LanguageStats(
-            new Dictionary<string, int> { ["total"] = reviews.Sum(r => r.ProfanityCount) },
-            new Dictionary<string, int> { ["total"] = reviews.Sum(r => r.InsultCount) },
-            new Dictionary<string, int> { ["total"] = reviews.Sum(r => r.SlurCount) }
+            profanityByMonth,
+            insultsByMonth,
+            slursByMonth,
+            banterByMonth,
+            complaintsByMonth
         );
 
         return new AnalysisSnapshot(

@@ -16,7 +16,7 @@ public static class Mappings
         .SingleOrDefault();
     public static SteamReview MapToDomain(this SteamReviewDTO dto, AppId appId)
     {
-        var (profanity, insults, slurs) = TextAnalyzer.AnalyzeCapped(dto.Review ?? "");
+        var (profanity, insults, slurs, banter, complaints) = TextAnalyzer.AnalyzeCapped(dto.Review ?? "");
         return new SteamReview {
             AppId = appId,
             AuthorId = dto.Author.SteamId,
@@ -30,7 +30,9 @@ public static class Mappings
             ReviewLength = dto.Review?.Length ?? 0,
             ProfanityCount = profanity,
             InsultCount = insults,
-            SlurCount = slurs
+            SlurCount = slurs,
+            BanterCount = banter,
+            ComplaintCount = complaints
         };
     }
 }

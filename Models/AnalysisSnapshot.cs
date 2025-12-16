@@ -14,7 +14,9 @@ public record struct AnalysisSnapshot(
 );
 
 public record struct LanguageStats(
-    Dictionary<string, int> Profanity,
-    Dictionary<string, int> Insults,
-    Dictionary<string, int> Slurs
+    Dictionary<string, int> ProfanityByMonth,
+    Dictionary<string, int> InsultsByMonth,
+    Dictionary<string, int> SlursByMonth,
+    Dictionary<string, int> BanterByMonth,
+    Dictionary<string, int> ComplaintsByMonth
 );

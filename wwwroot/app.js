@@ -217,22 +217,22 @@ const loadingMessages = {
 
 function getLoadingMessage() {
     const tags = currentMetrics?.verdict?.tags?.map(t => t.id) || [];
-    
+
     // Always start with neutral pool
     let pool = [...loadingMessages.neutral];
-    
+
     // Add tag-specific pools
     for (const tag of tags) {
         if (loadingMessages[tag]) {
             pool = pool.concat(loadingMessages[tag]);
         }
     }
-    
+
     // Some tags share pools
     if (tags.includes('180') || tags.includes('PHOENIX')) {
         pool = pool.concat(loadingMessages.REDEMPTION || []);
     }
-    
+
     return pool[Math.floor(Math.random() * pool.length)];
 }
 
@@ -295,7 +295,7 @@ async function analyze() {
     if (infoRes.ok) {
         currentGameInfo = await infoRes.json();
         document.getElementById('game-title').textContent = currentGameInfo.name;
-        
+
         // Check for sexual content (flag bit 3 = 8)
         const isSexual = (currentGameInfo.flags & 8) !== 0;
         if (window.setEyeShy) {
@@ -325,7 +325,7 @@ async function analyze() {
     ws.onclose = () => {
         isStreaming = false;
         console.log('Analysis complete');
-        
+
         if (currentSnapshot) {
             const sampled = currentSnapshot.totalPositive + currentSnapshot.totalNegative;
             const gameTotal = currentSnapshot.gameTotalPositive + currentSnapshot.gameTotalNegative;
@@ -336,7 +336,7 @@ async function analyze() {
             }
 
             updateMetrics(currentSnapshot);
-            
+
             // Compute tag timeline after analysis completes
             if (window.Metrics) {
                 const isFree = currentGameInfo?.isFree || false;
@@ -602,15 +602,25 @@ function updateLanguageChart(snapshot) {
     const profanity = stats.profanity?.total || 0;
     const insults = stats.insults?.total || 0;
     const slurs = stats.slurs?.total || 0;
+    const banter = stats.banter?.total || 0;
+    const complaints = stats.complaints?.total || 0;
 
     // calculate rate per review, show as percentage
     const profanityRate = (profanity / totalReviews * 100).toFixed(1);
     const insultsRate = (insults / totalReviews * 100).toFixed(1);
     const slursRate = (slurs / totalReviews * 100).toFixed(1);
+    const banterRate = (banter / totalReviews * 100).toFixed(1);
+    const complaintsRate = (complaints / totalReviews * 100).toFixed(1);
 
-    const labels = [`Profanity (${profanityRate}%)`, `Insults (${insultsRate}%)`, `Slurs (${slursRate}%)`];
-    const data = [profanity, insults, slurs];
-    const colors = ['#f59e0b', '#ef4444', '#7c3aed'];
+    const labels = [
+        `Slurs (${slursRate}%)`,
+        `Profanity (${profanityRate}%)`,
+        `Insults (${insultsRate}%)`,
+        `Complaints (${complaintsRate}%)`,
+        `Banter (${banterRate}%)`,
+    ];
+    const data = [slurs, profanity, insults, complaints, banter];
+    const colors = ['#7c3aed', '#f59e0b', '#ef4444', '#f97316', '#06b6d4'];
 
     if (!languageChart) {
         languageChart = new Chart(document.getElementById('language-chart'), {
@@ -776,15 +786,15 @@ function updateStats(snapshot) {
 
     // Game totals from metadata
     const gameTotal = snapshot.gameTotalPositive + snapshot.gameTotalNegative;
-    const gameRatio = gameTotal > 0 
-        ? Math.round((snapshot.gameTotalPositive / gameTotal) * 100) 
+    const gameRatio = gameTotal > 0
+        ? Math.round((snapshot.gameTotalPositive / gameTotal) * 100)
         : 0;
-    
+
     // Sampling progress
     const sampled = snapshot.totalPositive + snapshot.totalNegative;
     const target = snapshot.targetSampleCount;
     const coveragePct = gameTotal > 0 ? Math.round((sampled / gameTotal) * 100) : 0;
-    const samplingInfo = isStreaming 
+    const samplingInfo = isStreaming
         ? `<strong>Sampling:</strong> ${sampled.toLocaleString()} / ${target.toLocaleString()} (${coveragePct}% of total) |`
         : `<strong>Sampled:</strong> ${sampled.toLocaleString()} (${coveragePct}%) |`;
 
@@ -862,7 +872,7 @@ function updateTimelineData(snapshot, reset = false) {
 // Map tag IDs to their CSS variable colors
 const tagColorMap = {
     'HEALTHY': '#4ade80',
-    'HONEST': '#22c55e', 
+    'HONEST': '#22c55e',
     'EXTRACTIVE': '#f97316',
     'PREDATORY': '#ef4444',
     'STOCKHOLM': '#a855f7',
@@ -945,20 +955,20 @@ function drawTimeline() {
     // Draw tag strip below chart
     if (tagTimelineData.length > 0) {
         const stripY = chartH + 2;
-        
+
         for (const entry of tagTimelineData) {
             const monthIdx = timelineData.months.indexOf(entry.month);
             if (monthIdx < 0) continue;
-            
+
             const x = (monthIdx / timelineData.months.length) * w;
-            
+
             // Draw primary tag color (first non-data-quality tag)
-            const significantTags = entry.tags.filter(t => 
+            const significantTags = entry.tags.filter(t =>
                 !['LOW_DATA', 'CORRUPTED', 'HORNY'].includes(t)
             );
             const primaryTag = significantTags[0] || entry.tags[0];
             const color = tagColorMap[primaryTag] || '#666';
-            
+
             timelineCtx.fillStyle = color;
             timelineCtx.fillRect(x, stripY, barW, tagStripH - 2);
         }
@@ -1086,7 +1096,7 @@ function filterBucketByTime(bucket) {
     const range = getSelectedMonths();
     const hideSpikes = document.getElementById('hideSpikes')?.checked;
     const excludeMonths = hideSpikes && currentMetrics?.excludedMonths ? new Set(currentMetrics.excludedMonths) : new Set();
-    
+
     if (!range && excludeMonths.size === 0) return {
         pos: bucket.positiveCount,
         neg: bucket.negativeCount,
@@ -1140,7 +1150,7 @@ function updateConvergence(current, last, snapshot) {
 
 function updateMetrics(snapshot) {
     if (!window.Metrics) return;
-    
+
     const filter = getSelectedMonths();
     const isFree = currentGameInfo?.isFree || false;
     const isSexual = currentGameInfo?.flags ? (currentGameInfo.flags & 8) !== 0 : false;
@@ -1151,7 +1161,7 @@ function updateMetrics(snapshot) {
     lastMetrics = currentMetrics;
 
     currentMetrics = Metrics.compute(snapshot, { timelineFilter: filter, isFree, isSexual, convergenceScore });
-    
+
     const metricsEl = document.getElementById('metrics-detail');
     if (metricsEl && currentMetrics) {
         const v = currentMetrics.verdict;
@@ -1208,18 +1218,18 @@ function updateOpinionPanel(metrics) {
         `;
         return;
     }
-    
+
     const tags = metrics.verdict.tags.map(t => t.id);
     const posMedianHours = Math.round(metrics.posMedianReview / 60);
     const negMedianHours = Math.round(metrics.negMedianReview / 60);
     const positivePct = Math.round(metrics.positiveRatio * 100);
     const negativePct = Math.round(metrics.negativeRatio * 100);
-    
+
     // Determine overall verdict class and message
     let verdictClass = 'caution';
     let verdictText = 'Proceed with awareness';
     let verdictExplain = '';
-    
+
     if (tags.includes('PREDATORY') || tags.includes('REFUND_TRAP')) {
         verdictClass = 'warning';
         verdictText = 'High risk of regret';
@@ -1249,7 +1259,7 @@ function updateOpinionPanel(metrics) {
         verdictText = 'Getting worse';
         verdictExplain = `Sentiment has declined over time. What you read in old reviews may not match current experience.`;
     }
-    
+
     // Build the time commitment section
     let timeCommitment = '';
     if (negMedianHours < 10) {
@@ -1261,7 +1271,7 @@ function updateOpinionPanel(metrics) {
     } else {
         timeCommitment = `<strong>Lifestyle game:</strong> ${negMedianHours} hours before people decided they didn't like it. This isn't a game, it's a relationship.`;
     }
-    
+
     // Stockholm warning
     let stockholmWarning = '';
     if (metrics.stockholmIndex > 1.5 && negMedianHours > 100) {
@@ -1273,7 +1283,7 @@ function updateOpinionPanel(metrics) {
             </div>
         `;
     }
-    
+
     el.innerHTML = `
         <div class="opinion-verdict ${verdictClass}">${verdictText}</div>
         <p>${verdictExplain}</p>
@@ -1283,9 +1293,9 @@ function updateOpinionPanel(metrics) {
             <strong>TL;DR:</strong> 
             ${positivePct}% positive at ${posMedianHours}h, 
             ${negativePct}% negative at ${negMedianHours}h.
-            ${metrics.medianRatio > 1.3 ? 'Red flag: negatives take longer to form.' : 
-              metrics.medianRatio < 0.7 ? 'Good sign: negatives bounce early.' : 
-              'Neutral: similar time to verdict either way.'}
+            ${metrics.medianRatio > 1.3 ? 'Red flag: negatives take longer to form.' :
+            metrics.medianRatio < 0.7 ? 'Good sign: negatives bounce early.' :
+                'Neutral: similar time to verdict either way.'}
         </div>
     `;
 }
@@ -1297,14 +1307,14 @@ function updateTagTimeline(timeline) {
 
 function updateEyeFromMetrics(metrics) {
     if (!window.setEyeExpression) return;
-    
+
     const tags = metrics.verdict.tags.map(t => t.id);
-    
+
     // Pupil dilation for addictive games
     if (window.setEyeDilation) {
         window.setEyeDilation(tags.includes('ADDICTIVE') ? 1 : 0);
     }
-    
+
     // Priority-based expression
     if (tags.includes('PREDATORY') || tags.includes('REFUND_TRAP')) {
         window.setEyeExpression('angry');
@@ -1323,7 +1333,7 @@ function filterVelocityBucketByTime(bucket) {
     const range = getSelectedMonths();
     const hideSpikes = document.getElementById('hideSpikes')?.checked;
     const excludeMonths = hideSpikes && currentMetrics?.excludedMonths ? new Set(currentMetrics.excludedMonths) : new Set();
-    
+
     if (!range && excludeMonths.size === 0) return {
         pos: bucket.positiveCount,
         neg: bucket.negativeCount,
