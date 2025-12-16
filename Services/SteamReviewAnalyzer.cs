@@ -46,6 +46,13 @@ public record SteamReviewAnalyzer(IOptions<SteamReviewAnalyzer.Configuration> Op
         var positiveReviews = reviews.Where(r => r.Verdict > 0).ToList();
         var negativeReviews = reviews.Where(r => r.Verdict < 0).ToList();
 
+        // aggregate language stats
+        var languageStats = new LanguageStats(
+            new Dictionary<string, int> { ["total"] = reviews.Sum(r => r.ProfanityCount) },
+            new Dictionary<string, int> { ["total"] = reviews.Sum(r => r.InsultCount) },
+            new Dictionary<string, int> { ["total"] = reviews.Sum(r => r.SlurCount) }
+        );
+
         return new AnalysisSnapshot(
             bucketsByReview,
             bucketsByTotal,
@@ -55,7 +62,8 @@ public record SteamReviewAnalyzer(IOptions<SteamReviewAnalyzer.Configuration> Op
             negativeReviews.Count,
             meta.TotalPositive,
             meta.TotalNegative,
-            meta.TargetSampleCount
+            meta.TargetSampleCount,
+            languageStats
         );
     }
 

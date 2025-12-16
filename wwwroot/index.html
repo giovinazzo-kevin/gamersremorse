@@ -350,6 +350,21 @@
             padding-bottom: 0;
         }
 
+        .chart-container.language {
+            height: 250px;
+            padding-bottom: 0;
+        }
+
+        .chart-row {
+            display: flex;
+            gap: 20px;
+        }
+
+        .chart-half {
+            flex: 1;
+            min-width: 0;
+        }
+
         .chart-title {
             font-size: 11px;
             color: #555;
@@ -577,9 +592,19 @@
                         <div id="timeline-range"></div>
                         <canvas id="timeline"></canvas>
                     </div>
-                    <h3 class="chart-title">How long do people keep playing after reviewing?</h3>
-                    <div class="chart-container velocity">
-                        <canvas id="velocity-chart"></canvas>
+                    <div class="chart-row">
+                        <div class="chart-half">
+                            <h3 class="chart-title">How long do people keep playing after reviewing?</h3>
+                            <div class="chart-container velocity">
+                                <canvas id="velocity-chart"></canvas>
+                            </div>
+                        </div>
+                        <div class="chart-half">
+                            <h3 class="chart-title">Language in reviews</h3>
+                            <div class="chart-container language">
+                                <canvas id="language-chart"></canvas>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>

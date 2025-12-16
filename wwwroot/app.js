@@ -1,5 +1,6 @@
 ﻿let chart = null;
 let velocityChart = null;
+let languageChart = null;
 let currentSnapshot = null;
 let currentGameInfo = null;
 let timelineCanvas = null;
@@ -242,6 +243,7 @@ document.getElementById('hideSpikes')?.addEventListener('change', () => {
     if (currentSnapshot) {
         updateChart(currentSnapshot);
         updateVelocityChart(currentSnapshot);
+        updateLanguageChart(currentSnapshot);
         updateStats(currentSnapshot);
     }
 });
@@ -279,6 +281,10 @@ async function analyze() {
         velocityChart.destroy();
         velocityChart = null;
     }
+    if (languageChart) {
+        languageChart.destroy();
+        languageChart = null;
+    }
     document.getElementById('stats').innerHTML = '';
     document.getElementById('metrics-detail').innerHTML = '';
     document.getElementById('opinion-content').innerHTML = '<div class="opinion-loading">⏳ Analyzing...</div>';
@@ -307,6 +313,7 @@ async function analyze() {
         updateChart(snapshot);
         updateTimelineData(snapshot, isFirstSnapshot);
         updateVelocityChart(snapshot);
+        updateLanguageChart(snapshot);
         updateStats(snapshot);
         updateMetrics(snapshot);
         isFirstSnapshot = false;
@@ -476,10 +483,10 @@ function updateChart(snapshot) {
             data: {
                 labels,
                 datasets: [
-                    { label: 'Positive', data: positive, backgroundColor: positiveColors, stack: 'stack' },
-                    { label: 'Edited (Positive)', data: uncertainPos, backgroundColor: uncertainPosColors, stack: 'stack' },
-                    { label: 'Negative', data: negative, backgroundColor: negativeColors, stack: 'stack' },
-                    { label: 'Edited (Negative)', data: uncertainNeg, backgroundColor: uncertainNegColors, stack: 'stack' }
+                    { label: '👍', data: positive, backgroundColor: positiveColors, stack: 'stack' },
+                    { label: '👍*', data: uncertainPos, backgroundColor: uncertainPosColors, stack: 'stack' },
+                    { label: '👎', data: negative, backgroundColor: negativeColors, stack: 'stack' },
+                    { label: '👎*', data: uncertainNeg, backgroundColor: uncertainNegColors, stack: 'stack' }
                 ]
             },
             options: {
@@ -557,10 +564,10 @@ function updateVelocityChart(snapshot) {
             data: {
                 labels,
                 datasets: [
-                    { label: 'Positive', data: positive, backgroundColor: hexToRgba(colors.positive, 0.7), stack: 'stack' },
-                    { label: 'Edited (Positive)', data: uncertainPos, backgroundColor: hexToRgba(colors.uncertain, 0.7), stack: 'stack' },
-                    { label: 'Negative', data: negative, backgroundColor: hexToRgba(colors.negative, 0.7), stack: 'stack' },
-                    { label: 'Edited (Negative)', data: uncertainNeg, backgroundColor: hexToRgba(colors.uncertain, 0.7), stack: 'stack' }
+                    { label: '👍', data: positive, backgroundColor: hexToRgba(colors.positive, 0.7), stack: 'stack' },
+                    { label: '👍*', data: uncertainPos, backgroundColor: hexToRgba(colors.uncertain, 0.7), stack: 'stack' },
+                    { label: '👎', data: negative, backgroundColor: hexToRgba(colors.negative, 0.7), stack: 'stack' },
+                    { label: '👎*', data: uncertainNeg, backgroundColor: hexToRgba(colors.uncertain, 0.7), stack: 'stack' }
                 ]
             },
             options: {
@@ -582,6 +589,54 @@ function updateVelocityChart(snapshot) {
         velocityChart.data.datasets[3].data = uncertainNeg;
         velocityChart.data.datasets[3].backgroundColor = hexToRgba(colors.uncertain, 0.7);
         velocityChart.update();
+    }
+}
+
+function updateLanguageChart(snapshot) {
+    const stats = snapshot.languageStats;
+    if (!stats) return;
+
+    const totalReviews = snapshot.totalPositive + snapshot.totalNegative;
+    if (totalReviews === 0) return;
+
+    const profanity = stats.profanity?.total || 0;
+    const insults = stats.insults?.total || 0;
+    const slurs = stats.slurs?.total || 0;
+
+    // calculate rate per review, show as percentage
+    const profanityRate = (profanity / totalReviews * 100).toFixed(1);
+    const insultsRate = (insults / totalReviews * 100).toFixed(1);
+    const slursRate = (slurs / totalReviews * 100).toFixed(1);
+
+    const labels = [`Profanity (${profanityRate}%)`, `Insults (${insultsRate}%)`, `Slurs (${slursRate}%)`];
+    const data = [profanity, insults, slurs];
+    const colors = ['#f59e0b', '#ef4444', '#7c3aed'];
+
+    if (!languageChart) {
+        languageChart = new Chart(document.getElementById('language-chart'), {
+            type: 'bar',
+            data: {
+                labels,
+                datasets: [{
+                    data,
+                    backgroundColor: colors
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false }
+                },
+                scales: {
+                    y: { beginAtZero: true }
+                }
+            }
+        });
+    } else {
+        languageChart.data.labels = labels;
+        languageChart.data.datasets[0].data = data;
+        languageChart.update();
     }
 }
 

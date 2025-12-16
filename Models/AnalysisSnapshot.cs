@@ -9,5 +9,12 @@ public record struct AnalysisSnapshot(
     int TotalNegative,
     int GameTotalPositive,
     int GameTotalNegative,
-    int TargetSampleCount
+    int TargetSampleCount,
+    LanguageStats LanguageStats
+);
+
+public record struct LanguageStats(
+    Dictionary<string, int> Profanity,
+    Dictionary<string, int> Insults,
+    Dictionary<string, int> Slurs
 );

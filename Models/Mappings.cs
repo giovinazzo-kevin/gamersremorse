@@ -1,4 +1,5 @@
 ﻿using gamersremorse.Entities;
+using gamersremorse.Services;
 
 namespace gamersremorse.Models;
 
@@ -13,16 +14,23 @@ public static class Mappings
             Flags = kv.Value.Data.Flags
         })
         .SingleOrDefault();
-    public static SteamReview MapToDomain(this SteamReviewDTO dto, AppId appId) => new SteamReview {
-        AppId = appId,
-        AuthorId = dto.Author.SteamId,
-        PostedOn = DateTimeOffset.FromUnixTimeSeconds(dto.CreatedAt),
-        EditedOn = DateTimeOffset.FromUnixTimeSeconds(dto.UpdatedAt),
-        LastPlayed = DateTimeOffset.FromUnixTimeSeconds(dto.Author.LastPlayed),
-        TimePlayedAtReview = TimeSpan.FromMinutes(dto.Author.PlaytimeAtReview),
-        TimePlayedInTotal = TimeSpan.FromMinutes(dto.Author.PlaytimeForever),
-        GamesOwned = dto.Author.NumGamesOwned,
-        Verdict = dto.VotedUp ? 1 : -1,
-        ReviewLength = dto.Review?.Length ?? 0
-    };
+    public static SteamReview MapToDomain(this SteamReviewDTO dto, AppId appId)
+    {
+        var (profanity, insults, slurs) = TextAnalyzer.AnalyzeCapped(dto.Review ?? "");
+        return new SteamReview {
+            AppId = appId,
+            AuthorId = dto.Author.SteamId,
+            PostedOn = DateTimeOffset.FromUnixTimeSeconds(dto.CreatedAt),
+            EditedOn = DateTimeOffset.FromUnixTimeSeconds(dto.UpdatedAt),
+            LastPlayed = DateTimeOffset.FromUnixTimeSeconds(dto.Author.LastPlayed),
+            TimePlayedAtReview = TimeSpan.FromMinutes(dto.Author.PlaytimeAtReview),
+            TimePlayedInTotal = TimeSpan.FromMinutes(dto.Author.PlaytimeForever),
+            GamesOwned = dto.Author.NumGamesOwned,
+            Verdict = dto.VotedUp ? 1 : -1,
+            ReviewLength = dto.Review?.Length ?? 0,
+            ProfanityCount = profanity,
+            InsultCount = insults,
+            SlurCount = slurs
+        };
+    }
 }

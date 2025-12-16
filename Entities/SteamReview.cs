@@ -12,6 +12,10 @@ public class SteamReview
     public Amount GamesOwned { get; set; }
     public int ReviewLength { get; set; }
 
+    // language signals
+    public byte ProfanityCount { get; set; }  // fuck, shit, etc
+    public byte InsultCount { get; set; }     // trash, garbage, scam
+    public byte SlurCount { get; set; }       // racial/homophobic/ableist
 
     public PlayTime TimePlayedAtReview { get; set; }
     public PlayTime TimePlayedInTotal { get; set; }
