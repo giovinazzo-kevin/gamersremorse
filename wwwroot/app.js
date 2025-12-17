@@ -29,25 +29,27 @@ function quitToDesktop() {
             inset: 0;
             background: #000;
             display: flex;
-            align-items: center;
+            align-items: top;
             justify-content: center;
             width: 100%;
             height: 100%;
         ">
-            <svg id="eye" style="width: 100%; height: 100%"></svg>
+            <svg id="eye" style="width: 75%; height: 50%"></svg>
         </div>
     `;
         window.svg = document.getElementById('eye');
-        setEyePeeved(true, true);
+        playRandomJingle();
+        setBarDensity(201, 0.01);
+        setEyePeeved(true, false, false, (Math.random() - 0.5), (Math.random() - 0.5), 4.5);
         setTimeout(() => {
             setExpression(expr);
             state.nextBlink
-        }, 500);
+        }, 100 + Math.random() * 500);
         setTimeout(() => {
             alert(msg);
             location.reload();
-        }, 1200);
-    }, 250);
+        }, 1000 + Math.random() * 400);
+    }, Math.random() * 500);
     return false;
 }
 
@@ -173,7 +175,6 @@ async function analyze() {
     isFirstSnapshot = true;
     ws.onclose = () => {
         isStreaming = false;
-        console.log('Analysis complete');
 
         if (currentSnapshot) {
             const sampled = currentSnapshot.totalPositive + currentSnapshot.totalNegative;
@@ -191,7 +192,6 @@ async function analyze() {
                 const isFree = currentGameInfo?.isFree || false;
                 const isSexual = currentGameInfo?.flags ? (currentGameInfo.flags & 8) !== 0 : false;
                 const tagTimeline = Metrics.computeTimeline(currentSnapshot, 3, { isFree, isSexual });
-                console.log('Tag timeline:', tagTimeline);
                 updateTagTimeline(tagTimeline);
             }
             
@@ -1235,13 +1235,11 @@ function initHeatmap() {
 
 function updateEditHeatmap(snapshot) {
     if (!heatmapCanvas) {
-        console.log('Heatmap: no canvas');
         initHeatmap();
         if (!heatmapCanvas) return;
     }
     
     if (!snapshot.editHeatmap) {
-        console.log('Heatmap: no editHeatmap in snapshot', Object.keys(snapshot));
         return;
     }
     
@@ -1249,21 +1247,17 @@ function updateEditHeatmap(snapshot) {
     let months = heatmap.months || [];
     let cells = heatmap.cells || {};
     
-    console.log('Heatmap:', months.length, 'months,', Object.keys(cells).length, 'cells');
-    
     // If too many months, aggregate to quarters or years
     if (months.length > 96) {
         // >8 years: aggregate to years
         const aggregated = aggregateToYears(months, cells);
         months = aggregated.periods;
         cells = aggregated.cells;
-        console.log('Heatmap: aggregated to', months.length, 'years');
     } else if (months.length > 48) {
         // >4 years: aggregate to quarters
         const aggregated = aggregateToQuarters(months, cells);
         months = aggregated.periods;
         cells = aggregated.cells;
-        console.log('Heatmap: aggregated to', months.length, 'quarters');
     }
     
     if (months.length < 2) {
@@ -1530,7 +1524,6 @@ if (document.readyState === 'loading') {
 
 async function fetchControversyContext(gameName, metrics, snapshot) {
     const events = detectNotableEvents(metrics, snapshot);
-    console.log('Detected events:', events);
     
     // Show status in the controversy section
     const container = document.getElementById('metrics-detail');
@@ -1563,7 +1556,6 @@ async function fetchControversyContext(gameName, metrics, snapshot) {
     // Remove loading indicator
     document.getElementById('controversy-loading')?.remove();
     
-    console.log('Contexts found:', contexts.length);
     if (contexts.length > 0) {
         displayControversyContext(contexts);
     }
