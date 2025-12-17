@@ -17,350 +17,39 @@ let convergenceScore = 0;
 let loadingMessageCount = 0;
 let tagTimelineData = [];
 
-const loadingMessages = {
-    // Always available - generic loading flavor
-    neutral: [
-        "Reticulating splines...",
-        "Unburying the lede...",
-        "Calculating regret vectors...",
-        "Correlating causations...",
-        "Causing correlations...",
-        "Interviewing haters...",
-        "Cross-referencing copium levels...",
-        "Evaluating life choices...",
-        "Tabulating hours lost...",
-        "Disregarding anime pfp opinions...",
-        "Rerolling...",
-        "Scrolling...",
-        "Saving...",
-        "Loading...",
-        "Fast travelling to a conclusion...",
-        "Taking the scenic route...",
-        "Shifting the goalposts...",
-        "Checking if you can pet the dog...",
-        "Asking mom for more EYE-bucks...",
-        "Triangulating the shadows on the wall...",
-        "Confabulating plausible narratives...",
-        "Maintaining the agenda...",
-        "Watching the movie adaptation...",
-        "Asking a crowd to count all these reviews...",
-        "Taking off the nostalgia goggles...",
-        "Looking through rose-tinted glasses...",
-        "Normalizing the deviance...",
-        "Factoring in the FOMO...",
-        "Adjusting for skill issue...",
-        "Polling the backlog...",
-        "Measuring the cope gradient...",
-        "Auditing the fun budget...",
-        "Rolling for critical disappointment...",
-        "Checking the wiki...",
-        "Counting early access years...",
-        "Preordering the special edition...",
-        "Buying the DLC...",
-        "Installing EAC...",
-        "Cracking Denuvo...",
-        "Asking FitGirl...",
-        "Dividing by zero...",
-        "Remembering when games had manuals...",
-        "Remembering when games were meant to be fun...",
-        "Factoring in the day one patch...",
-        "Subtracting the tutorial hours...",
-        "Accounting for review bombs...",
-        "Forgiving the launch window...",
-        "Blaming the publisher...",
-        "Assuming good faith...",
-        "Trusting the process...",
-        "Doubting the process...",
-        "Abandoning the process...",
-        "Speedrunning to conclusions...",
-        "Netdecking opinions...",
-        "Touching grass...",
-        "Chasing the meta...",
-        "Nerfing expectations...",
-        "Buffing skepticism...",
-        "Mapping echo chamber acoustics...",
-        "Tracking Pink Wojack index...",
-        "Regulating the markets...",
-        "Squeezing the invisible hand...",
-        "Rationalizing with agents...",
-        "Consulting the backseaters...",
-        "Malding...",
-        "Seething...",
-        "Coping...",
-        "Respeccing...",
-        "Looting containers...",
-        "Managing inventory...",
-        "Identifying scrolls...",
-        "Quaffing unidentified potions...",
-        "Monitoring the botnet...",
-        "ENHANCING...",
-        "Polishing JPEG artifacts...",
-        "Refunding within two hours...",
-        "Wishlisting for later...",
-        "Waiting for a sale...",
-        "Waiting for the complete edition...",
-        "Waiting for mods to fix it...",
-        "Reading between the patch notes...",
-        "Translating from marketing speak...",
-        "Decoding the investor call...",
-        "Pouring one out for the devs...",
-        "Blaming the executives...",
-        "~*~✿ Drawing a pretty chart ✿~*~",
-        "Studying game development...",
-        "Studying game theory...",
-        "Studying data science...",
-        "Undersampling shill takes...",
-        "Oversampling based takes...",
-        "Tuning desire sensor...",
-        "Calculating world-line divergence...",
-        "Accepting reality...",
-        "Building the Numidium...",
-        "NOTHING EVER HAPPENS",
-        "ASK AGAIN LATER",
-        "WAIT",
-        "WAKE UP",
-        "IT'S HAPPENING",
-        "QUESTION AUTHORITY",
-    ],
+function quitToDesktop() {
+    const msg = exitMessages[Math.floor(Math.random() * exitMessages.length)];
+    const keys = Object.keys(expressions);
+    const expr = keys[Math.floor(Math.random() * keys.length)];
 
-    REVISIONIST: [
-        "LITERALLY 1984",
-        "THIS IS RETCONNING",
-    ],
-
-    // EXTRACTIVE
-    EXTRACTIVE: [
-        "Calibrating extraction detectors...",
-        "Sampling buyer's remorse...",
-        "Indexing broken promises...",
-        "Reverse engineering the hype...",
-        "Amortizing disappointment...",
-        "Measuring distance to cashgrab...",
-        "Comparing to what was promised...",
-        "YOU ARE THROWING YOUR TIME AWAY",
-        "YOU HAVE NOBODY TO BLAME BUT THEM",
-        "YOU WILL NEVER BE GOOD ENOUGH",
-        "NOW INSTALL THIS DRM",
-        "BUY THE BATTLE PASS",
-        "BUY THE LIMITED TIME OFFER",
-        "BUY THE DLC",
-        "BUY THE HATS",
-        "BUY THE NEW CHARACTER",
-        "BUY THE SKINS",
-        "BUY THE SPECIAL BUNDLE",
-        "BUY STORE CREDITS",
-        "BUY A LIFE",
-        "BUY A KEY",
-        "OPEN MORE LOOTBOXES",
-        "PULL THE LEVER YOU STUPID RAT",
-        "TRY AGAIN?",
-        "YOU CAN SELL IT ON THE MARKET",
-        "THIS IS SOULLESS"
-    ],
-
-    // PREDATORY
-    PREDATORY: [
-        "Liquidating good faith...",
-        "Shorting the long-term support...",
-        "Auditing the battle pass...",
-        "Detecting the pivot to mobile...",
-        "Anticipating the live service sunset...",
-        "Astroturfing the discourse...",
-        "Unleashing the AI shills...",
-        "Addressing death threats...",
-        "Beating the allegations...",
-        "NOW INSTALL THIS KERNEL LEVEL ROOTKIT",
-        "THE TPM IS FOR YOUR OWN GOOD",
-        "BUY ALL THE BATTLE PASSES",
-        "BUY ALL THE LIMITED TIME OFFERS",
-        "BUY ALL THE DLC",
-        "BUY ALL THE HATS",
-        "BUY ALL THE NEW CHARACTERS",
-        "BUY ALL THE SKINS",
-        "BUY ALL THE SPECIAL BUNDLES",
-        "BUY MORE STORE CREDITS",
-        "BUY MORE LIVES",
-        "BUY MORE KEYS",
-        "BUY THE PRESS",
-        "BUY THE MEDIA",
-        "I HAVE SEEN ENOUGH!",
-        "THEY TARGETED GAMERS. GAMERS.",
-        "DO THESE PEOPLE HAVE NO IDEA",
-        "I AM MAD ON YOUR BEHALF",
-        "THE PRIDE. THE ACCOMPLISHMENT. THE FUCKING GALL OF THESE PEOPLE.",
-        "THEY CAN'T KEEP GETTING AWAY WITH THIS",
-        "I SHALL READ EACH AND EVERY REVIEW WITH EXTREME PREJUDICE",
-        "THEY WILL NEVER BE FORGIVEN FOR WHAT THEY DID",
-        "EVERYONE CAN SEE WHAT'S GOING ON HERE",
-        "THEIR DENIABILITY STOPPED BEING PLAUSIBLE A LONG TIME AGO",
-        "THIS IS WHAT THEY TOOK FROM US",
-    ],
-
-    // STOCKHOLM
-    STOCKHOLM: [
-        "You're not addicted, you just can't stop using it",
-        "Measuring stockholm syndrome...",
-        "Locating sunk cost fixpoint...",
-        "Sampling the salt mines...",
-        "Waiting in queue...",
-        "Waiting in queue...",
-        "Waiting in queue...",
-        "Waiting in queue...",
-        "Waiting in queue...",
-        "Waiting in queue...",
-        "YOU'RE LOCKED IN HERE WITH ME!",
-        "HAVE YOU SEEN THE EXIT?",
-        "DOES IT GET BETTER BEFORE IT GETS WORSE?",
-        "I STILL LOVE YOU",
-        "I AM BETTER THAN THEM",
-    ],
-
-    // CULT
-    CULT: [
-        "Drawing a pentagram...",
-        "Lighting candles...",
-        "Sacrificing a goat...",
-        "Stoking the bonfire...",
-        "Drinking the kool-aid...",
-        "Learning 2 play...",
-        "Gitting gud...",
-        "Scrubbing the floor...",
-        "Pwning n00bz...",
-        "Raising the skill floor...",
-        "Raising the skill ceiling...",
-        "Waiting in queue...",
-        "Waiting in queue...",
-        "Waiting in queue...",
-        "Waiting in queue...",
-        "Waiting in queue...",
-        "Waiting in queue...",
-        "I CAN STOP WHENEVER I WANT",
-        "I AM IN THE TOP 0.001% OF ALL PLAYERS",
-        "WATCH ME ON TWITCH",
-        "SKILL ISSUE",
-        "GIT GUD",
-    ],
-
-    // REFUND_TRAP
-    REFUND_TRAP: [
-        "Becoming back my money...",
-        "Querying the refund window...",
-        "WHERE'S THE MONEY LEBOWSKI??",
-        "THIS THRESHOLD IS COMPLETELY ARBITRARY",
-    ],
-
-    // DEAD
-    DEAD: [
-        "Polling dead servers...",
-        "Exhuming abandoned roadmaps...",
-        "Beating a dead horse...",
-        "DEAD GAME",
-        "HE'S DEAD, JIM",
-        "LOOK HOW THEY MASSACRED MY BOY",
-        "YOUR OLD GAMES LIE IN RUIN",
-        "A DEAD GAME WILL BRING YOU NO FUN TODAY",
-        "SHAZBOT",
-        "I MISS YOU SO MUCH",
-        "PLEASE COME BACK TO ME",
-        "THIS GAME WAS MY ENTIRE CHILDHOOD",
-        "IT WAS INEVITABLE",
-        "YOU COULD HAVE STOPPED THIS",
-    ],
-
-    // ADDICTIVE
-    ADDICTIVE: [
-        "Computing addiction coefficients...",
-        "Remembering when games were not full-time jobs...",
-        "Getting the next fix...",
-        "Texting the pusher...",
-        "SMOKING KILLS",
-        "I NEED MORE OF THIS",
-        "MORE! MORE! MORE!",
-        "WHY DO I ALWAYS FEEL LIKE SHIT",
-        "HEY BRO YOU WANNA PLAY",
-        "SORRY WE'RE FULL",
-        "PLEASE ACCEPT THE PARTY INVITE",
-        "WHERE WE DROPPING BOYS",
-        "JUST ONE MORE TURN",
-        "I'M QUITTING AFTER THIS ONE",
-        "WE'RE DONE WHEN I SAY WE'RE DONE",
-        "WHAT YEAR IS IT",
-    ],
-
-    // DIVISIVE
-    DIVISIVE: [
-        "Accepting reality...",
-        "Confirming the bias...",
-        "BUT THEY SAID-",
-        "THIS IS GASLIGHTING",
-        "WHY WON'T YOU STOP FIGHTING",
-        "MAKE UP YOUR MIND ALREADY",
-        "NOW KISS"
-    ],
-
-    // REDEMPTION
-    REDEMPTION: [
-        "Verifying that it was actually fixed...",
-        "Parsing the patch notes...",
-        "Crediting the modding community...",
-        "WAIT, THEY'RE ACTUALLY LISTENING??",
-        "(X) DOUBT",
-        "ERROR ERROR ERROR",
-        "WHAT? IMPOSSIBLE!",
-        "THIS CAN'T BE",
-        "THIS GOES AGAINST THE NARRATIVE",
-        "THE PROBABILITY OF THIS BEING TRUE IS ASTRONOMICALLY LOW",
-        "DO NOT BELIEVE THEIR LIES",
-        "I SEE THE LIGHT AT THE END OF THE TUNNEL",
-        "NATURE IS HEALING",
-        "I FEEL SO MUCH BETTER ALREADY",
-        "THANK YOU THANK YOU THANK YOU"
-    ],
-
-    // ENSHITTIFIED
-    ENSHITTIFIED: [
-        "Wondering if it ever gets good...",
-        "Mourning the single player campaign...",
-        "WHY WOULD YOU DO THIS TO ME",
-        "THIS USED TO BE THE BEST GAME EVER",
-        "IT'S NOT THE NOSTALGIA IT REALLY DID GET WORSE",
-        "YOU'RE NOT OLD AND BITTER YOU'RE JUST RIGHT",
-        "THEY WERE RIGHT ALL ALONG",
-        "AIR CONDITIONING BROUGHT DOWN THE ROMAN EMPIRE",
-        "ABYSMAL GLORPSHIT"
-    ],
-
-    // LOW_DATA
-    LOW_DATA: [
-        "Squinting at the sample size...",
-        "Extrapolating from vibes...",
-        "Drawing conclusions from thin air...",
-        "Pulling the relevant bits out of my ass...",
-        "Googling that for you...",
-        "THERE IS AS YET INSUFFICIENT DATA FOR A MEANINGFUL ANSWER",
-        "THE SOURCE IS THAT I MADE IT THE FUCK UP!",
-        "LOOK IT UP SWEATY",
-    ],
-
-    // HORNY
-    HORNY: [
-        "Getting stuck in the washing machine...",
-        "Researching for a friend...",
-        "Clearing browser history...",
-        "Adjusting the mosaic...",
-        "Reading it for the plot...",
-        "Proving theorem #34...",
-        "Failing NNN...",
-        "Comparing 2D to 3D...",
-        "Measuring chest curvature...",
-        "Measuring butt curvature...",
-        "AWOOGA",
-        "WIFE MATERIAL",
-        "I AM COOMING",
-        "THIS IS SO FUCKING HOT",
-        "HEY THAT'S MY WAIFU YOU'RE LUSTING OVER",
-    ],
-};
+    setTimeout(() => {
+        document.body.innerHTML = `
+        <div style="
+            position: fixed;
+            inset: 0;
+            background: #000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            height: 100%;
+        ">
+            <svg id="eye" style="width: 100%; height: 100%"></svg>
+        </div>
+    `;
+        window.svg = document.getElementById('eye');
+        setEyePeeved(true, true);
+        setTimeout(() => {
+            setExpression(expr);
+            state.nextBlink
+        }, 500);
+        setTimeout(() => {
+            alert(msg);
+            location.reload();
+        }, 1200);
+    }, 250);
+    return false;
+}
 
 function getLoadingMessage() {
     const tags = currentMetrics?.verdict?.tags?.map(t => t.id) || [];
@@ -1327,11 +1016,10 @@ function updateMetrics(snapshot) {
         const tagPills = v.tags.map(t =>
             `<span class="tag-pill" style="background:${t.color}; opacity:${opacity}">${t.id}</span>`
         ).join(' ');
-        const preliminaryIcon = loadingMessageCount++ % 2 == 0 ? '⌛' : '⏳';
         const preliminaryWarning = isStreaming && convergenceScore < 0.8
-            ? `<div class="loading">${preliminaryIcon} ${loadingMsg}</div>`
+            ? `<div class="loading"><span class="loading-icon">⏳</span> ${loadingMsg}</div>`
             : isStreaming
-                ? `<div class="loading">✅ ${loadingMsg}</div>`
+                ? `<div class="loading"><span class="loading-icon">💬</span> ${loadingMsg}</div>`
                 : '';
         metricsEl.innerHTML = `
             <div class="verdict-tags">
@@ -1478,7 +1166,7 @@ function updateEyeFromMetrics(metrics) {
     // Unhinged mode for really bad games
     const unhingedTags = ['PREDATORY', 'ENSHITTIFIED', 'PLAGUE', 'CURSED'];
     const isUnhinged = unhingedTags.some(t => tags.includes(t)) ||
-                       (tags.includes('FLOP') && tags.includes('REVISIONIST'));
+                       (tags.includes('FLOP') && tags.includes('RETCONNED'));
     if (window.setEyeUnhinged) {
         window.setEyeUnhinged(isUnhinged);
     }
@@ -1912,7 +1600,7 @@ function detectNotableEvents(metrics, snapshot) {
 
     events.push({
         type: launchWasNegative ? (tags.includes('FLOP') ? 'launch_flop' : 'launch_troubled') : 'launch',
-        month: 'launch',
+        month: sortedMonths[0],
         year: sortedMonths[0] || '',
         severity: 0,
         tag: launchWasNegative ? (tags.includes('FLOP') ? 'FLOP' : 'LAUNCH') : 'LAUNCH'
@@ -1971,7 +1659,7 @@ function detectNotableEvents(metrics, snapshot) {
     }
 
     // Mass edit events
-    if (tags.includes('REVISIONIST') || tags.includes('ENSHITTIFIED')) {
+    if (tags.includes('RETCONNED') || tags.includes('ENSHITTIFIED')) {
         const editHeatmap = snapshot.editHeatmap;
         if (editHeatmap?.months?.length > 0) {
             // Count edits by month (when edited, not when posted)
@@ -2033,7 +1721,7 @@ function detectNotableEvents(metrics, snapshot) {
                         year: periodStr,
                         month: periodStr,
                         severity: metrics.recentNegativeEditRatio,
-                        tag: tags.includes('REVISIONIST') ? 'REVISIONIST' : 'ENSHITTIFIED'
+                        tag: tags.includes('RETCONNED') ? 'RETCONNED' : 'ENSHITTIFIED'
                     });
                 }
             }
@@ -2071,18 +1759,13 @@ function displayControversyContext(contexts) {
         const tagClass = tag ? tag.toLowerCase().replace(/_/g, '-') : 'launch';
         const yearLabel = ctx.event.year;
 
-        const safeOverview = ctx.overview
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;');
         html += `
             <details class="controversy-item">
                 <summary>
                     <span class="tag-pill" style="background: var(--color-tag-${tagClass})">${tag || 'LAUNCH'}</span>
                     <span class="controversy-year">${yearLabel}</span>
                 </summary>
-                <div class="controversy-text">${safeOverview}</div>
+                <div class="controversy-text">${ctx.overview}</div>
             </details>
         `;
     }

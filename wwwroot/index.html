@@ -3,8 +3,8 @@
 <head>
     <title>Gamer's Remorse - Redefining The Metrics</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation" defer></script>
     <style>
         :root {
             --color-positive: #54bebe;
@@ -44,13 +44,17 @@
             --color-tag-low-data: #999;
             --color-tag-corrupted: #666;
             --color-tag-review-bombed: #ff6600;
-            --color-tag-revisionist: #8B4513;
+            --color-tag-retconned: #8B4513;
         }
 
         * {
             box-sizing: border-box;
             margin: 0;
             padding: 0;
+        }
+        
+        html, body{
+            height: 100vh;
         }
 
         body {
@@ -99,46 +103,90 @@
                     background: #f0f0f0;
                 }
 
-        /* === THREE COLUMN LAYOUT === */
+        /* === FOUR COLUMN LAYOUT === */
         .main {
-            max-width: 1500px;
-            margin: 15px auto;
+            margin: 15px 20px;
             display: grid;
-            grid-template-columns: 320px 1fr 320px;
+            grid-template-columns: 15fr 35fr 35fr 15fr;
             gap: 20px;
-            padding: 0 20px;
         }
 
-        .col-left {
+        .col-methodology {
             order: 1;
         }
 
-        .col-center {
+        .col-verdict {
             order: 2;
         }
 
-        .col-right {
+        .col-charts {
             order: 3;
         }
 
-        /* Mobile: stack with different order */
+        .col-opinion {
+            order: 4;
+        }
+
+        /* Medium screens: 3 columns */
+        @media (max-width: 1400px) {
+            .main {
+                grid-template-columns: 25% 50% 25%;
+            }
+
+            .col-methodology {
+                order: 1;
+                grid-column: 1;
+                grid-row: 1;
+            }
+
+            .col-verdict {
+                order: 2;
+                grid-column: 1;
+                grid-row: 2;
+            }
+
+            .col-charts {
+                order: 3;
+                grid-column: 2;
+                grid-row: 1 / 3;
+            }
+
+            .col-opinion {
+                order: 4;
+                grid-column: 3;
+                grid-row: 1 / 3;
+            }
+        }
+
+        /* Mobile: stack */
         @media (max-width: 1000px) {
             .main {
                 grid-template-columns: 1fr;
             }
 
-            .col-center {
+            .col-verdict {
                 order: 1;
+                grid-column: 1;
+                grid-row: auto;
             }
-            /* charts first */
-            .col-left {
+
+            .col-charts {
                 order: 2;
+                grid-column: 1;
+                grid-row: auto;
             }
-            /* methodology second */
-            .col-right {
+
+            .col-opinion {
                 order: 3;
+                grid-column: 1;
+                grid-row: auto;
             }
-            /* opinion last */
+
+            .col-methodology {
+                order: 4;
+                grid-column: 1;
+                grid-row: auto;
+            }
         }
 
         /* === BOXES === */
@@ -381,6 +429,7 @@
             pointer-events: none;
             z-index: 100;
         }
+
         .controversy-icon {
             display: inline-block;
             width: 1.2em;
@@ -393,11 +442,11 @@
             border-top: 1px solid #ddd;
         }
 
-        .controversy-section h4 {
-            margin: 0 0 10px 0;
-            font-size: 12px;
-            color: #333;
-        }
+            .controversy-section h4 {
+                margin: 0 0 10px 0;
+                font-size: 12px;
+                color: #333;
+            }
 
         .controversy-item {
             background: #f9f9f9;
@@ -524,21 +573,13 @@
             border-radius: 2px;
         }
 
-        .verbosity-sample.short {
-            background: linear-gradient(to bottom,
-                var(--color-positive) 0%,
-                var(--color-positive) 100%
-            );
-        }
+            .verbosity-sample.short {
+                background: linear-gradient(to bottom, var(--color-positive) 0%, var(--color-positive) 100% );
+            }
 
-        .verbosity-sample.long {
-            background: linear-gradient(to bottom,
-                var(--color-positive) 0%,
-                var(--color-positive) 30%,
-                color-mix(in srgb, var(--color-positive) 50%, black) 30%,
-                color-mix(in srgb, var(--color-positive) 50%, black) 100%
-            );
-        }
+            .verbosity-sample.long {
+                background: linear-gradient(to bottom, var(--color-positive) 0%, var(--color-positive) 30%, color-mix(in srgb, var(--color-positive) 50%, black) 30%, color-mix(in srgb, var(--color-positive) 50%, black) 100% );
+            }
 
         /* === OPINION SECTION === */
         .opinion-placeholder {
@@ -600,6 +641,24 @@
             border-left: 3px solid var(--color-accent);
         }
 
+        /* === LOADING === */
+        .loading {
+            color: #888;
+            font-style: italic;
+            margin-top: 10px;
+        }
+
+        .loading-icon {
+            font-style: normal;
+        }
+
+        .opinion-loading {
+            color: #999;
+            font-style: italic;
+            text-align: center;
+            padding: 20px;
+        }
+
         /* === FOOTER === */
         .footer {
             text-align: center;
@@ -612,6 +671,11 @@
                 color: var(--color-accent);
             }
     </style>
+
+    <script src="metrics.js" defer></script>
+    <script src="txt.js" defer></script>
+    <script src="eye.js" defer></script>
+    <script src="app.js" defer></script>
 </head>
 <body>
     <div class="header">
@@ -623,16 +687,17 @@
     </div>
 
     <div class="nav">
-        <a href="#">Analyze</a>
-        <a href="#">Leaderboards</a>
+        <a href="#">Play</a>
+        <a href="#">Hall of Fame</a>
         <a href="#">Wall of Shame</a>
-        <a href="#">Healthy Games</a>
+        <a href="#">Settings</a>
         <a href="#">About</a>
+        <a href="#" onclick="return quitToDesktop();">Quit to Desktop</a>
     </div>
 
     <div class="main">
-        <!-- LEFT COLUMN: Methodology -->
-        <div class="col-left">
+        <!-- METHODOLOGY -->
+        <div class="col-methodology">
             <div class="box">
                 <div class="box-header">What Am I Looking At?</div>
                 <div class="box-body">
@@ -671,7 +736,7 @@
                         They do not (necessarily) represent the opinions of the players, and they are not to be taken or shared as objective statements (unless sourced from reddit and adequately padded with weasel words).
                     </p>
                     <p>
-                        The sampling algorithm does not strive to represent the current recommended/not recommended ratio faithfully; 
+                        The sampling algorithm does not strive to represent the current recommended/not recommended ratio faithfully;
                         it tries to find as many different opinions as possible and then it weighs them against the nominal ratio when it makes sense to do so.
                     </p>
                     <p>
@@ -682,10 +747,10 @@
             </div>
         </div>
 
-        <!-- CENTER COLUMN: Charts -->
-        <div class="col-center">
+        <!-- VERDICT: Search + Tags + What Happened -->
+        <div class="col-verdict">
             <div class="box">
-                <div class="box-header light">Steam Review Analysis</div>
+                <div class="box-header">Analyze</div>
                 <div class="box-body">
                     <div class="search-row">
                         <input type="text" id="appId" placeholder="Steam App ID or store URL">
@@ -693,7 +758,20 @@
                     </div>
                     <h2 id="game-title"></h2>
                     <div id="stats"></div>
-                    <div id="metrics-detail"></div>
+                    <div id="metrics-detail">
+                        <p style="color: #999; font-style: italic;">
+                            Enter a Steam App ID or URL to analyze.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- CHARTS -->
+        <div class="col-charts">
+            <div class="box">
+                <div class="box-header light">Playtime Distribution</div>
+                <div class="box-body">
                     <div class="chart-controls">
                         <label><input type="checkbox" id="hideAnomalies"> Hide anomalies</label>
                         <label><input type="checkbox" id="hideSpikes"> Hide bombs/brigades</label>
@@ -731,10 +809,10 @@
             </div>
         </div>
 
-        <!-- RIGHT COLUMN: Opinion / So What -->
-        <div class="col-right">
+        <!-- OPINION -->
+        <div class="col-opinion">
             <div class="box">
-                <div class="box-header">How Do I Read The Charts?</div>
+                <div class="box-header">So What?</div>
                 <div class="box-body" id="opinion-content">
                     <p style="color: #999; font-style: italic;">
                         Analyze a game to see the verdict.
@@ -747,10 +825,5 @@
     <div class="footer">
         Made with 💊 by <a href="#">ritalin.js</a>
     </div>
-
-    <script src="patterns.js"></script>
-    <script src="metrics.js"></script>
-    <script src="eye.js"></script>
-    <script src="app.js"></script>
 </body>
 </html>

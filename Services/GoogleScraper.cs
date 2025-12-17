@@ -81,20 +81,23 @@ public class GoogleScraper(IDbContextFactory<AppDbContext> dbFactory) : IAsyncDi
                 () => {
                     const mainCol = document.querySelector('[data-container-id=""main-col""]');
                     if (!mainCol) return null;
-    
+                    const rect = mainCol.getBoundingClientRect();
+                    // force a paint, then grab innerText which respects visibility
+
                     const ul = mainCol.querySelector('ul');
-                    if (!ul) return mainCol.textContent.trim();
-    
+                    if (!ul) return mainCol.innerText.trim();
+
                     const items = [...ul.querySelectorAll('li')]
-                        .map(li => li.textContent?.trim())
-                        .filter(t => t && t.length > 20);
-    
-                    return items.length ? items.join('\n\n') : null;
+                        .map(li => li.innerText.trim())
+                        .filter(t => t && t.length > 2)
+                        .map(t => '• ' + t);
+
+                    return items.length ? items.join('\n') : null;
                 }
             ");
 
                 if (overview != null) {
-                    overview = Regex.Replace(overview, @"([\.\:\;\@\#\(,\)%]+[\w\d\-_~]+\s*)+[\)]?|\{+[^\}]*?\}+(div|span|a|p|mark|ul|li)?\s*", "");
+                    overview = Regex.Replace(overview, @"• ([^:]+):", "• <strong>$1</strong>:");
                     overview = overview.Trim();
                     if (string.IsNullOrWhiteSpace(overview)) overview = null;
                 }

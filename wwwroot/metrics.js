@@ -14,7 +14,7 @@ const Metrics = {
         'EXTRACTIVE': ['TROUBLED'],
         'FLOP': ['TROUBLED'],
         'TROUBLED': ['HONEST'],
-        'ENSHITTIFIED': ['REVISIONIST', 'HONEYMOON'],
+        'ENSHITTIFIED': ['RETCONNED', 'HONEYMOON'],
     },
     tagDefinitions: [
         // ============================================================
@@ -266,12 +266,12 @@ const Metrics = {
         // Detecting sentiment shifts via review edits
         // ============================================================
         {
-            id: 'REVISIONIST',
+            id: 'RETCONNED',
             condition: (m) => m.recentNegativeEditRatio >= 0.25 && m.oldReviewsEditedRatio >= 0.50 && m.totalEdits >= 1000
                            || m.recentNegativeEditRatio >= 0.50 && m.oldReviewsEditedRatio >= 0.25 && m.totalEdits >= 1000,
             reason: (m) => `${Math.round(m.recentNegativeEditRatio * 100)}% of recent edits negative, ${Math.round(m.oldReviewsEditedRatio * 100)}% of old reviews revised`,
             severity: 0.1,
-            color: 'var(--color-tag-revisionist)'
+            color: 'var(--color-tag-retconned)'
         }
     ],
 

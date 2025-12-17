@@ -1,8 +1,4 @@
-const svg = document.getElementById('eye');
-const width = svg.clientWidth;
-const height = svg.clientHeight;
-const centerX = width / 2;
-const centerY = height / 2;
+window.svg = document.getElementById('eye');
 const frameInterval = 1000 / 15;
 let lastFrame = 0;
 
@@ -25,7 +21,7 @@ const config = {
     boredThreshold: 0.5,
     blinkSpeed: 30,
     openSpeed: 3,
-    sleepTimeout: 10,
+    sleepTimeout: 30,
     dozeSpeed: 0.5,
     blinkInterval: 4,
     blinkVariance: 2,
@@ -133,6 +129,7 @@ const state = {
     blinkTarget: 1,
     awake: false,
     lastInteraction: Date.now(),
+    canBlink: true,
     nextBlinkTime: 0,
     pendingDoubleBlink: false,
     busy: false,
@@ -152,6 +149,8 @@ const state = {
     targetBlush: 0,
     // Engrossed mode - locked on graph, ignores cursor
     engrossed: false,
+    // Peeved mode - stares at user, ignores cursor
+    peeved: false,
     // Cumulative time spent being cornered (ms)
     corneredTime: 0,
     // Derived states (computed each frame)
@@ -170,6 +169,17 @@ function setExpression(name) {
         state.targetExpr = name;
         state.exprProgress = 0;
     }
+}
+
+function enableBlinking() {
+    state.canBlink = true;
+    state.nextBlinkTime = 0;
+}
+
+function disableBlinking() {
+    state.canBlink = false;
+    state.blinkTarget = 0;
+    state.nextBlinkTime = Number.MAX_VALUE;
 }
 
 function setDilation(value) {
@@ -283,7 +293,7 @@ function updateBlink(dt) {
         state.blink = Math.max(state.blink - speed * dt, state.blinkTarget);
     }
 
-    if (state.awake && state.blinkTarget === 1 && state.blink >= 0.95) {
+    if (state.awake && state.canBlink && state.blinkTarget === 1 && state.blink >= 0.95) {
         state.blinkTarget = 0;
     }
 }
@@ -298,15 +308,15 @@ function drawBar(x, barHeight, direction, color, barWidth, irisX, irisY, irisRad
         const circleYOffset = Math.sqrt(irisRadius * irisRadius - dx * dx);
         if (up) {
             const irisTop = irisY - circleYOffset;
-            y = centerY - barHeight;
+            y = (svg.clientHeight / 2) - barHeight;
             h = irisTop - y;
         } else {
             const irisBottom = irisY + circleYOffset;
             y = irisBottom;
-            h = (centerY + barHeight) - irisBottom;
+            h = ((svg.clientHeight / 2) + barHeight) - irisBottom;
         }
     } else {
-        y = up ? centerY - barHeight : centerY;
+        y = up ? (svg.clientHeight / 2) - barHeight : (svg.clientHeight / 2);
         h = barHeight;
     }
 
@@ -329,9 +339,9 @@ function drawLashTip(x, startHeight, lashLength, direction, color, barWidth) {
     h = lashLength;
 
     if (up) {
-        y = centerY - startHeight - lashLength;
+        y = (svg.clientHeight / 2) - startHeight - lashLength;
     } else {
-        y = centerY + startHeight;
+        y = (svg.clientHeight / 2) + startHeight;
     }
 
     if (h <= 0) return;
@@ -384,21 +394,21 @@ function draw() {
     const blinkLashMult = 1 + state.blink * 2 * scaleY + 0.5;
 
     // Convert to pixels
-    const irisRadiusPx = (irisRadius + state.attention * irisDilation) * height;
-    const maxLashPx = maxLashLength * height * blinkLashMult * lashMultiplier;
-    const maxIrisOffsetXPx = config.maxIrisOffsetX * width;
-    const maxIrisOffsetYPx = config.maxIrisOffsetY * height;
+    const irisRadiusPx = (irisRadius + state.attention * irisDilation) * svg.clientHeight;
+    const maxLashPx = maxLashLength * svg.clientHeight * blinkLashMult * lashMultiplier;
+    const maxIrisOffsetXPx = config.maxIrisOffsetX * svg.clientWidth;
+    const maxIrisOffsetYPx = config.maxIrisOffsetY * svg.clientHeight;
 
-    const irisXPx = centerX + state.irisX * maxIrisOffsetXPx;
-    const irisYPx = centerY + (state.irisY + irisYOffset) * maxIrisOffsetYPx * scaleY;
+    const irisXPx = (svg.clientWidth / 2) + state.irisX * maxIrisOffsetXPx;
+    const irisYPx = (svg.clientHeight / 2) + (state.irisY + irisYOffset) * maxIrisOffsetYPx * scaleY;
 
     // Bar spacing
-    const minBarPx = barWidthMin * width;
-    const maxBarPx = barWidthMax * width;
+    const minBarPx = barWidthMin * svg.clientWidth;
+    const maxBarPx = barWidthMax * svg.clientWidth;
     const avgBarWidth = (minBarPx + maxBarPx) / 2;
     const spacing = avgBarWidth * (1 + gapRatio);
     const totalWidth = barCount * spacing;
-    const startX = centerX - totalWidth / 2;
+    const startX = (svg.clientWidth / 2) - totalWidth / 2;
 
     const styles = getComputedStyle(document.documentElement);
     const colorPositive = styles.getPropertyValue('--color-positive').trim();
@@ -417,7 +427,7 @@ function draw() {
         const x = startX + i * spacing + spacing / 2;
         const normalizedX = (i - barCount / 2) / (barCount / 6);
 
-        // Bar width still uses gaussian for thickness variation
+        // Bar svg.clientWidth still uses gaussian for thickness variation
         const barWidthPx = minBarPx + Math.exp(-(normalizedX * normalizedX) / 2) * (maxBarPx - minBarPx);
 
         // Get shape values from current and target expressions, then lerp
@@ -429,8 +439,8 @@ function draw() {
         const targetBottomShape = shapeFunctions[targetExpr.bottom.shape](normalizedX, targetExpr.bottom.params);
         const bottomShape = lerp(currentBottomShape, targetBottomShape, t);
 
-        const topHeight = topShape * topMaxHeight * height * scaleY;
-        const bottomHeight = bottomShape * bottomMaxHeight * height * scaleY;
+        const topHeight = topShape * topMaxHeight * svg.clientHeight * scaleY;
+        const bottomHeight = bottomShape * bottomMaxHeight * svg.clientHeight * scaleY;
 
         // Lash length based on shape
         const lashLengthTop = topShape * maxLashPx;
@@ -467,12 +477,12 @@ function updateCursorTracking() {
 
         if (state.attention < config.boredThreshold && !state.beingCornered) state.attention = 0;
 
-        const dx = state.cursorX - centerX;
-        const dy = state.cursorY - centerY;
+        const dx = state.cursorX - (svg.clientWidth / 2);
+        const dy = state.cursorY - (svg.clientHeight / 2);
         const dist = Math.sqrt(dx * dx + dy * dy);
 
         if (dist > 0) {
-            const maxDist = Math.min(width, height) / 2;
+            const maxDist = Math.min(svg.clientWidth, svg.clientHeight) / 2;
             const normalized = Math.min(dist / maxDist, 1);
             state.targetX = (dx / dist) * normalized;
             state.targetY = (dy / dist) * normalized;
@@ -510,13 +520,20 @@ function getGraphCenter() {
 function updateIrisPosition(dt) {
     if (!state.awake) return;
 
+    const lerpSpeed = 1.5;
+    const lerpFactor = 1 - Math.exp(-lerpSpeed * dt);
+
     // Engrossed mode - locked on graph, ignores cursor
     if (state.engrossed) {
         const graphPos = getGraphCenter();
-        const lerpSpeed = 1.5;
-        const lerpFactor = 1 - Math.exp(-lerpSpeed * dt);
         state.irisX += (graphPos.x - state.irisX) * lerpFactor;
         state.irisY += (graphPos.y - state.irisY) * lerpFactor;
+        return;
+    }
+
+    if (state.peeved) {
+        state.irisX += (0 - state.irisX) * lerpFactor;
+        state.irisY += (0 - state.irisY) * lerpFactor;
         return;
     }
 
@@ -536,9 +553,6 @@ function updateIrisPosition(dt) {
     // Detect if eye is looking at the graph (close to graph position)
     const distToGraph = Math.sqrt((state.irisX - graphPos.x) ** 2 + (state.irisY - graphPos.y) ** 2);
     state.lookingAtGraph = state.shy && distToGraph < 0.3;
-
-    const lerpSpeed = 1.5;
-    const lerpFactor = 1 - Math.exp(-lerpSpeed * dt);
 
     state.irisX += (goalX - state.irisX) * lerpFactor;
     state.irisY += (goalY - state.irisY) * lerpFactor;
@@ -571,15 +585,19 @@ function onMouseMove(e) {
     state.cursorY = e.clientY - rect.top;
 }
 
+function snooze() {
+    state.awake = false;
+    state.blinkTarget = 1;
+    setExpression('neutral');
+}
+
 function tick(timestamp) {
     if (lastFrame === 0) lastFrame = timestamp;
     const dt = (timestamp - lastFrame) / 1000;
 
     const idleTime = (Date.now() - state.lastInteraction) / 1000;
     if (state.awake && idleTime > config.sleepTimeout) {
-        state.awake = false;
-        state.blinkTarget = 1;
-        setExpression('neutral');
+        snooze();
     }
 
     if (dt >= frameInterval / 1000) {
@@ -629,6 +647,20 @@ document.addEventListener('click', () => {
 requestAnimationFrame(tick);
 scheduleNextBlink();
 
+function setPeeved(isPeeved, snap) {
+    state.peeved = isPeeved;
+    if (snap) {
+        state.irisX = 0;
+        state.irisY = 0;
+    }
+    if (isPeeved) {
+        disableBlinking();
+    }
+    else {
+        enableBlinking();
+    }
+}
+
 function setShy(isShy) {
     if (isShy) {
         state.shy = true;
@@ -653,9 +685,15 @@ function isUnhinged() {
 }
 
 // Expose for other modules
+window.tick = tick;
+window.wake = wake;
+window.snooze = snooze;
+window.scheduleNextBlink = scheduleNextBlink;
 window.setEyeExpression = setExpression;
 window.setEyeDilation = setDilation;
 window.setEyeLoading = setLoading;
 window.setEyeShy = setShy;
 window.setEyeUnhinged = setUnhinged;
+window.setEyePeeved = setPeeved;
 window.isEyeUnhinged = isUnhinged;
+window.expressions = expressions;

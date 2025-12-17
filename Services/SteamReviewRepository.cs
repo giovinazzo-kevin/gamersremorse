@@ -72,6 +72,7 @@ public record SteamReviewRepository(
         var totalReviews = totalPos + totalNeg;
         var targetCount = (int)(totalReviews * Options.Value.LazyRefreshTargetPercent);
         targetCount = Math.Clamp(targetCount, Options.Value.LazyRefreshMinItems, Options.Value.LazyRefreshMaxItems);
+        targetCount = Math.Min(totalPos + totalNeg, targetCount);
 
         if (meta is null) {
             meta = new Metadata {

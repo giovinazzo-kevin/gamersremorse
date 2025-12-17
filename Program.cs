@@ -53,7 +53,7 @@ app.MapGet("/controversies", async (string game, string months, string? types, G
             ? monthNames[monthNumber.Value] : "";
 
         query = eventType switch {
-            "launch" => $"{game} (video game) launch reception",
+            "launch" => $"{game} (video game) launch reception {year}",
             "launch_troubled" => $"{game} (video game) launch controversy",
             "launch_flop" => $"Why did {game} (video game) flop",
             "death" => $"Why did {game} (video game) die in {year}",
