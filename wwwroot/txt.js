@@ -1097,13 +1097,34 @@ const loadingMessages = {
 };
 
 
+let customTagline = null;
+
 window.setRandomTagline = function (numBlinks) {
+    if (customTagline !== null) {
+        tagline.innerHTML = `<strong>${customTagline}</strong>`;
+        return;
+    }
     const pool = numBlinks % 2 == 0
         ? [...taglines.positive, ...taglines.neutral]
         : [...taglines.negative, ...taglines.neutral];
     const tag = pool[Math.floor(Math.random() * pool.length)];
     tagline.style.color = numBlinks % 2 == 0 ? 'var(--color-positive)' : 'var(--color-negative)';
     tagline.innerHTML = `<strong>${tag}</strong>`;
+}
+
+window.setCustomTagline = function (text) {
+    customTagline = text;
+    if (text !== null) {
+        tagline.innerHTML = `<strong>${text}</strong>`;
+    }
+}
+
+window.getCustomTagline = function () {
+    return customTagline;
+}
+
+window.clearCustomTagline = function () {
+    customTagline = null;
 }
 
 window.clearTagline = function () {

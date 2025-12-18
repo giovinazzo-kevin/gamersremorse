@@ -193,7 +193,7 @@ select.modal-input option {
 }
 
 .modal-bottom-row {
-    margin-top: 8px;
+    margin: 4px;
     display: flex;
     gap: 8px;
     justify-content: flex-end;
@@ -280,4 +280,324 @@ select.modal-input option {
 
 .modal-color::-moz-color-swatch {
     border: none;
+}
+
+.modal-slider-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.modal-slider {
+    width: 100px;
+    height: 4px;
+    -webkit-appearance: none;
+    appearance: none;
+    background: #1f1f1f;
+    border: 1px solid;
+    border-color: #282e22 #889180 #889180 #282e22;
+    border-radius: 1px;
+    outline: none;
+}
+
+.modal-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 8px;
+    height: 16px;
+    background: #4c5844;
+    border: 1px solid;
+    border-color: #889180 #282e22 #282e22 #889180;
+    cursor: pointer;
+}
+
+.modal-slider::-moz-range-thumb {
+    width: 8px;
+    height: 16px;
+    background: #4c5844;
+    border: 1px solid;
+    border-color: #889180 #282e22 #282e22 #889180;
+    border-radius: 0;
+    cursor: pointer;
+}
+
+.modal-slider-value {
+    min-width: 24px;
+    text-align: right;
+}
+
+.modal-locked-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: #808080;
+    font-style: italic;
+}
+
+.modal-locked-content .lock-icon {
+    font-size: 32px;
+    margin-bottom: 8px;
+}
+
+/* === DEVELOPER CONSOLE === */
+.dev-console {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 300px;
+    background: rgba(30, 30, 30, 0.95);
+    border-bottom: 2px solid #4a4a4a;
+    border-radius: 0 0 8px 8px;
+    font-family: 'Consolas', 'Courier New', monospace;
+    font-size: 13px;
+    color: #e0e0e0;
+    display: flex;
+    flex-direction: column;
+    z-index: 9999;
+    transform: translateY(-100%);
+    transition: transform 0.15s ease-out;
+}
+
+.dev-console.visible {
+    transform: translateY(0);
+}
+
+.console-output {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px 12px;
+    scrollbar-width: thin;
+    scrollbar-color: #555 #2a2a2a;
+}
+
+.console-output::-webkit-scrollbar {
+    width: 8px;
+}
+
+.console-output::-webkit-scrollbar-track {
+    background: #2a2a2a;
+}
+
+.console-output::-webkit-scrollbar-thumb {
+    background: #555;
+    border-radius: 4px;
+}
+
+.console-line {
+    margin: 2px 0;
+    line-height: 1.4;
+}
+
+.console-line.error {
+    color: #ff6b6b;
+}
+
+.console-line.success {
+    color: #69db7c;
+}
+
+.console-line.warning {
+    color: #ffd93d;
+}
+
+.console-input-row {
+    display: flex;
+    align-items: center;
+    padding: 8px 12px;
+    background: rgba(0, 0, 0, 0.3);
+    border-top: 1px solid #3a3a3a;
+}
+
+.console-prompt {
+    color: #888;
+    margin-right: 8px;
+    font-weight: bold;
+}
+
+.console-input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: #fff;
+    font-family: 'Consolas', 'Courier New', monospace;
+    font-size: 13px;
+    caret-color: #fff;
+}
+
+.console-input::placeholder {
+    color: #555;
+}
+
+.console-resize {
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    width: 16px;
+    height: 16px;
+    cursor: ns-resize;
+    background: linear-gradient(135deg, transparent 50%, #555 50%);
+    border-radius: 0 0 6px 0;
+}
+
+.console-resize:hover {
+    background: linear-gradient(135deg, transparent 50%, #777 50%);
+}
+
+/* === ACHIEVEMENT TOAST === */
+.achievement-toast {
+    position: fixed;
+    bottom: 0;
+    right: 0;
+    background: linear-gradient(180deg, #282d35 0%, #101829 100%);
+    border: 1px solid #1f2220;
+    border-radius: 4px 0 0 0;
+    padding: 15px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    z-index: 10000;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+    min-width: 280px;
+    animation: toast-slide-up 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+}
+
+.achievement-toast.hiding {
+    animation: toast-slide-down 0.4s ease-in forwards;
+}
+
+@keyframes toast-slide-up {
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
+}
+
+@keyframes toast-slide-down {
+    from { transform: translateY(0); }
+    to { transform: translateY(100%); }
+}
+
+.achievement-toast-icon {
+    width: 62px;
+    height: 62px;
+    border: 1px solid #a4a7a9;
+    padding: 1px;
+    flex-shrink: 0;
+}
+
+.achievement-toast-icon-inner {
+    width: 100%;
+    height: 100%;
+    background: radial-gradient(circle, #e8e8e8 0%, #c8c8c8 100%);
+    box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 32px;
+    filter: grayscale(100%) contrast(1.1);
+}
+
+.achievement-toast-text {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.achievement-toast-header {
+    font-size: 12px;
+    color: #fff;
+}
+
+.achievement-toast-title {
+    font-size: 12px;
+    color: #a5aab6;
+}
+
+/* === ACHIEVEMENTS TAB === */
+.achievements-container {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 100%;
+    overflow-y: auto;
+}
+
+.achievements-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #3e4637;
+    margin-bottom: 4px;
+}
+
+.achievements-count {
+    color: #c4b550;
+}
+
+.achievement-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px;
+    background: #3e4637;
+    border: 1px solid;
+    border-color: #282e22 #889180 #889180 #282e22;
+}
+
+.achievement-item.locked {
+    opacity: 0.5;
+}
+
+.achievement-item.hidden {
+    opacity: 0.3;
+}
+
+.achievement-icon {
+    font-size: 24px;
+    width: 32px;
+    text-align: center;
+}
+
+.achievement-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.achievement-title {
+    font-weight: bold;
+    color: #fff;
+    margin-bottom: 2px;
+}
+
+.achievement-item.locked .achievement-title {
+    color: #808080;
+}
+
+.achievement-desc {
+    font-size: 11px;
+    color: #b0b0b0;
+}
+
+.achievement-progress {
+    margin-top: 4px;
+    height: 4px;
+    background: #282e22;
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.achievement-progress-bar {
+    height: 100%;
+    background: #c4b550;
+    transition: width 0.3s ease;
+}
+
+.achievement-unlocked {
+    font-size: 10px;
+    color: #69db7c;
+    white-space: nowrap;
 }

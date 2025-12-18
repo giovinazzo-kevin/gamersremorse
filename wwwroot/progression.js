@@ -47,13 +47,35 @@ function createCheatCodeListener(codes, onMatch) {
     });
 }
 
+// Cheats are gated behind sv_cheats 1 in console
+let svCheats = false;
+
+function setSvCheats(enabled) {
+    svCheats = enabled;
+}
+
+function isSvCheats() {
+    return svCheats;
+}
+
 createCheatCodeListener({
     'konami': '↑↑↓↓←→←→ba',
     'doom': 'iddqd',
     'doomguns': 'idkfa',
     'xyzzy': 'xyzzy'
 }, (code) => {
+    if (!svCheats) return; // cheats disabled
+    
     playZeldaSecretJingle();
+    
+    // Trigger achievements
+    if (typeof setAchievementFlag === 'function') {
+        if (code === 'konami') setAchievementFlag('konamiEntered');
+        if (code === 'doom') setAchievementFlag('iddqdEntered');
+        if (code === 'doomguns') setAchievementFlag('idkfaEntered');
+        if (code === 'xyzzy') setAchievementFlag('xyzzyEntered');
+    }
+    
     if (code === 'konami') {
         progression.currencies.analysis.amount += 1000;
     }

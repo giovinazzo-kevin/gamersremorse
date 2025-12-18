@@ -1,4 +1,11 @@
-﻿const scales = {
+﻿// Note helper - N('C', 4) returns frequency for C4
+const NOTE_OFFSETS = { 'C': 0, 'C#': 1, 'Db': 1, 'D': 2, 'D#': 3, 'Eb': 3, 'E': 4, 'F': 5, 'F#': 6, 'Gb': 6, 'G': 7, 'G#': 8, 'Ab': 8, 'A': 9, 'A#': 10, 'Bb': 10, 'B': 11 };
+function N(note, octave) {
+    const semitone = NOTE_OFFSETS[note] + (octave - 4) * 12;
+    return 261.63 * Math.pow(2, semitone / 12); // C4 = 261.63 Hz
+}
+
+const scales = {
     pentatonic: [0, 2, 4, 7, 9],           // safe, alien, star control
     blues: [0, 3, 5, 6, 7, 10],            // swagger, attitude
     dorian: [0, 2, 3, 5, 7, 9, 10],        // melancholy but moving
@@ -12,9 +19,9 @@
 const sfx = {
     quit: playRandomJingle,
     secret: playZeldaSecretJingle,
-    shame: () => playJingle({ scale: 'locrian', baseFreq: 165, tempo: 0.7 }),  // hall of shame entry
-    fame: () => playJingle({ scale: 'majorPentatonic', baseFreq: 440, tempo: 1.3 }), // hall of fame
-    error: () => playJingle({ scale: 'wholeTone', baseFreq: 200, tempo: 0.5 }), // API failed, dreamy dissolution
+    shame: () => playJingle({ scale: 'locrian', baseFreq: N('E', 3), tempo: 0.7 }),  // hall of shame entry
+    fame: () => playJingle({ scale: 'majorPentatonic', baseFreq: N('A', 4), tempo: 1.3 }), // hall of fame
+    error: () => playJingle({ scale: 'wholeTone', baseFreq: N('G', 3), tempo: 0.5 }), // API failed, dreamy dissolution
 };
 
 function playJingle(opts = {}) {
@@ -96,8 +103,8 @@ function playZeldaSecretJingle() {
     delayGain.connect(ctx.destination);
 
     const notes = [
-        783.99, 739.99, 311.13, 440.00,
-        415.30, 659.25, 830.61, 1046.50,
+        N('G', 5), N('F#', 5), N('Eb', 4), N('A', 4),
+        N('G#', 4), N('E', 5), N('G#', 5), N('C', 6),
     ];
 
     const noteLength = 0.12;
@@ -137,6 +144,51 @@ function playZeldaSecretJingle() {
         gain2.gain.exponentialRampToValueAtTime(0.001, startTime + noteLength * 0.9);
         osc2.start(startTime);
         osc2.stop(startTime + noteLength);
+    });
+}
+
+function playAchievementSound() {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    
+    const melody1 = [N('A#', 4), N('A', 5), N('C', 6)];
+    const melody2 = [N('C', 4), N('C', 5), N('C', 7)]; 
+    const noteLength = 0.1;
+    
+    // 50% volume delay
+    const delay = ctx.createDelay();
+    const delayGain = ctx.createGain();
+    delay.delayTime.value = 0.08;
+    delayGain.gain.value = 0.5;
+    delay.connect(delayGain);
+    delayGain.connect(ctx.destination);
+    
+    const playNote = (freq, startTime, vol, i) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.value = freq;
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        gain.connect(delay);
+        
+        gain.gain.setValueAtTime(vol, startTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, startTime + noteLength * 2);
+        
+        osc.start(startTime);
+        let k = i == 2 ? 0.5 : 1;
+        osc.stop(startTime + noteLength * k);
+    };
+    
+    melody1.forEach((freq, i) => {
+        const startTime = ctx.currentTime + i * noteLength;
+        const volume = 0.2 - (i * 0.03);
+        if (freq) playNote(freq, startTime, volume, i);
+    });
+    
+    melody2.forEach((freq, i) => {
+        const startTime = ctx.currentTime + i * noteLength;
+        const volume = 0.12 - (i * 0.02); // quieter harmony
+        if (freq) playNote(freq, startTime, volume, i);
     });
 }
 

@@ -283,7 +283,6 @@ const expressions = {
         },
 
         snap: {
-            barCount: 20,
             noiseTop: 0,
             noiseBottom: 0,
             shy: false,
@@ -313,8 +312,8 @@ const expressions = {
     },
     reading: {
         lerp: {
-            top: { shapes: [{ type: 'gaussian', params: { width: 2.2 }, offset: 0, amplitude: 1 }], maxHeight: 0.25 },
-            bottom: { shapes: [{ type: 'gaussian', params: { width: 2.2 }, offset: 0, amplitude: 1 }], maxHeight: 0.25 },
+            top: { shapes: [{ type: 'gaussian', params: { width: 2.2 }, offset: 0, amplitude: 1 }], maxHeight: 0.35 },
+            bottom: { shapes: [{ type: 'gaussian', params: { width: 2.2 }, offset: 0, amplitude: 1 }], maxHeight: 0.35 },
             gapRatio: 0,
             irisRadius: 0.22,
             irisYOffset: 0,
@@ -326,7 +325,6 @@ const expressions = {
             driftStrength: 0.15,
         },
         snap: {
-            barCount: 20,
             impulseBounds: {
                 top: { left: 'reflect', right: 'reflect' },
                 bottom: { left: 'reflect', right: 'reflect' }
@@ -353,10 +351,10 @@ const expressions = {
 
             state.dilation = -lfo2 / 4 - progress;
 
-            state.irisX = lfo1 * scanWeight;
-            state.irisY = lfo2 * scanWeight;
+            state.irisX = lfo1 * scanWeight * 0.5;
+            state.irisY = lfo2 * scanWeight * 0.5;
 
-            state.lashMultiplier = lerp(0.3, 2, blend);
+            state.lashMultiplier = lerp(0.6, 2, blend);
             state.top.maxHeight = lerp(0.40, 0.10, blend);
             state.bottom.maxHeight = lerp(0.45, 0.10, blend);
 
@@ -377,6 +375,8 @@ const expressions = {
             lashMultiplier: 1,
             targetWidthRatio: 1,
             driftStrength: 0.005,
+            topSampleSpeed: 0.1,
+            bottomSampleSpeed: -0.1,
         },
         snap: {},
         update: (dt) => { },
@@ -406,11 +406,13 @@ const expressions = {
         lerp: {
             top: { shapes: [{ type: 'skewedLeft', params: { width: 2, skew: 0.4 }, offset: 0, amplitude: 1 }], maxHeight: 0.2 },
             bottom: { shapes: [{ type: 'skewedRight', params: { width: 2.2, skew: 0.3 }, offset: 0, amplitude: 1 }], maxHeight: 0.26 },
-            irisRadius: 0.1,
+            irisRadius: 0.14,
             irisYOffset: -0.05,
-            irisXOffset: 0,
+            irisXOffset: 0.75,
             lashMultiplier: 1.2,
             driftStrength: 0.005,
+            topSampleSpeed: -0.1,
+            bottomSampleSpeed: 0.9,
         },
         snap: {},
         update: (dt) => { },
@@ -794,7 +796,7 @@ function drawBar(x, barHeight, direction, color, barWidth, irisX, irisY, irisRad
     svg.appendChild(bar);
 }
 
-function drawLashTip(x, startHeight, lashLength, direction, color, barWidth) {
+function drawLashTip(x, startHeight, lashLength, direction, color, barWidth, opacity = 1) {
     const up = direction === 'up';
 
     let y, h;
@@ -814,6 +816,7 @@ function drawLashTip(x, startHeight, lashLength, direction, color, barWidth) {
     bar.setAttribute('width', barWidth);
     bar.setAttribute('height', h);
     bar.setAttribute('fill', color);
+    bar.setAttribute('fill-opacity', opacity);
     bar.setAttribute('rx', 2);
     svg.appendChild(bar);
 }
@@ -868,7 +871,9 @@ function draw() {
     const colorNegative = styles.getPropertyValue('--color-negative').trim();
     const navbarBg = styles.getPropertyValue('--color-accent').trim();
     const lashColor = styles.getPropertyValue('--color-uncertain').trim();
-    const currentLashColor = lerpColor(navbarBg, lashColor, 1 - state.blink);
+    // Stay solid during blink, go transparent when closed (sleeping)
+    const lashOpacity = state.blink > 0.8 ? 1 - ((state.blink - 0.8) / 0.2) : 1;
+    const currentLashColor = lashColor;
 
     const blushColor = '#ff6b9d';
     const blushAmount = state.blush * 0.4;
@@ -903,8 +908,8 @@ function draw() {
 
         drawBar(topX, topHeight, 'up', tintedPositive, barWidthPx, irisXPx, irisYPx, irisRadiusPx);
         drawBar(bottomX, bottomHeight, 'down', tintedNegative, barWidthPx, irisXPx, irisYPx, irisRadiusPx);
-        drawLashTip(topX, topHeight, lashLengthTop, 'up', currentLashColor, barWidthPx);
-        drawLashTip(bottomX, bottomHeight, lashLengthBottom, 'down', currentLashColor, barWidthPx);
+        drawLashTip(topX, topHeight, lashLengthTop, 'up', currentLashColor, barWidthPx, lashOpacity);
+        drawLashTip(bottomX, bottomHeight, lashLengthBottom, 'down', currentLashColor, barWidthPx, lashOpacity);
     }
 }
 
@@ -1057,6 +1062,18 @@ function setCursorTrackingEnabled(enabled) {
         state.targetX = 0;
         state.targetY = 0;
     }
+}
+
+function isCursorTrackingEnabled() {
+    return state.cursorTrackingEnabled !== false;
+}
+
+function isSleepEnabled() {
+    return state.sleepEnabled !== false;
+}
+
+function isBlinkingEnabled() {
+    return state.canBlink;
 }
 
 function snooze() {

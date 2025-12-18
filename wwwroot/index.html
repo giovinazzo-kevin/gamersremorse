@@ -73,7 +73,7 @@
         }
 
             .header h1 {
-                color: #fff;
+                color: var(--color-uncertain);
                 font-size: 22px;
                 font-weight: bold;
             }
@@ -666,15 +666,163 @@
             .footer a {
                 color: var(--color-accent);
             }
+
+        /* === DARK MODE === */
+        body.dark-mode {
+            background: #1a1a1a;
+            color: #e0e0e0;
+        }
+
+        .dark-mode .header {
+            background: #0d0d0d;
+        }
+
+        .dark-mode .nav {
+            background: #252525;
+            border-bottom-color: #444;
+        }
+
+        .dark-mode .nav a {
+            color: #ccc;
+            border-right-color: #444;
+        }
+
+        .dark-mode .nav a:hover {
+            background: #333;
+        }
+
+        .dark-mode .box {
+            background: #252525;
+            border-color: #444;
+        }
+
+        .dark-mode .box-header {
+            background: #0d0d0d;
+        }
+
+        .dark-mode .box-header.light {
+            background: #2a2a2a;
+            color: #aaa;
+            border-bottom-color: #444;
+        }
+
+        .dark-mode .box-body {
+            color: #ccc;
+        }
+
+        .dark-mode .box-body h3 {
+            color: #aaa;
+            border-top-color: #444;
+        }
+
+        .dark-mode .box-body strong {
+            color: #fff;
+        }
+
+        .dark-mode input[type="text"] {
+            background: #1a1a1a;
+            color: #e0e0e0;
+            border-color: #555;
+        }
+
+        .dark-mode button {
+            background: #444;
+        }
+
+        .dark-mode button:hover {
+            background: #555;
+        }
+
+        /* Keep Source Engine modal olive in dark mode */
+        .dark-mode .source-modal,
+        .dark-mode .modal-tab,
+        .dark-mode .modal-btn,
+        .dark-mode .modal-close {
+            background: #4c5844;
+        }
+
+        .dark-mode .modal-tab:hover,
+        .dark-mode .modal-btn:hover,
+        .dark-mode .modal-close:hover {
+            background: #5c6854;
+        }
+
+        .dark-mode #stats {
+            color: #999;
+        }
+
+        .dark-mode #stats strong {
+            color: #e0e0e0;
+        }
+
+        .dark-mode #metrics-detail {
+            background: #1a1a1a;
+            border-color: #444;
+        }
+
+        .dark-mode .chart-container {
+            background: #1a1a1a;
+            border-color: #444;
+        }
+
+        .dark-mode .chart-title {
+            color: #aaa;
+        }
+
+        .dark-mode .chart-controls {
+            color: #ccc;
+        }
+
+        .dark-mode .reasons li {
+            color: #aaa;
+        }
+
+        .dark-mode .metrics-raw {
+            color: #666;
+            border-top-color: #444;
+        }
+
+        .dark-mode #game-title {
+            color: #e0e0e0;
+        }
+
+        .dark-mode .controversy-item {
+            background: #1a1a1a;
+        }
+
+        .dark-mode .controversy-text {
+            color: #bbb;
+        }
+
+        .dark-mode .opinion-tldr {
+            background: #1a1a1a;
+        }
+
+        .dark-mode .footer {
+            color: #666;
+        }
+
+        .dark-mode .x-label {
+            color: #888;
+        }
+
+        .dark-mode .verbosity-legend {
+            color: #888;
+        }
+
+        .dark-mode .verbosity-label {
+            color: #aaa;
+        }
     </style>
 
     <link rel="stylesheet" href="modal.css">
-    <script src="modal.js" defer></script>
     <script src="txt.js" defer></script>
     <script src="sfx.js" defer></script>
     <script src="metrics.js" defer></script>
     <script src="progression.js" defer></script>
+    <script src="achievements.js" defer></script>
     <script src="eye.js" defer></script>
+    <script src="modal.js" defer></script>
     <script src="app.js" defer></script>
 
 </head>
@@ -706,10 +854,10 @@
                         This chart shows <strong>when</strong> players leave reviews.
                         X-axis is playtime (log scale), Y-axis is review count.
                     </p>
-                    <p>
-                        <strong style="color: var(--color-positive)">Blue</strong> = positive.
-                        <strong style="color: var(--color-negative)">Pink</strong> = negative.
-                        <strong style="color: var(--color-uncertain)">Gray</strong> = edited after a week (fence-sitters).
+                    <p id="color-legend">
+                        <strong style="color: var(--color-positive)">Positive</strong> = positive.
+                        <strong style="color: var(--color-negative)">Negative</strong> = negative.
+                        <strong style="color: var(--color-uncertain)">Uncertain</strong> = edited after a week (fence-sitters).
                     </p>
 
                     <h3>Healthy vs Extractive</h3>

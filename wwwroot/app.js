@@ -256,6 +256,68 @@ function hexToRgba(hex, alpha) {
     return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
+// 24-color palette for human-readable color names
+const COLOR_NAMES = {
+    '#000000': 'Black',
+    '#FFFFFF': 'White',
+    '#808080': 'Gray',
+    '#C0C0C0': 'Silver',
+    '#FF0000': 'Red',
+    '#800000': 'Maroon',
+    '#FFFF00': 'Yellow',
+    '#808000': 'Olive',
+    '#00FF00': 'Lime',
+    '#008000': 'Green',
+    '#00FFFF': 'Cyan',
+    '#008080': 'Teal',
+    '#0000FF': 'Blue',
+    '#000080': 'Navy',
+    '#FF00FF': 'Magenta',
+    '#800080': 'Purple',
+    '#FFA500': 'Orange',
+    '#A52A2A': 'Brown',
+    '#FFC0CB': 'Pink',
+    '#FFD700': 'Gold',
+    '#F0E68C': 'Khaki',
+    '#E6E6FA': 'Lavender',
+    '#40E0D0': 'Turquoise',
+    '#FF7F50': 'Coral',
+    '#DC143C': 'Crimson',
+    '#FF1493': 'Deep Pink',
+    '#C71585': 'Violet'
+};
+
+function hexToRgb(hex) {
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    return { r, g, b };
+}
+
+function colorDistance(c1, c2) {
+    // Weighted Euclidean distance (human eye is more sensitive to green)
+    const rDiff = c1.r - c2.r;
+    const gDiff = c1.g - c2.g;
+    const bDiff = c1.b - c2.b;
+    return Math.sqrt(2 * rDiff * rDiff + 4 * gDiff * gDiff + 3 * bDiff * bDiff);
+}
+
+function getColorName(hex) {
+    const target = hexToRgb(hex);
+    let closest = 'Unknown';
+    let minDist = Infinity;
+    
+    for (const [paletteHex, name] of Object.entries(COLOR_NAMES)) {
+        const palette = hexToRgb(paletteHex);
+        const dist = colorDistance(target, palette);
+        if (dist < minDist) {
+            minDist = dist;
+            closest = name;
+        }
+    }
+    return closest;
+}
+
 function getColors() {
     const styles = getComputedStyle(document.documentElement);
     return {
@@ -830,7 +892,7 @@ function drawTimeline() {
     timelineCtx.fillRect(selX + selW - 4, 0, 8, chartH + tagStripH);
 
     // year labels
-    timelineCtx.fillStyle = '#666';
+    timelineCtx.fillStyle = typeof isDarkMode === 'function' && isDarkMode() ? '#888' : '#666';
     timelineCtx.font = '10px Verdana';
     timelineCtx.textAlign = 'center';
 
@@ -1279,7 +1341,7 @@ function updateEditHeatmap(snapshot) {
     if (months.length < 2) {
         // Not enough data
         heatmapCtx.clearRect(0, 0, heatmapCanvas.width, heatmapCanvas.height);
-        heatmapCtx.fillStyle = '#999';
+        heatmapCtx.fillStyle = typeof isDarkMode === 'function' && isDarkMode() ? '#666' : '#999';
         heatmapCtx.font = '12px Verdana';
         heatmapCtx.textAlign = 'center';
         heatmapCtx.fillText('Not enough edit data', heatmapCanvas.width / 2, heatmapCanvas.height / 2);
@@ -1359,7 +1421,7 @@ function updateEditHeatmap(snapshot) {
     heatmapCtx.setLineDash([]);
     
     // X axis labels (posted month) - show every Nth
-    heatmapCtx.fillStyle = '#666';
+    heatmapCtx.fillStyle = typeof isDarkMode === 'function' && isDarkMode() ? '#888' : '#666';
     heatmapCtx.font = '9px Verdana';
     heatmapCtx.textAlign = 'center';
     const labelStep = Math.ceil(n / 10);
@@ -1376,7 +1438,7 @@ function updateEditHeatmap(snapshot) {
     }
     
     // Axis titles
-    heatmapCtx.fillStyle = '#333';
+    heatmapCtx.fillStyle = typeof isDarkMode === 'function' && isDarkMode() ? '#aaa' : '#333';
     heatmapCtx.font = '10px Verdana';
     heatmapCtx.textAlign = 'center';
     heatmapCtx.fillText('Posted', padding.left + chartW / 2, h - 5);
@@ -1784,3 +1846,26 @@ function displayControversyContext(contexts) {
 }
 
 document.addEventListener('click', onPageClick);
+
+function updateColorLegend() {
+    const legend = document.getElementById('color-legend');
+    if (!legend) return;
+    
+    const colors = getColors();
+    const posName = getColorName(colors.positive);
+    const negName = getColorName(colors.negative);
+    const uncName = getColorName(colors.uncertain);
+    
+    legend.innerHTML = `
+        <strong style="color: var(--color-positive)">${posName}</strong> = positive.
+        <strong style="color: var(--color-negative)">${negName}</strong> = negative.
+        <strong style="color: var(--color-uncertain)">${uncName}</strong> = edited after a week (fence-sitters).
+    `;
+}
+
+// Update legend on load and expose for color changes
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', updateColorLegend);
+} else {
+    updateColorLegend();
+}
