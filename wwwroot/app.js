@@ -172,6 +172,9 @@ async function analyze() {
     ws.onclose = () => {
         isStreaming = false;
         setExpression('neutral');
+        
+        // Achievement: first analysis
+        if (typeof setAchievementFlag === 'function') setAchievementFlag('analyzedGame');
 
         if (currentSnapshot) {
             const sampled = currentSnapshot.totalPositive + currentSnapshot.totalNegative;
@@ -552,7 +555,14 @@ function updateLanguageChart(snapshot) {
         `Banter (${banterRate}%)`,
     ];
     const data = [slurs, profanity, insults, complaints, banter];
-    const colors = ['#7c3aed', '#f59e0b', '#ef4444', '#f97316', '#06b6d4'];
+    const colors = getColors();
+    const barColors = [
+        colors.negative,  // Slurs
+        colors.positive,  // Profanity
+        colors.negative,  // Insults
+        colors.positive,  // Complaints
+        colors.negative,  // Banter
+    ];
 
     if (!languageChart) {
         languageChart = new Chart(document.getElementById('language-chart'), {
@@ -561,7 +571,7 @@ function updateLanguageChart(snapshot) {
                 labels,
                 datasets: [{
                     data,
-                    backgroundColor: colors
+                    backgroundColor: barColors
                 }]
             },
             options: {
@@ -578,6 +588,7 @@ function updateLanguageChart(snapshot) {
     } else {
         languageChart.data.labels = labels;
         languageChart.data.datasets[0].data = data;
+        languageChart.data.datasets[0].backgroundColor = barColors;
         languageChart.update();
     }
 }
@@ -1846,6 +1857,50 @@ function displayControversyContext(contexts) {
 }
 
 document.addEventListener('click', onPageClick);
+
+// PrintScreen interception - flash magenta/black chessboard
+document.addEventListener('keyup', (e) => {
+    if (e.key === 'PrintScreen') {
+        flashChessboard();
+    }
+});
+
+function flashChessboard() {
+    // Play the screenshot sound
+    if (typeof playScreenshotSound === 'function') playScreenshotSound();
+    
+    // Achievement: Eye of the Beholder
+    if (typeof setAchievementFlag === 'function') setAchievementFlag('triedScreenshot');
+    
+    const overlay = document.createElement('div');
+    overlay.className = 'screenshot-blocker';
+    
+    // Generate chessboard pattern
+    const size = 64; // px per square
+    let html = '<div class="chessboard">';
+    const cols = Math.ceil(window.innerWidth / size) + 1;
+    const rows = Math.ceil(window.innerHeight / size) + 1;
+    
+    for (let y = 0; y < rows; y++) {
+        for (let x = 0; x < cols; x++) {
+            const isMagenta = (x + y) % 2 === 0;
+            html += `<div class="chess-square" style="
+                left: ${x * size}px;
+                top: ${y * size}px;
+                width: ${size}px;
+                height: ${size}px;
+                background: ${isMagenta ? '#ff00ff' : '#000000'};
+            "></div>`;
+        }
+    }
+    html += '</div>';
+    overlay.innerHTML = html;
+    
+    document.body.appendChild(overlay);
+    
+    // Remove after a brief flash
+    setTimeout(() => overlay.remove(), 150);
+}
 
 function updateColorLegend() {
     const legend = document.getElementById('color-legend');

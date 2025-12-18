@@ -375,6 +375,12 @@
             height: 80px;
         }
 
+        #eye-container {
+            position: relative;
+            width: 120px;
+            height: 80px;
+        }
+
         #labels-container {
             position: absolute;
             bottom: -1.5em;
@@ -813,6 +819,27 @@
         .dark-mode .verbosity-label {
             color: #aaa;
         }
+
+        /* Screenshot blocker */
+        .screenshot-blocker {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 99999;
+            pointer-events: none;
+        }
+
+        .chessboard {
+            position: relative;
+            width: 100%;
+            height: 100%;
+        }
+
+        .chess-square {
+            position: absolute;
+        }
     </style>
 
     <link rel="stylesheet" href="modal.css">
@@ -828,7 +855,9 @@
 </head>
 <body>
     <div class="header">
-        <svg id="eye"></svg>
+        <div id="eye-container">
+            <svg id="eye"></svg>
+        </div>
         <div>
             <h1>Gamer's Remorse</h1>
             <div id="tagline"></div>
@@ -969,10 +998,6 @@
                 </div>
             </div>
         </div>
-    </div>
-
-    <div class="footer">
-        Made with 💊 by <a href="#">ritalin.js</a>
     </div>
 </body>
 </html>

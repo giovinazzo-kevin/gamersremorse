@@ -1164,10 +1164,207 @@ function setBarDensity(numBars = 51, gapRatio = 0.2) {
     state.barCount = numBars;
 }
 
+// === DEATH ANIMATIONS ===
+const deathAnimations = {
+    explode: doExplode,
+    fall: doFall,
+};
+
+function killEye(animation = 'fall') {
+    const eyeEl = document.getElementById('eye');
+    if (!eyeEl) return;
+    if (state.isDead) return;
+    
+    state.isDead = true;
+    
+    // Stare at player and play pre-death jingle
+    setExpression('shocked');
+    setPeeved(true, false, false, 0, 0, 10);
+    
+    const animFn = deathAnimations[animation] || deathAnimations.explode;
+    
+    if (typeof playPreDeathSound === 'function') {
+        playPreDeathSound(() => animFn(eyeEl));
+    } else {
+        setTimeout(() => animFn(eyeEl), 1000);
+    }
+}
+
+// For backwards compatibility
+function explodeEye() {
+    killEye('explode');
+}
+
+function doFall(eyeEl) {
+    const eyeContainer = document.getElementById('eye-container') || eyeEl.parentElement;
+    
+    // Play post-death sound
+    if (typeof playPostDeathSound === 'function') playPostDeathSound();
+    
+    // Hide overflow to prevent scrollbar
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    
+    // Mario death jump - up then down
+    let y = 0;
+    let vy = -4; // smaller jump
+    const gravity = 0.25;
+    let hangFrames = 20;
+    
+    eyeContainer.style.position = 'relative';
+    
+    function animateFall() {
+        if (hangFrames > 0 && vy >= 0) {
+            hangFrames--;
+        } else {
+            vy += gravity;
+            y += vy;
+        }
+        
+        eyeEl.style.transform = `translateY(${y}px)`;
+        
+        if (y < window.innerHeight) {
+            requestAnimationFrame(animateFall);
+        } else {
+            eyeEl.style.visibility = 'hidden';
+            eyeEl.style.transform = '';
+            document.body.style.overflow = originalOverflow;
+            showRespawnTimer(eyeContainer, eyeEl);
+        }
+    }
+    
+    requestAnimationFrame(animateFall);
+}
+
+function doExplode(eyeEl) {
+    const eyeContainer = document.getElementById('eye-container') || eyeEl.parentElement;
+    
+    // Get all the parts
+    const parts = eyeEl.querySelectorAll('circle, ellipse, path, rect, line');
+    const particles = [];
+    
+    // Get eye's bounding rect for positioning
+    const eyeRect = eyeEl.getBoundingClientRect();
+    const containerRect = eyeContainer.getBoundingClientRect();
+    
+    // Create explosion particles from each element
+    parts.forEach((part, i) => {
+        const clone = part.cloneNode(true);
+        const bbox = part.getBBox();
+        const cx = bbox.x + bbox.width / 2;
+        const cy = bbox.y + bbox.height / 2;
+        
+        // Random velocity away from center
+        const angle = Math.random() * Math.PI * 2;
+        const speed = 5 + Math.random() * 15;
+        const vx = Math.cos(angle) * speed;
+        const vy = Math.sin(angle) * speed;
+        const vr = (Math.random() - 0.5) * 30; // rotation velocity
+        
+        particles.push({ el: clone, x: cx, y: cy, vx, vy, vr, rotation: 0, opacity: 1 });
+    });
+    
+    // Hide original
+    eyeEl.style.visibility = 'hidden';
+    
+    // Create explosion container
+    const container = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    container.setAttribute('viewBox', eyeEl.getAttribute('viewBox'));
+    container.style.position = 'absolute';
+    container.style.top = '0';
+    container.style.left = '0';
+    container.style.width = '100%';
+    container.style.height = '100%';
+    container.style.pointerEvents = 'none';
+    container.style.overflow = 'visible';
+    container.id = 'eye-explosion';
+    
+    particles.forEach(p => container.appendChild(p.el));
+    eyeContainer.style.position = 'relative';
+    eyeContainer.style.overflow = 'visible';
+    eyeContainer.appendChild(container);
+    
+    // Animate explosion
+    let frame = 0;
+    const maxFrames = 60;
+    
+    function animateExplosion() {
+        frame++;
+        const progress = frame / maxFrames;
+        
+        particles.forEach(p => {
+            p.x += p.vx;
+            p.y += p.vy;
+            p.vy += 0.5; // gravity
+            p.rotation += p.vr;
+            p.opacity = 1 - progress;
+            
+            p.el.setAttribute('transform', `translate(${p.x}, ${p.y}) rotate(${p.rotation})`);
+            p.el.style.opacity = p.opacity;
+        });
+        
+        if (frame < maxFrames) {
+            requestAnimationFrame(animateExplosion);
+        } else {
+            container.remove();
+            showRespawnTimer(eyeContainer, eyeEl);
+        }
+    }
+    
+    // Play pow + post-death sound
+    if (typeof playPowSound === 'function') playPowSound();
+    if (typeof playPostDeathSound === 'function') playPostDeathSound();
+    
+    requestAnimationFrame(animateExplosion);
+}
+
+function showRespawnTimer(container, eyeEl) {
+    const timer = document.createElement('div');
+    timer.id = 'respawn-timer';
+    timer.style.cssText = `
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        font-family: monospace;
+        font-size: 48px;
+        color: #ff4444;
+        text-shadow: 0 0 10px #ff0000;
+        z-index: 100;
+    `;
+    container.appendChild(timer);
+    
+    let seconds = 10;
+    timer.textContent = seconds;
+    
+    const countdown = setInterval(() => {
+        seconds--;
+        timer.textContent = seconds;
+        
+        if (seconds <= 0) {
+            clearInterval(countdown);
+            timer.remove();
+            eyeEl.style.visibility = 'visible';
+            state.isDead = false;
+            
+            // Disappointed reaction with timeout
+            const reaction = Date.now();
+            state.lastReaction = reaction;
+            setExpression('disappointed');
+            setTimeout(() => {
+                if (state.lastReaction === reaction) {
+                    setExpression('neutral');
+                }
+            }, 5000);
+        }
+    }, 1000);
+}
+
 document.addEventListener('mousemove', onMouseMove);
 svg.addEventListener('click', () => {
     if (state.awake && state.canBlink) {
         blink();
+        playPowSound();
         state.poked = true;
         state.attentionThreshold *= state.patience;
 

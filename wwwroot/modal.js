@@ -1,4 +1,4 @@
-/* Modal JS - HTML/CSS Source Engine UI */
+﻿/* Modal JS - HTML/CSS Source Engine UI */
 
 let activeModal = null;
 
@@ -273,7 +273,7 @@ function buildInterfaceTab(content, refs) {
 function buildLockedTab(content) {
     const locked = document.createElement('div');
     locked.className = 'modal-locked-content';
-    locked.innerHTML = '<span class="lock-icon">🔒</span><p>Complete achievements to unlock</p>';
+    locked.innerHTML = '<span class="lock-icon">ðŸ”’</span><p>Complete achievements to unlock</p>';
     content.appendChild(locked);
 }
 
@@ -336,6 +336,44 @@ function buildAchievementsTab(content) {
     content.appendChild(container);
 }
 
+function buildAudioTab(content) {
+    const container = document.createElement('div');
+    container.className = 'audio-container';
+    
+    const header = document.createElement('div');
+    header.className = 'audio-header';
+    header.innerHTML = `
+        <span>Sound Test</span>
+        <span class="audio-hint">Discover sounds by using the site</span>
+    `;
+    container.appendChild(header);
+    
+    const sounds = typeof getUnlockedSounds === 'function' ? getUnlockedSounds() : [];
+    
+    for (const sound of sounds) {
+        const item = document.createElement('div');
+        item.className = 'audio-item' + (sound.unlocked ? '' : ' locked');
+        
+        if (sound.unlocked) {
+            item.innerHTML = `
+                <div class="audio-icon">${sound.icon}</div>
+                <div class="audio-name">${sound.name}</div>
+                <button class="audio-play">▶</button>
+            `;
+            item.querySelector('.audio-play').onclick = () => sound.play();
+        } else {
+            item.innerHTML = `
+                <div class="audio-icon">🔒</div>
+                <div class="audio-name">???</div>
+            `;
+        }
+        
+        container.appendChild(item);
+    }
+    
+    content.appendChild(container);
+}
+
 function openModal(title, options = {}) {
     if (activeModal) closeModal();
 
@@ -385,10 +423,7 @@ function openModal(title, options = {}) {
         else if (tabName === 'Interface') buildInterfaceTab(content, refs);
         else if (tabName === 'Achievements') buildAchievementsTab(content);
         else if (tabName === 'Audio') {
-            const placeholder = document.createElement('div');
-            placeholder.className = 'modal-locked-content';
-            placeholder.innerHTML = '<p style="color: #808080;">Audio settings coming soon...</p>';
-            content.appendChild(placeholder);
+            buildAudioTab(content);
         } else if (tabName === '???') buildLockedTab(content);
     };
 
@@ -408,7 +443,7 @@ function openModal(title, options = {}) {
         if (isLocked) {
             const lock = document.createElement('span');
             lock.className = 'tab-lock';
-            lock.textContent = '🔒';
+            lock.textContent = 'ðŸ”’';
             tabEl.appendChild(lock);
         }
         
@@ -660,17 +695,13 @@ const commands = {
         execute: () => {
             if (typeof achievementState !== 'undefined') {
                 const count = Object.keys(achievementState.unlocked).length;
-                achievementState.unlocked = {};
-                achievementState.darkModeEnabled = false;
-                achievementState.customizedEye = false;
-                achievementState.customTaglineSet = false;
-                achievementState.svCheatsEnabled = false;
-                achievementState.konamiEntered = false;
-                achievementState.iddqdEntered = false;
-                achievementState.idkfaEntered = false;
-                achievementState.xyzzyEntered = false;
-                achievementState.impulse101 = false;
-                achievementState.checkedEarly = false;
+                for (const key in achievementState) {
+                    if (key === 'unlocked') {
+                        achievementState.unlocked = {};
+                    } else {
+                        achievementState[key] = false;
+                    }
+                }
                 if (typeof saveAchievementState === 'function') saveAchievementState();
                 consolePrint(`Reset ${count} achievement${count !== 1 ? 's' : ''}.`, 'success');
             } else {
@@ -698,14 +729,41 @@ const commands = {
         description: 'Unbind all keys',
         hidden: true,
         execute: () => {
-            consolePrint("...please don't.");
-            if (typeof setExpression === 'function') setExpression('shocked');
+            const count = Object.keys(keyBindings).length;
+            if (count === 0) {
+                consolePrint('No bindings to remove.');
+            } else {
+                keyBindings = {};
+                consolePrint(`Removed ${count} binding${count !== 1 ? 's' : ''}.`);
+            }
         }
     },
     noclip: {
         description: 'Toggle noclip',
         hidden: true,
         execute: () => consolePrint("I can't let you do that.")
+    },
+    kill: {
+        description: 'Kill the eye',
+        hidden: true,
+        execute: () => {
+            if (typeof killEye === 'function') {
+                killEye();
+            } else {
+                consolePrint('Nothing to kill.');
+            }
+        }
+    },
+    explode: {
+        description: 'Explode the eye',
+        hidden: true,
+        execute: () => {
+            if (typeof killEye === 'function') {
+                killEye('explode');
+            } else {
+                consolePrint('Nothing to explode.');
+            }
+        }
     },
     impulse: {
         description: 'Impulse command',

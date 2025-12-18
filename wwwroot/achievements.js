@@ -1,6 +1,25 @@
 /* Achievements System - Steam-style unlocks */
 
 const ACHIEVEMENTS = {
+    // === BASIC PROGRESSION ===
+    first_analysis: {
+        id: 'first_analysis',
+        title: 'Under the Microscope',
+        description: 'Analyze your first game',
+        icon: '🔬',
+        hidden: false,
+        check: (state) => state.analyzedGame
+    },
+    
+    screenshot: {
+        id: 'screenshot',
+        title: 'Eye of the Beholder',
+        description: 'Take a screenshot',
+        icon: '📸',
+        hidden: false,
+        check: (state) => state.triedScreenshot
+    },
+    
     // === CUSTOMIZATION ===
     dark_mode: {
         id: 'dark_mode',
@@ -113,6 +132,8 @@ const ACHIEVEMENTS = {
 // === STATE ===
 let achievementState = {
     unlocked: {},           // id -> timestamp
+    analyzedGame: false,
+    triedScreenshot: false,
     darkModeEnabled: false,
     customizedEye: false,
     customTaglineSet: false,
@@ -190,6 +211,8 @@ function unlockAll() {
 }
 
 // === TOAST NOTIFICATION ===
+let activeToasts = [];
+
 function showAchievementToast(achievement) {
     const toast = document.createElement('div');
     toast.className = 'achievement-toast';
@@ -203,6 +226,11 @@ function showAchievementToast(achievement) {
         </div>
     `;
     
+    // Stack above existing toasts
+    const offset = activeToasts.length * 90; // toast height + gap
+    toast.style.bottom = `${20 + offset}px`;
+    
+    activeToasts.push(toast);
     document.body.appendChild(toast);
     
     // Play sound if available
@@ -213,7 +241,14 @@ function showAchievementToast(achievement) {
     // Remove after display time
     setTimeout(() => {
         toast.classList.add('hiding');
-        setTimeout(() => toast.remove(), 400);
+        setTimeout(() => {
+            toast.remove();
+            activeToasts = activeToasts.filter(t => t !== toast);
+            // Reposition remaining toasts
+            activeToasts.forEach((t, i) => {
+                t.style.bottom = `${20 + i * 90}px`;
+            });
+        }, 400);
     }, 4000);
 }
 
