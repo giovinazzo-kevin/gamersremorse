@@ -37,10 +37,10 @@ function quitToDesktop() {
             <svg id="eye" style="width: 1200px; height: 800px"></svg>
         </div>
     `;
-        window.svg = document.getElementById('eye');
+        svg = document.getElementById('eye');
         playRandomJingle();
         setBarDensity(151, -0.1, 1.1);
-        setEyePeeved(true, false, false, (Math.random() - 0.5), (Math.random() - 0.5), 4.5);
+        setPeeved(true, false, false, (Math.random() - 0.5), (Math.random() - 0.5), 4.5);
         setTimeout(() => {
             setExpression(expr);
             state.nextBlink
@@ -73,7 +73,7 @@ function getLoadingMessage() {
 
     // Filter based on unhinged state
     // ALL CAPS messages only allowed when unhinged
-    const isUnhinged = window.isEyeUnhinged?.() || false;
+    const isUnhinged = isUnhinged?.() || false;
     if (!isUnhinged) {
         pool = pool.filter(msg => msg !== msg.toUpperCase());
     }
@@ -106,7 +106,7 @@ async function analyze() {
     const appId = extractAppId(input);
     if (!appId) return alert('Invalid App ID');
 
-    window.setEyeExpression('neutral');
+    setExpression('neutral');
 
     // reset state
     cachedControversyHtml = null;
@@ -150,9 +150,7 @@ async function analyze() {
 
         // Check for sexual content (flag bit 3 = 8)
         const isSexual = (currentGameInfo.flags & 8) !== 0;
-        if (window.setEyeShy) {
-            window.setEyeShy(isSexual);
-        }
+        setExpression('flustered');
     }
 
     const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -171,13 +169,13 @@ async function analyze() {
         updateMetrics(snapshot);
         isFirstSnapshot = false;
 
-        if (window.setEyeLoading) window.setEyeLoading(true);
+        if (setLoading) setLoading(true);
     };
 
     isFirstSnapshot = true;
     ws.onclose = () => {
         isStreaming = false;
-        window.setEyeExpression('neutral');
+        setExpression('neutral');
 
         if (currentSnapshot) {
             const sampled = currentSnapshot.totalPositive + currentSnapshot.totalNegative;
@@ -191,7 +189,7 @@ async function analyze() {
             updateMetrics(currentSnapshot);
 
             // Compute tag timeline after analysis completes
-            if (window.Metrics) {
+            if (Metrics) {
                 const isFree = currentGameInfo?.isFree || false;
                 const isSexual = currentGameInfo?.flags ? (currentGameInfo.flags & 8) !== 0 : false;
                 const tagTimeline = Metrics.computeTimeline(currentSnapshot, 3, { isFree, isSexual });
@@ -204,7 +202,7 @@ async function analyze() {
             }
         }
 
-        if (window.setEyeLoading) window.setEyeLoading(false);
+        if (setLoading) setLoading(false);
         // Final metrics update triggers eye emotion
         if (currentMetrics) {
             updateEyeFromMetrics(currentMetrics);
@@ -686,11 +684,11 @@ function initTimeline() {
     timelineCtx = timelineCanvas.getContext('2d');
 
     resizeTimeline();
-    window.addEventListener('resize', resizeTimeline);
+    addEventListener('resize', resizeTimeline);
 
     timelineCanvas.addEventListener('mousedown', onTimelineMouseDown);
-    window.addEventListener('mousemove', onTimelineMouseMove);
-    window.addEventListener('mouseup', onTimelineMouseUp);
+    addEventListener('mousemove', onTimelineMouseMove);
+    addEventListener('mouseup', onTimelineMouseUp);
 }
 
 function resizeTimeline() {
@@ -998,7 +996,7 @@ function updateConvergence(current, last, snapshot) {
 }
 
 function updateMetrics(snapshot) {
-    if (!window.Metrics) return;
+    if (!Metrics) return;
 
     const filter = getSelectedMonths();
     const isFree = currentGameInfo?.isFree || false;
@@ -1157,34 +1155,26 @@ function updateTagTimeline(timeline) {
 }
 
 function updateEyeFromMetrics(metrics) {
-    if (!window.setEyeExpression) return;
-
     const tags = metrics.verdict.tags.map(t => t.id);
 
     // Pupil dilation for addictive games
-    if (window.setEyeDilation) {
-        window.setEyeDilation(tags.includes('ADDICTIVE') ? 1 : 0);
-    }
+    setDilation(tags.includes('ADDICTIVE') ? 1 : 0);
 
     // Unhinged mode for really bad games
-    const unhingedTags = ['PREDATORY', 'ENSHITTIFIED', 'PLAGUE', 'CURSED'];
-    const isUnhinged = unhingedTags.some(t => tags.includes(t)) ||
-                       (tags.includes('FLOP') && tags.includes('RETCONNED'));
-    if (window.setEyeUnhinged) {
-        window.setEyeUnhinged(isUnhinged);
-    }
+    const unhingedTags = ['PREDATORY', 'ENSHITTIFIED', 'PLAGUE', 'CURSED', 'FLOP'];
+    setUnhinged(unhingedTags.some(t => tags.includes(t)));
 
     // Priority-based expression
     if (tags.includes('PREDATORY') || tags.includes('REFUND_TRAP')) {
-        window.setEyeExpression('angry');
+        setExpression('angry');
     } else if (tags.includes('EXTRACTIVE') || tags.includes('STOCKHOLM')) {
-        window.setEyeExpression('suspicious');
+        setExpression('suspicious');
     } else if (tags.includes('FLOP') || tags.includes('DEAD')) {
-        window.setEyeExpression('mocking');
+        setExpression('mocking');
     } else if (tags.includes('HEALTHY') || tags.includes('HONEST')) {
-        window.setEyeExpression('neutral');
+        setExpression('neutral');
     } else {
-        window.setEyeExpression('neutral');
+        setExpression('neutral');
     }
 }
 
@@ -1770,4 +1760,4 @@ function displayControversyContext(contexts) {
     cachedControversyHtml = html;
 }
 
-document.addEventListener('click', window.onPageClick);
+document.addEventListener('click', onPageClick);

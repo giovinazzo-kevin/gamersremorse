@@ -4,7 +4,109 @@ let t = 0;
 let lastFrame = 0;
 let numBlinks = 0;
 
-// Shape functions - each returns 0-1 for a given normalized x position
+const state = {
+    // Iris
+    irisX: 0,
+    irisY: 0,
+    targetX: 0,
+    targetY: 0,
+    irisRadius: 0.15,
+    irisXOffset: 0,
+    irisYOffset: 0,
+
+    // Gaze
+    attention: 0,
+    gazeSpeed: 1.5,
+
+    // Lids - LIVE values
+    top: { shape: 'gaussian', params: { sigma: 1 }, maxHeight: 0.3 },
+    bottom: { shape: 'gaussian', params: { sigma: 1 }, maxHeight: 0.3 },
+    lashMultiplier: 1,
+
+    // Lerp targets (set by setExpression)
+    targetTop: { shape: 'gaussian', params: { sigma: 1 }, maxHeight: 0.3 },
+    targetBottom: { shape: 'gaussian', params: { sigma: 1 }, maxHeight: 0.3 },
+    targetIrisRadius: 0.15,
+    targetIrisXOffset: 0,
+    targetIrisYOffset: 0,
+    targetLashMultiplier: 1,
+
+    // Wave
+    topSampleOffset: 0,
+    bottomSampleOffset: 0,
+    topSampleSpeed: 0.1,
+    bottomSampleSpeed: -0.1,
+
+    // Cursor
+    cursorX: undefined,
+    cursorY: undefined,
+    lastCursorX: undefined,
+    lastCursorY: undefined,
+    svgWidth: 0,
+    svgHeight: 0,
+
+    // Blink
+    blink: 1,
+    blinkTarget: 1,
+    awake: false,
+    lastInteraction: 0,
+    canBlink: true,
+    nextBlinkTime: 0,
+    pendingDoubleBlink: false,
+
+    // Expression
+    currentExpr: 'neutral',
+    targetExpr: 'neutral',
+    exprProgress: 1,
+
+    // Dilation/Blush
+    dilation: 0,
+    targetDilation: 0,
+    blush: 0,
+    targetBlush: 0,
+
+    // Behavior flags
+    busy: false,
+    poked: false,
+    shy: false,
+    engrossed: false,
+    peeved: false,
+    unhinged: false,
+    corneredTime: 0,
+    lookingAtGraph: false,
+    beingCornered: false,
+
+    // Visual params
+    barCount: 20,
+    gapRatio: 0.2,
+    targetWidthRatio: 1.2,
+    maxLashLength: 0.04,
+    maxIrisOffsetX: 0.26,
+    maxIrisOffsetY: 0.12,
+    irisDilation: 0.03,
+    noiseTop: 0,
+    noiseBottom: 0,
+
+    // Behavior params
+    driftStrength: 0.0005,
+    damping: 0.01,
+    boredDamping: 0.5,
+    attentionDecay: 0.99,
+    attentionGain: 0.01,
+    attentionThreshold: 300,
+    patience: 0.9,
+    boredThreshold: 0.5,
+    blinkSpeed: 30,
+    openSpeed: 3,
+    sleepTimeout: 30,
+    dozeSpeed: 0.5,
+    blinkInterval: 4,
+    blinkVariance: 2,
+    doubleBlinkChance: 0.2,
+    expressionSpeed: 2,
+};
+
+// Shape functions
 const shapeFunctions = {
     gaussian: (x, params) => {
         const sigma = params.sigma ?? 1;
@@ -44,6 +146,7 @@ const shapeFunctions = {
     },
 };
 
+// Expression DEFINITIONS - just data, applied via setExpression
 const expressions = {
     neutral: {
         top: { shape: 'gaussian', params: { sigma: 1 }, maxHeight: 0.3 },
@@ -58,6 +161,10 @@ const expressions = {
         bottomSampleSpeed: 0.1,
         targetWidthRatio: 1.2,
         driftStrength: 0.005,
+        shy: false,
+        engrossed: false,
+        corneredTime: 0,
+        targetBlush: 0,
         update: (dt) => { },
     },
     suspicious: {
@@ -92,21 +199,18 @@ const expressions = {
 
             let progress = Math.pow((lfo0 + 1) / 2, 3);
 
-            // smooth blend factor - 0 = scanning, 1 = focused
             const raw = Math.max(0, Math.min(1, (progress - 0.45) / 0.1));
-            const blend = raw * raw * (3 - 2 * raw); // smoothstep
+            const blend = raw * raw * (3 - 2 * raw);
             const scanWeight = 1 - blend;
 
             state.dilation = -lfo2 / 4 - progress;
 
-            // iris movement fades out as blend increases
             state.irisX = lfo1 * scanWeight;
             state.irisY = lfo2 * scanWeight;
 
-            // all params lerp based on blend
-            expressions['reading'].lashMultiplier = lerp(0.3, 2, blend);
-            expressions['reading'].top.maxHeight = lerp(0.40, 0.10, blend);
-            expressions['reading'].bottom.maxHeight = lerp(0.45, 0.10, blend);
+            state.lashMultiplier = lerp(0.3, 2, blend);
+            state.top.maxHeight = lerp(0.40, 0.10, blend);
+            state.bottom.maxHeight = lerp(0.45, 0.10, blend);
 
             state.driftStrength = blend / 4;
             state.barCount = Math.floor(lfo1 * 10) + 30;
@@ -166,8 +270,8 @@ const expressions = {
         bottomSampleSpeed: -0.1,
         driftStrength: 0.05,
         update: (dt) => {
-            expressions['mocking'].bottom.params.intensity = Math.sin(t * 10) / 5;
-            expressions['mocking'].bottom.params.base = (Math.sin(t * 16) + 1) / 4 + 0.25;
+            state.bottom.params.intensity = Math.sin(t * 10) / 5;
+            state.bottom.params.base = (Math.sin(t * 16) + 1) / 4 + 0.25;
         },
     },
     flustered: {
@@ -178,92 +282,81 @@ const expressions = {
         irisXOffset: 0,
         lashMultiplier: 2.0,
         driftStrength: 0.5,
-        update: (dt) => { },
+        shy: true,
+        engrossed: false,
+        corneredTime: 0,
+        targetBlush: 1,
+        update: (dt) => {
+            if (state.beingCornered) {
+                state.corneredTime += dt * 1000;
+
+                if (state.corneredTime >= 5000) {
+                    state.shy = false;
+                    state.engrossed = true;
+                    state.targetBlush = 0.3;
+                    state.targetDilation = 0.8;
+                    setExpression('neutral');
+                    return;
+                }
+            }
+
+            if (state.beingCornered) {
+                state.targetDilation = Math.min(1.5, state.targetDilation + dt * 2);
+                setExpression('shocked');
+            } else if (state.lookingAtGraph) {
+                state.targetDilation = 1;
+                setExpression('shocked');
+            } else {
+                state.targetDilation = 0;
+            }
+        },
     },
 };
 
-const state = {
-    irisX: 0,
-    irisY: 0,
-    targetX: 0,
-    targetY: 0,
-    attention: 0,
-    gazeSpeed: 1.5,
-
-    topSampleOffset: 0,
-    bottomSampleOffset: 0,
-    topSampleSpeed: 0.1,
-    bottomSampleSpeed: -0.1,
-
-    cursorX: undefined,
-    cursorY: undefined,
-    lastCursorX: undefined,
-    lastCursorY: undefined,
-    blink: 1,
-    blinkTarget: 1,
-    awake: false,
-    lastInteraction: 0,
-    canBlink: true,
-    nextBlinkTime: 0,
-    pendingDoubleBlink: false,
-    busy: false,
-    poked: false,
-    currentExpr: 'neutral',
-    targetExpr: 'neutral',
-    exprProgress: 1,
-    lerpedExpr: null,
-    dilation: 0,
-    targetDilation: 0,
-    shy: false,
-    blush: 0,
-    targetBlush: 0,
-    engrossed: false,
-    peeved: false,
-    corneredTime: 0,
-    lookingAtGraph: false,
-    beingCornered: false,
-
-    barCount: 20,
-    gapRatio: 0.2,
-    targetWidthRatio: 1.2,
-    maxLashLength: 0.04,
-    maxIrisOffsetX: 0.26,
-    maxIrisOffsetY: 0.12,
-    irisDilation: 0.03,
-    driftStrength: 0.0005,
-    damping: 0.01,
-    boredDamping: 0.5,
-    attentionDecay: 0.99,
-    attentionGain: 0.01,
-    attentionThreshold: 300,
-    patience: 0.9,
-    boredThreshold: 0.5,
-    blinkSpeed: 30,
-    openSpeed: 3,
-    sleepTimeout: 30,
-    dozeSpeed: 0.5,
-    blinkInterval: 4,
-    blinkVariance: 2,
-    doubleBlinkChance: 0.2,
-    expressionSpeed: 2,
-    noiseTop: 0,
-    noiseBottom: 0,
-};
+function deepCopy(obj) {
+    return JSON.parse(JSON.stringify(obj));
+}
 
 function setExpression(name) {
     if (!expressions[name]) return;
+    if (state.targetExpr === name && state.exprProgress > 0.5) return; // already going there
+
+    // Store current state as "from" values
+    state.fromTop = deepCopy(state.top);
+    state.fromBottom = deepCopy(state.bottom);
+    state.fromIrisRadius = state.irisRadius;
+    state.fromIrisXOffset = state.irisXOffset;
+    state.fromIrisYOffset = state.irisYOffset;
+    state.fromLashMultiplier = state.lashMultiplier;
 
     state.currentExpr = state.targetExpr;
     state.targetExpr = name;
     state.exprProgress = 0;
 
-    // Auto-apply any state-like properties from expression
-    const expr = expressions[name];
-    for (const key of Object.keys(expr)) {
-        if (key in state) {
-            state[key] = expr[key];
+    // Apply non-lerped properties immediately from neutral first, then expression
+    const applyImmediate = (expr) => {
+        for (const key of Object.keys(expr)) {
+            if (key === 'top' || key === 'bottom' || key === 'update') continue;
+            if (key === 'irisRadius' || key === 'irisXOffset' || key === 'irisYOffset' || key === 'lashMultiplier') continue;
+            if (key in state) {
+                state[key] = expr[key];
+            }
         }
+    };
+
+    applyImmediate(expressions['neutral']);
+    if (name !== 'neutral') {
+        applyImmediate(expressions[name]);
     }
+
+    // Set lerp targets
+    const expr = expressions[name];
+    state.targetTop = deepCopy(expr.top);
+    state.targetBottom = deepCopy(expr.bottom);
+    state.targetIrisRadius = expr.irisRadius;
+    state.targetIrisXOffset = expr.irisXOffset;
+    state.targetIrisYOffset = expr.irisYOffset;
+    state.targetLashMultiplier = expr.lashMultiplier;
 }
 
 function enableBlinking() {
@@ -289,42 +382,49 @@ function easeInOut(t) {
     return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
 }
 
-function updateShyState(dt) {
-    if (!state.shy) return;
-
-    if (state.beingCornered) {
-        state.corneredTime += dt * 1000;
-
-        if (state.corneredTime >= 5000) {
-            state.shy = false;
-            state.engrossed = true;
-            state.targetBlush = 0.3;
-            state.targetDilation = 0.8;
-            setExpression('neutral');
-            return;
-        }
+function lerpParams(from, to, t) {
+    const result = {};
+    const allKeys = new Set([...Object.keys(from), ...Object.keys(to)]);
+    for (const key of allKeys) {
+        const a = from[key] ?? 0;
+        const b = to[key] ?? 0;
+        result[key] = lerp(a, b, t);
     }
-
-    if (state.beingCornered) {
-        state.targetDilation = Math.min(1.5, state.targetDilation + dt * 2);
-        setExpression('shocked');
-    } else if (state.lookingAtGraph) {
-        state.targetDilation = 1;
-        setExpression('shocked');
-    } else {
-        state.targetDilation = 0;
-        setExpression('flustered');
-    }
+    return result;
 }
 
 function updateExpression(dt) {
     if (state.exprProgress < 1) {
         state.exprProgress = Math.min(1, state.exprProgress + state.expressionSpeed * dt);
+
+        const t = easeInOut(state.exprProgress);
+
+        // Lerp scalar values
+        state.irisRadius = lerp(state.fromIrisRadius, state.targetIrisRadius, t);
+        state.irisXOffset = lerp(state.fromIrisXOffset, state.targetIrisXOffset, t);
+        state.irisYOffset = lerp(state.fromIrisYOffset, state.targetIrisYOffset, t);
+        state.lashMultiplier = lerp(state.fromLashMultiplier, state.targetLashMultiplier, t);
+
+        // Lerp lid heights
+        state.top.maxHeight = lerp(state.fromTop.maxHeight, state.targetTop.maxHeight, t);
+        state.bottom.maxHeight = lerp(state.fromBottom.maxHeight, state.targetBottom.maxHeight, t);
+
+        // Lerp shape params
+        state.top.params = lerpParams(state.fromTop.params, state.targetTop.params, t);
+        state.bottom.params = lerpParams(state.fromBottom.params, state.targetBottom.params, t);
+
+        // Shape names snap at halfway
+        if (t >= 0.5) {
+            state.top.shape = state.targetTop.shape;
+            state.bottom.shape = state.targetBottom.shape;
+        }
     }
+
     const dilationSpeed = 2;
     state.dilation += (state.targetDilation - state.dilation) * dilationSpeed * dt;
     const blushSpeed = 3;
     state.blush += (state.targetBlush - state.blush) * blushSpeed * dt;
+
     expressions[state.targetExpr].update(dt);
 }
 
@@ -391,7 +491,7 @@ function updateBlink(dt) {
         setRandomTagline(numBlinks++);
     }
 
-    tagline.style.opacity = 1 - state.blink;
+    if (tagline) tagline.style.opacity = 1 - state.blink;
 }
 
 function drawBar(x, barHeight, direction, color, barWidth, irisX, irisY, irisRadius) {
@@ -472,19 +572,15 @@ function draw() {
 
     const { barCount, gapRatio, maxLashLength, irisDilation, targetWidthRatio } = state;
 
-    const currentExpr = expressions[state.currentExpr];
-    const targetExpr = expressions[state.targetExpr];
-    const t = easeInOut(state.exprProgress);
-
-    // Lerp scalar values
-    const baseIrisRadius = lerp(currentExpr.irisRadius, targetExpr.irisRadius, t);
+    // All values come from state now
+    const baseIrisRadius = state.irisRadius;
     const dilationBonus = state.dilation * 0.08;
     const irisRadius = baseIrisRadius + dilationBonus;
-    const irisXOffset = lerp(currentExpr.irisXOffset, targetExpr.irisXOffset, t);
-    const irisYOffset = lerp(currentExpr.irisYOffset, targetExpr.irisYOffset, t);
-    const lashMultiplier = lerp(currentExpr.lashMultiplier, targetExpr.lashMultiplier, t);
-    const topMaxHeight = lerp(currentExpr.top.maxHeight, targetExpr.top.maxHeight, t);
-    const bottomMaxHeight = lerp(currentExpr.bottom.maxHeight, targetExpr.bottom.maxHeight, t);
+    const irisXOffset = state.irisXOffset;
+    const irisYOffset = state.irisYOffset;
+    const lashMultiplier = state.lashMultiplier;
+    const topMaxHeight = state.top.maxHeight;
+    const bottomMaxHeight = state.bottom.maxHeight;
 
     // Blink affects scale
     const scaleY = 1 - state.blink;
@@ -499,7 +595,7 @@ function draw() {
     const irisXPx = (svg.clientWidth / 2) + (state.irisX + irisXOffset) * maxIrisOffsetXPx;
     const irisYPx = (svg.clientHeight / 2) + (state.irisY + irisYOffset) * maxIrisOffsetYPx * scaleY;
 
-    // Bar spacing - derived from bar count to maintain aspect ratio
+    // Bar spacing
     const totalTargetWidth = svg.clientWidth * targetWidthRatio;
     const spacing = totalTargetWidth / barCount;
     const barWidthPx = spacing * (1 / (1 + gapRatio));
@@ -519,30 +615,21 @@ function draw() {
     const tintedNegative = lerpColor(colorNegative, blushColor, blushAmount);
 
     for (let i = 0; i < barCount; i++) {
-        // Bar POSITION moves with offset (per lid)
         const topBarPosition = (i - barCount / 2) + state.topSampleOffset;
         const bottomBarPosition = (i - barCount / 2) + state.bottomSampleOffset;
 
-        // Wrap bar positions so bars cycle around
         const wrappedTopPosition = ((topBarPosition % barCount) + barCount) % barCount - barCount / 2;
         const wrappedBottomPosition = ((bottomBarPosition % barCount) + barCount) % barCount - barCount / 2;
 
-        // Bar's X pixel positions
         const topX = startX + (wrappedTopPosition + barCount / 2) * spacing + spacing / 2;
         const bottomX = startX + (wrappedBottomPosition + barCount / 2) * spacing + spacing / 2;
 
-        // Sample the FIXED curve at wrapped positions
         const topNormalizedX = wrappedTopPosition / (barCount / 6);
         const bottomNormalizedX = wrappedBottomPosition / (barCount / 6);
 
-        // Get shape values - curve is FIXED, bars slide through it
-        const currentTopShape = shapeFunctions[currentExpr.top.shape](topNormalizedX, currentExpr.top.params);
-        const targetTopShape = shapeFunctions[targetExpr.top.shape](topNormalizedX, targetExpr.top.params);
-        const topShape = lerp(currentTopShape, targetTopShape, t);
-
-        const currentBottomShape = shapeFunctions[currentExpr.bottom.shape](bottomNormalizedX, currentExpr.bottom.params);
-        const targetBottomShape = shapeFunctions[targetExpr.bottom.shape](bottomNormalizedX, targetExpr.bottom.params);
-        const bottomShape = lerp(currentBottomShape, targetBottomShape, t);
+        // Use state.top and state.bottom directly
+        const topShape = shapeFunctions[state.top.shape](topNormalizedX, state.top.params);
+        const bottomShape = shapeFunctions[state.bottom.shape](bottomNormalizedX, state.bottom.params);
 
         const topNoise = state.noiseTop * Math.random();
         const botNoise = state.noiseBottom * Math.random();
@@ -550,7 +637,6 @@ function draw() {
         const topHeight = topShape * topMaxHeight * svg.clientHeight * scaleY - topNoise * scaleY;
         const bottomHeight = bottomShape * bottomMaxHeight * svg.clientHeight * scaleY - botNoise * scaleY;
 
-        // Lash length based on shape
         const lashLengthTop = topShape * maxLashPx;
         const lashLengthBottom = bottomShape * maxLashPx;
 
@@ -683,7 +769,7 @@ function onMouseMove(e) {
     const rect = svg.getBoundingClientRect();
     state.cursorX = e.clientX - rect.left;
     state.cursorY = e.clientY - rect.top;
-    state.svgWidth = rect.width;   // store these
+    state.svgWidth = rect.width;
     state.svgHeight = rect.height;
 }
 
@@ -722,7 +808,6 @@ function tick(timestamp) {
 
         updateCursorTracking(dt);
         updateIrisPosition(dt);
-        updateShyState(dt);
         draw();
         lastFrame = timestamp;
     }
@@ -782,21 +867,6 @@ function setPeeved(isPeeved, snap, canBlink, targetX = 0, targetY = 0, gazeSpeed
     }
 }
 
-function setShy(isShy) {
-    if (isShy) {
-        state.shy = true;
-        state.engrossed = false;
-        state.corneredTime = 0;
-        state.targetBlush = 1;
-        setExpression('flustered');
-    } else {
-        state.shy = false;
-        state.engrossed = false;
-        state.corneredTime = 0;
-        state.targetBlush = 0;
-    }
-}
-
 function setUnhinged(isUnhinged) {
     state.unhinged = isUnhinged;
 }
@@ -809,19 +879,3 @@ function setBarDensity(numBars = 51, gapRatio = 0.2) {
     state.gapRatio = gapRatio;
     state.barCount = numBars;
 }
-
-// Expose for other modules
-window.tick = tick;
-window.wake = wake;
-window.snooze = snooze;
-window.scheduleNextBlink = scheduleNextBlink;
-window.setBarDensity = setBarDensity;
-window.setEyeExpression = setExpression;
-window.setEyeDilation = setDilation;
-window.setEyeLoading = setLoading;
-window.setEyeShy = setShy;
-window.setEyeUnhinged = setUnhinged;
-window.setEyePeeved = setPeeved;
-window.isEyeUnhinged = isUnhinged;
-window.expressions = expressions;
-window.onPageClick = onPageClick;
