@@ -36,7 +36,7 @@ const config = {
 const shapeFunctions = {
     gaussian: (x, params) => {
         const sigma = params.sigma ?? 1;
-        return Math.exp(-(x * x) / (2 * sigma * sigma));
+        return Math.exp(-(x * x) / (2 * sigma * sigma)) + (params.c ?? 0);
     },
     flat: (x, params) => {
         const falloff = params.falloff ?? 0.3;
@@ -86,7 +86,7 @@ const expressions = {
         update: (dt) => { },
     },
     suspicious: {
-        top: { shape: 'flat', params: { falloff: 0.2 }, maxHeight: 0.12 },
+        top: { shape: 'flat', params: { falloff: 0.7 }, maxHeight: 0.12 },
         bottom: { shape: 'raised', params: { sigma: 1.2, base: 0.6 }, maxHeight: 0.32 },
         irisRadius: 0.11,
         irisYOffset: 0.05,
@@ -108,14 +108,24 @@ const expressions = {
         noiseBottom: 1,
         update: (dt) => { },
     },
-    shocked: {
-        top: { shape: 'gaussian', params: { sigma: 1.3 }, maxHeight: 0.45 },
-        bottom: { shape: 'gaussian', params: { sigma: 1.3 }, maxHeight: 0.45 },
+    addicted: {
+        top: { shape: 'gaussian', params: { sigma: 1 }, maxHeight: 0.2 },
+        bottom: { shape: 'gaussian', params: { sigma: 1 }, maxHeight: 0.2 },
         irisRadius: 0.22,
         irisYOffset: 0,
         irisXOffset: 0,
         lashMultiplier: 0.5,
-        targetWidthRatio: 1.2,
+        targetWidthRatio: 1,
+        update: (dt) => { },
+    },
+    shocked: {
+        top: { shape: 'gaussian', params: { sigma: 1.2, c: -1 }, maxHeight: 0.5 },
+        bottom: { shape: 'gaussian', params: { sigma: 1.2, c: -1 }, maxHeight: 0.5 },
+        irisRadius: 0.22,
+        irisYOffset: 0,
+        irisXOffset: 0,
+        lashMultiplier: 0.5,
+        targetWidthRatio: 1,
         update: (dt) => { },
     },
     angry: {
@@ -146,7 +156,7 @@ const expressions = {
         topSampleSpeed: -0.1,
         bottomSampleSpeed: -0.1,
         update: (dt) => {
-            expressions['mocking'].bottom.params.intensity = Math.sin(t * 17) / 5;
+            expressions['mocking'].bottom.params.intensity = Math.sin(t * 10) / 5;
             expressions['mocking'].bottom.params.base = (Math.sin(t * 16) + 1) / 4 + 0.25;
         },
     },
@@ -754,9 +764,10 @@ function isUnhinged() {
     return state.unhinged || false;
 }
 
-function setBarDensity(numBars = 51, gapRatio = 0.2) {
+function setBarDensity(numBars = 51, gapRatio = 0.2, variance = 0.8) {
     config.gapRatio = gapRatio;
     config.barCount = numBars;
+    config.barThicknessVariance = variance;
 }
 
 // Expose for other modules
