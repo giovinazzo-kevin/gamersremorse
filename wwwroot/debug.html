@@ -1,0 +1,489 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+    <title>A-eye Debug Console</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        :root {
+            --color-positive: #54bebe;
+            --color-negative: #c80064;
+            --color-uncertain: #666666;
+            --color-accent: #333333;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        html, body {
+            height: 100vh;
+            background: #1a1a1a;
+            font-family: Verdana, Arial, sans-serif;
+            font-size: 11px;
+            color: #ccc;
+        }
+
+        .debug-layout {
+            display: grid;
+            grid-template-columns: 300px 1fr;
+            height: 100vh;
+        }
+
+        .controls {
+            background: #252525;
+            padding: 15px;
+            overflow-y: auto;
+            border-right: 2px solid #333;
+        }
+
+        .eye-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #000;
+        }
+
+        #eye {
+            width: 100%;
+            height: 100%;
+            max-width: 1200px;
+            max-height: 800px;
+        }
+
+        h1 {
+            color: var(--color-positive);
+            font-size: 14px;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #444;
+        }
+
+        .section {
+            margin-bottom: 20px;
+        }
+
+        .section-header {
+            color: var(--color-negative);
+            font-size: 10px;
+            text-transform: uppercase;
+            margin-bottom: 10px;
+            letter-spacing: 1px;
+        }
+
+        .btn-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 5px;
+        }
+
+        button {
+            background: #333;
+            color: #ccc;
+            border: 1px solid #444;
+            padding: 8px 10px;
+            font-size: 10px;
+            cursor: pointer;
+            font-family: Verdana, Arial, sans-serif;
+            transition: all 0.1s;
+        }
+
+            button:hover {
+                background: #444;
+                border-color: var(--color-positive);
+            }
+
+            button.active {
+                background: var(--color-positive);
+                color: #000;
+            }
+
+        .slider-row {
+            margin-bottom: 10px;
+        }
+
+            .slider-row label {
+                display: block;
+                margin-bottom: 4px;
+                color: #888;
+            }
+
+            .slider-row input[type="range"] {
+                width: 100%;
+            }
+
+        .slider-value {
+            float: right;
+            color: var(--color-positive);
+            font-family: monospace;
+        }
+
+        .toggle-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 8px;
+        }
+
+            .toggle-row input[type="checkbox"  autocomplete="off"] {
+                accent-color: var(--color-positive);
+            }
+
+        .jingle-btn {
+            width: 100%;
+            background: #2a2a3a;
+            border-color: #4a4a6a;
+        }
+
+            .jingle-btn:hover {
+                background: #3a3a5a;
+            }
+
+        #tagline-display {
+            background: #000;
+            padding: 10px;
+            margin-top: 10px;
+            text-align: center;
+            font-size: 9px;
+            font-variant: small-caps;
+            min-height: 2em;
+        }
+
+            #tagline-display.positive {
+                color: var(--color-positive);
+            }
+
+            #tagline-display.negative {
+                color: var(--color-negative);
+            }
+    </style>
+</head>
+<body>
+    <div class="debug-layout">
+        <div class="controls">
+            <h1>🔧 A-eye Debug Console</h1>
+
+            <!-- EXPRESSIONS -->
+            <div class="section">
+                <div class="section-header">Expressions</div>
+                <div class="btn-grid" id="expr-buttons"></div>
+            </div>
+
+            <!-- EYE -->
+            <div class="section">
+                <div class="section-header">Eye</div>
+                <div class="slider-row">
+                    <label>Scale <span class="slider-value" id="scale-val">100%</span></label>
+                    <input type="range" id="scale" min="5" max="100" step="1" value="100">
+                </div>
+                <div class="slider-row">
+                    <label>Bar Count <span class="slider-value" id="bar-count-val">20</span></label>
+                    <input type="range" id="bar-count" min="8" max="120" step="1" value="20">
+                </div>
+                <div class="slider-row">
+                    <label>Gap Ratio <span class="slider-value" id="gap-ratio-val">0.2</span></label>
+                    <input type="range" id="gap-ratio" min="0" max="1" step="0.05" value="0.2">
+                </div>
+            </div>
+
+            <!-- PUPIL -->
+            <div class="section">
+                <div class="section-header">Pupil</div>
+                <div class="slider-row">
+                    <label>Dilation <span class="slider-value" id="dilation-val">0.0</span></label>
+                    <input type="range" id="dilation" min="-1" max="1" step="0.05" value="0">
+                </div>
+                <div class="slider-row">
+                    <label>Iris X Offset <span class="slider-value" id="iris-x-val">0.0</span></label>
+                    <input type="range" id="iris-x" min="-1" max="1" step="0.05" value="0">
+                </div>
+                <div class="slider-row">
+                    <label>Iris Y Offset <span class="slider-value" id="iris-y-val">0.0</span></label>
+                    <input type="range" id="iris-y" min="-1" max="1" step="0.05" value="0">
+                </div>
+            </div>
+
+            <!-- WAVE -->
+            <div class="section">
+                <div class="section-header">Traveling Wave</div>
+                <div class="slider-row">
+                    <label>Top Speed <span class="slider-value" id="top-speed-val">-0.1</span></label>
+                    <input type="range" id="top-speed" min="-1" max="1" step="0.1" value="-0.1">
+                </div>
+                <div class="slider-row">
+                    <label>Bottom Speed <span class="slider-value" id="bottom-speed-val">0.1</span></label>
+                    <input type="range" id="bottom-speed" min="-1" max="1" step="0.1" value="0.1">
+                </div>
+            </div>
+
+            <!-- STATE -->
+            <div class="section">
+                <div class="section-header">State</div>
+                <div class="toggle-row">
+                    <input type="checkbox" autocomplete="off" id="shy-toggle">
+                    <label for="shy-toggle">Shy (sexual content)</label>
+                </div>
+                <div class="toggle-row">
+                    <input type="checkbox" autocomplete="off" id="unhinged-toggle">
+                    <label for="unhinged-toggle">Unhinged (predatory)</label>
+                </div>
+                <div class="toggle-row">
+                    <input type="checkbox" autocomplete="off" id="loading-toggle">
+                    <label for="loading-toggle">Loading (reading)</label>
+                </div>
+                <div class="toggle-row">
+                    <input type="checkbox" autocomplete="off" id="blink-toggle" checked>
+                    <label for="blink-toggle">Blinking</label>
+                </div>
+                <div class="toggle-row">
+                    <input type="checkbox" autocomplete="off" id="track-toggle" checked>
+                    <label for="track-toggle">Cursor tracking</label>
+                </div>
+                <div class="toggle-row">
+                    <input type="checkbox" autocomplete="off" id="sleep-toggle">
+                    <label for="sleep-toggle">Auto-sleep</label>
+                </div>
+            </div>
+
+            <!-- BLINK -->
+            <div class="section">
+                <div class="section-header">Blink</div>
+                <div class="btn-grid">
+                    <button id="blink-btn">Blink</button>
+                    <button id="sleep-btn">Sleep</button>
+                    <button id="wake-btn">Wake</button>
+                    <button id="poke-btn">Poke (anger)</button>
+                </div>
+            </div>
+
+            <!-- JINGLES -->
+            <div class="section">
+                <div class="section-header">Audio</div>
+                <div class="btn-grid">
+                    <button class="jingle-btn" onclick="playRandomJingle()">🎵 Random</button>
+                    <button class="jingle-btn" onclick="playZeldaSecretJingle()">🎵 Zelda</button>
+                </div>
+            </div>
+
+            <!-- TAGLINE -->
+            <div class="section">
+                <div class="section-header">Tagline</div>
+                <div class="btn-grid">
+                    <button id="tag-positive">Positive</button>
+                    <button id="tag-negative">Negative</button>
+                </div>
+                <div id="tagline-display">
+                    <div id="tagline"></div>
+                </div>
+            </div>
+
+            <!-- STATE READOUT - add after the other sections in .controls -->
+            <div class="section">
+                <div class="section-header">Live State</div>
+                <pre id="state-readout" style="
+                    background: #000;
+                    padding: 10px;
+                    font-family: monospace;
+                    font-size: 9px;
+                    color: #0f0;
+                    overflow: hidden;
+                    line-height: 1.4;
+                "></pre>
+            </div>
+        </div>
+
+        <div class="eye-container">
+            <svg id="eye"></svg>
+        </div>
+    </div>
+
+    <script src="txt.js"></script>
+    <script src="sfx.js"></script>
+    <script src="eye.js"></script>
+    <script>
+        // Initialize
+        window.svg = document.getElementById('eye');
+        state.sleepTimeout = Infinity;
+        wake();
+
+        // Expression buttons
+        const exprGrid = document.getElementById('expr-buttons');
+        for (const name of Object.keys(expressions)) {
+            const btn = document.createElement('button');
+            btn.textContent = name;
+            btn.addEventListener('click', () => {
+                exprGrid.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                setExpression(name);
+            });
+            exprGrid.appendChild(btn);
+        }
+
+        // Dilation
+        document.getElementById('dilation').addEventListener('input', (e) => {
+            const val = parseFloat(e.target.value);
+            document.getElementById('dilation-val').textContent = val.toFixed(2);
+            setDilation(val);
+        });
+
+        // Iris position (manual override)
+        document.getElementById('iris-x').addEventListener('input', (e) => {
+            const val = parseFloat(e.target.value);
+            document.getElementById('iris-x-val').textContent = val.toFixed(2);
+            state.targetX = val;
+            state.attention = 1;
+        });
+
+        document.getElementById('iris-y').addEventListener('input', (e) => {
+            const val = parseFloat(e.target.value);
+            document.getElementById('iris-y-val').textContent = val.toFixed(2);
+            state.targetY = val;
+            state.attention = 1;
+        });
+
+        // Wave speeds
+        document.getElementById('top-speed').addEventListener('input', (e) => {
+            const val = parseFloat(e.target.value);
+            document.getElementById('top-speed-val').textContent = val.toFixed(1);
+            state.topSampleSpeed = val;
+        });
+
+        document.getElementById('bottom-speed').addEventListener('input', (e) => {
+            const val = parseFloat(e.target.value);
+            document.getElementById('bottom-speed-val').textContent = val.toFixed(1);
+            state.bottomSampleSpeed = val;
+        });
+
+        // Toggles
+        document.getElementById('shy-toggle').addEventListener('change', (e) => {
+            setShy(e.target.checked);
+        });
+
+        document.getElementById('unhinged-toggle').addEventListener('change', (e) => {
+            setUnhinged(e.target.checked);
+        });
+
+        document.getElementById('loading-toggle').addEventListener('change', (e) => {
+            setLoading(e.target.checked);
+        });
+
+        // Blink controls
+        document.getElementById('blink-btn').addEventListener('click', () => blink());
+        document.getElementById('sleep-btn').addEventListener('click', () => snooze());
+        document.getElementById('wake-btn').addEventListener('click', () => wake());
+        document.getElementById('poke-btn').addEventListener('click', () => {
+            blink();
+            state.poked = true;
+            state.attentionThreshold *= state.patience;
+            if (state.attentionThreshold < 10) {
+                setPeeved(true, true, false, 0, -0.4);
+                setExpression('angry');
+            }
+        });
+
+        // Tagline controls
+        const tagDisplay = document.getElementById('tagline-display');
+
+        document.getElementById('tag-positive').addEventListener('click', () => {
+            setRandomTagline(0);
+        });
+        document.getElementById('tag-negative').addEventListener('click', () => {
+            setRandomTagline(1);
+        });
+
+        // Add to the script section
+        function updateStateReadout() {
+            const el = document.getElementById('state-readout');
+            if (!el) return;
+
+            el.textContent = `attention: ${state.attention.toFixed(3)}
+                targetX/Y: ${state.targetX.toFixed(2)}, ${state.targetY.toFixed(2)}
+                irisX/Y: ${state.irisX.toFixed(2)}, ${state.irisY.toFixed(2)}
+                targetDilation: ${state.targetDilation}
+                dilation: ${state.dilation}
+                cursorX/Y: ${(state.cursorX || 0).toFixed(0)}, ${(state.cursorY || 0).toFixed(0)}
+
+                awake: ${state.awake}
+                peeved: ${state.peeved}
+                engrossed: ${state.engrossed}
+                shy: ${state.shy}
+                busy: ${state.busy}
+
+                blink: ${state.blink.toFixed(2)}
+                blinkTarget: ${state.blinkTarget}
+                dilation: ${state.dilation.toFixed(2)}
+
+                expression: ${state.currentExpr} → ${state.targetExpr}
+                exprProgress: ${state.exprProgress.toFixed(2)}
+
+                attentionThreshold: ${state.attentionThreshold.toFixed(0)}`;
+        }
+
+        // call it every frame - hook into existing tick or setInterval
+        setInterval(updateStateReadout, 100);
+
+        // Add to the script section
+        document.getElementById('blink-toggle').addEventListener('change', (e) => {
+            if (e.target.checked) {
+                enableBlinking();
+            } else {
+                disableBlinking();
+            }
+        });
+
+        document.getElementById('track-toggle').addEventListener('change', (e) => {
+            state.peeved = !e.target.checked;
+            if (!e.target.checked) {
+                state.targetX = 0;
+                state.targetY = 0;
+            }
+        });
+
+        document.getElementById('sleep-toggle').addEventListener('change', (e) => {
+            state.sleepTimeout = e.target.checked ? 30 : Infinity;
+        });
+
+        document.getElementById('bar-count').addEventListener('input', (e) => {
+            const val = parseInt(e.target.value);
+            document.getElementById('bar-count-val').textContent = val;
+            state.barCount = val;
+        });
+
+        document.getElementById('gap-ratio').addEventListener('input', (e) => {
+            const val = parseFloat(e.target.value);
+            document.getElementById('gap-ratio-val').textContent = val.toFixed(2);
+            state.gapRatio = val;
+        });
+
+        function syncControlsToState() {
+            document.getElementById('dilation').value = state.targetDilation;
+            document.getElementById('dilation-val').textContent = state.targetDilation.toFixed(2);
+
+            document.getElementById('top-speed').value = state.topSampleSpeed;
+            document.getElementById('top-speed-val').textContent = state.topSampleSpeed.toFixed(1);
+
+            document.getElementById('bottom-speed').value = state.bottomSampleSpeed;
+            document.getElementById('bottom-speed-val').textContent = state.bottomSampleSpeed.toFixed(1);
+
+            document.getElementById('bar-count').value = state.barCount;
+            document.getElementById('bar-count-val').textContent = state.barCount;
+
+            document.getElementById('gap-ratio').value = state.gapRatio;
+            document.getElementById('gap-ratio-val').textContent = state.gapRatio.toFixed(2);
+        }
+
+        setInterval(() => {
+            updateStateReadout();
+            syncControlsToState();
+        }, 100);
+
+        document.getElementById('scale').addEventListener('input', (e) => {
+            const val = parseInt(e.target.value);
+            document.getElementById('scale-val').textContent = val + '%';
+            svg.style.width = val + '%';
+            svg.style.height = val + '%';
+        });
+    </script>
+</body>
+</html>

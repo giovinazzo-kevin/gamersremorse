@@ -1102,6 +1102,7 @@ window.setRandomTagline = function (numBlinks) {
         ? [...taglines.positive, ...taglines.neutral]
         : [...taglines.negative, ...taglines.neutral];
     const tag = pool[Math.floor(Math.random() * pool.length)];
+    tagline.style.color = numBlinks % 2 == 0 ? 'var(--color-positive)' : 'var(--color-negative)';
     tagline.innerHTML = `<strong>${tag}</strong>`;
 }
 

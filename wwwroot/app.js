@@ -106,6 +106,8 @@ async function analyze() {
     const appId = extractAppId(input);
     if (!appId) return alert('Invalid App ID');
 
+    window.setEyeExpression('neutral');
+
     // reset state
     cachedControversyHtml = null;
     currentSnapshot = null;
@@ -175,6 +177,7 @@ async function analyze() {
     isFirstSnapshot = true;
     ws.onclose = () => {
         isStreaming = false;
+        window.setEyeExpression('neutral');
 
         if (currentSnapshot) {
             const sampled = currentSnapshot.totalPositive + currentSnapshot.totalNegative;
@@ -1766,3 +1769,5 @@ function displayControversyContext(contexts) {
     container.innerHTML += html;
     cachedControversyHtml = html;
 }
+
+document.addEventListener('click', window.onPageClick);

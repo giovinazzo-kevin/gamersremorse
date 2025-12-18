@@ -4,35 +4,6 @@ let t = 0;
 let lastFrame = 0;
 let numBlinks = 0;
 
-const config = {
-    barCount: 20,
-    gapRatio: 0.2,
-    targetWidthRatio: 1.2,
-    barThicknessVariance: 0.8,
-    maxLashLength: 0.04,
-    maxIrisOffsetX: 0.26,
-    maxIrisOffsetY: 0.12,
-    irisDilation: 0.03,
-    driftStrength: 0.0005,
-    damping: 0.01,
-    boredDamping: 0.5,
-    attentionDecay: 0.99,
-    attentionGain: 0.01,
-    attentionThreshold: 300,
-    patience: 0.9,
-    boredThreshold: 0.5,
-    blinkSpeed: 30,
-    openSpeed: 3,
-    sleepTimeout: 30,
-    dozeSpeed: 0.5,
-    blinkInterval: 4,
-    blinkVariance: 2,
-    doubleBlinkChance: 0.2,
-    expressionSpeed: 2,
-    noiseTop: 0,
-    noiseBottom: 0,
-};
-
 // Shape functions - each returns 0-1 for a given normalized x position
 const shapeFunctions = {
     gaussian: (x, params) => {
@@ -77,6 +48,8 @@ const expressions = {
     neutral: {
         top: { shape: 'gaussian', params: { sigma: 1 }, maxHeight: 0.3 },
         bottom: { shape: 'gaussian', params: { sigma: 1 }, maxHeight: 0.3 },
+        barCount: 20,
+        gapRatio: 0.2,
         irisRadius: 0.15,
         irisYOffset: 0,
         irisXOffset: 0,
@@ -84,6 +57,7 @@ const expressions = {
         topSampleSpeed: -0.1,
         bottomSampleSpeed: 0.1,
         targetWidthRatio: 1.2,
+        driftStrength: 0.005,
         update: (dt) => { },
     },
     suspicious: {
@@ -94,20 +68,50 @@ const expressions = {
         irisXOffset: 0,
         lashMultiplier: 1.3,
         targetWidthRatio: 1.2,
+        driftStrength: 0.005,
         update: (dt) => { },
     },
     reading: {
-        top: { shape: 'gaussian', params: { sigma: 1.3 }, maxHeight: 0.45 },
-        bottom: { shape: 'gaussian', params: { sigma: 1.3 }, maxHeight: 0.45 },
+        top: { shape: 'gaussian', params: { sigma: 1.3 }, maxHeight: 0.15 },
+        bottom: { shape: 'gaussian', params: { sigma: 1.3 }, maxHeight: 0.15 },
+        barCount: 20,
+        gapRatio: 0,
         irisRadius: 0.22,
         irisYOffset: 0,
         irisXOffset: 0,
-        lashMultiplier: 0.5,
-        topSampleSpeed: 2.5,
-        bottomSampleSpeed: -5,
+        lashMultiplier: 2,
+        topSampleSpeed: 0.6,
+        bottomSampleSpeed: -0.2,
         targetWidthRatio: 1,
         noiseBottom: 1,
-        update: (dt) => { },
+        driftStrength: 0.15,
+        update: (dt) => {
+            const lfo0 = Math.sin(Math.pow(Math.cos(t / 20), 2));
+            const lfo1 = Math.sin(t / 4);
+            const lfo2 = Math.cos(t / 4);
+
+            let progress = Math.pow((lfo0 + 1) / 2, 3);
+
+            // smooth blend factor - 0 = scanning, 1 = focused
+            const raw = Math.max(0, Math.min(1, (progress - 0.45) / 0.1));
+            const blend = raw * raw * (3 - 2 * raw); // smoothstep
+            const scanWeight = 1 - blend;
+
+            state.dilation = -lfo2 / 4 - progress;
+
+            // iris movement fades out as blend increases
+            state.irisX = lfo1 * scanWeight;
+            state.irisY = lfo2 * scanWeight;
+
+            // all params lerp based on blend
+            expressions['reading'].lashMultiplier = lerp(0.3, 2, blend);
+            expressions['reading'].top.maxHeight = lerp(0.40, 0.10, blend);
+            expressions['reading'].bottom.maxHeight = lerp(0.45, 0.10, blend);
+
+            state.driftStrength = blend / 4;
+            state.barCount = Math.floor(lfo1 * 10) + 30;
+            state.gapRatio = (lfo2 + 1) / 2;
+        },
     },
     addicted: {
         top: { shape: 'gaussian', params: { sigma: 1 }, maxHeight: 0.2 },
@@ -115,18 +119,20 @@ const expressions = {
         irisRadius: 0.22,
         irisYOffset: 0,
         irisXOffset: 0,
-        lashMultiplier: 0.5,
+        lashMultiplier: 1,
         targetWidthRatio: 1,
+        driftStrength: 0.005,
         update: (dt) => { },
     },
     shocked: {
-        top: { shape: 'gaussian', params: { sigma: 1.2, c: -1 }, maxHeight: 0.5 },
-        bottom: { shape: 'gaussian', params: { sigma: 1.2, c: -1 }, maxHeight: 0.5 },
+        top: { shape: 'gaussian', params: { sigma: 1.2 }, maxHeight: 0.5 },
+        bottom: { shape: 'gaussian', params: { sigma: 1.2 }, maxHeight: 0.5 },
         irisRadius: 0.22,
         irisYOffset: 0,
         irisXOffset: 0,
         lashMultiplier: 0.5,
         targetWidthRatio: 1,
+        driftStrength: 0.005,
         update: (dt) => { },
     },
     angry: {
@@ -136,6 +142,7 @@ const expressions = {
         irisYOffset: -0.05,
         irisXOffset: 0,
         lashMultiplier: 1.2,
+        driftStrength: 0.005,
         update: (dt) => { },
     },
     sad: {
@@ -145,6 +152,7 @@ const expressions = {
         irisYOffset: 0.12,
         irisXOffset: 0,
         lashMultiplier: 1,
+        driftStrength: 0.005,
         update: (dt) => { },
     },
     mocking: {
@@ -156,6 +164,7 @@ const expressions = {
         lashMultiplier: 1.3,
         topSampleSpeed: -0.1,
         bottomSampleSpeed: -0.1,
+        driftStrength: 0.05,
         update: (dt) => {
             expressions['mocking'].bottom.params.intensity = Math.sin(t * 10) / 5;
             expressions['mocking'].bottom.params.base = (Math.sin(t * 16) + 1) / 4 + 0.25;
@@ -168,6 +177,7 @@ const expressions = {
         irisYOffset: 0.08,
         irisXOffset: 0,
         lashMultiplier: 2.0,
+        driftStrength: 0.5,
         update: (dt) => { },
     },
 };
@@ -192,7 +202,7 @@ const state = {
     blink: 1,
     blinkTarget: 1,
     awake: false,
-    lastInteraction: Date.now(),
+    lastInteraction: 0,
     canBlink: true,
     nextBlinkTime: 0,
     pendingDoubleBlink: false,
@@ -212,6 +222,32 @@ const state = {
     corneredTime: 0,
     lookingAtGraph: false,
     beingCornered: false,
+
+    barCount: 20,
+    gapRatio: 0.2,
+    targetWidthRatio: 1.2,
+    maxLashLength: 0.04,
+    maxIrisOffsetX: 0.26,
+    maxIrisOffsetY: 0.12,
+    irisDilation: 0.03,
+    driftStrength: 0.0005,
+    damping: 0.01,
+    boredDamping: 0.5,
+    attentionDecay: 0.99,
+    attentionGain: 0.01,
+    attentionThreshold: 300,
+    patience: 0.9,
+    boredThreshold: 0.5,
+    blinkSpeed: 30,
+    openSpeed: 3,
+    sleepTimeout: 30,
+    dozeSpeed: 0.5,
+    blinkInterval: 4,
+    blinkVariance: 2,
+    doubleBlinkChance: 0.2,
+    expressionSpeed: 2,
+    noiseTop: 0,
+    noiseBottom: 0,
 };
 
 function setExpression(name) {
@@ -226,9 +262,6 @@ function setExpression(name) {
     for (const key of Object.keys(expr)) {
         if (key in state) {
             state[key] = expr[key];
-        }
-        if (key in config) {
-            config[key] = expr[key];
         }
     }
 }
@@ -245,7 +278,7 @@ function disableBlinking() {
 }
 
 function setDilation(value) {
-    state.targetDilation = Math.max(0, Math.min(1, value));
+    state.targetDilation = Math.max(-1, Math.min(1, value));
 }
 
 function lerp(a, b, t) {
@@ -286,7 +319,7 @@ function updateShyState(dt) {
 
 function updateExpression(dt) {
     if (state.exprProgress < 1) {
-        state.exprProgress = Math.min(1, state.exprProgress + config.expressionSpeed * dt);
+        state.exprProgress = Math.min(1, state.exprProgress + state.expressionSpeed * dt);
     }
     const dilationSpeed = 2;
     state.dilation += (state.targetDilation - state.dilation) * dilationSpeed * dt;
@@ -306,7 +339,6 @@ function distance(x1, y1, x2, y2) {
 function setLoading(loading) {
     state.peeved = false;
     state.busy = loading;
-    config.driftStrength = loading ? 0.2 : 0.0005;
     if (loading) {
         setExpression('reading');
     } else {
@@ -320,7 +352,7 @@ function wake() {
         state.awake = true;
         state.blinkTarget = 0;
         setExpression('neutral');
-        if (config.attentionThreshold < 10) {
+        if (state.attentionThreshold < 10) {
             setExpression('angry');
         }
     }
@@ -332,20 +364,20 @@ function blink() {
 }
 
 function scheduleNextBlink() {
-    const variance = (Math.random() - 0.5) * 2 * config.blinkVariance;
-    state.nextBlinkTime = Date.now() + (config.blinkInterval + variance) * 1000;
-    state.pendingDoubleBlink = Math.random() < config.doubleBlinkChance;
+    const variance = (Math.random() - 0.5) * 2 * state.blinkVariance;
+    state.nextBlinkTime = Date.now() + (state.blinkInterval + variance) * 1000;
+    state.pendingDoubleBlink = Math.random() < state.doubleBlinkChance;
 }
 
 function updateBlink(dt) {
     let speed;
 
     if (state.blinkTarget === 1 && !state.awake) {
-        speed = config.dozeSpeed;
+        speed = state.dozeSpeed;
     } else if (state.blinkTarget === 0) {
-        speed = config.openSpeed;
+        speed = state.openSpeed;
     } else {
-        speed = config.blinkSpeed;
+        speed = state.blinkSpeed;
     }
 
     if (state.blink < state.blinkTarget) {
@@ -356,8 +388,7 @@ function updateBlink(dt) {
 
     if (state.awake && state.canBlink && state.blinkTarget === 1 && state.blink >= 0.95) {
         state.blinkTarget = 0;
-        tagline.style.color = numBlinks++ % 2 == 0 ? 'var(--color-negative)' : 'var(--color-positive)';
-        setRandomTagline(numBlinks);
+        setRandomTagline(numBlinks++);
     }
 
     tagline.style.opacity = 1 - state.blink;
@@ -439,7 +470,7 @@ function lerpColor(color1, color2, t) {
 function draw() {
     svg.innerHTML = '';
 
-    const { barCount, gapRatio, maxLashLength, irisDilation, targetWidthRatio, barThicknessVariance } = config;
+    const { barCount, gapRatio, maxLashLength, irisDilation, targetWidthRatio } = state;
 
     const currentExpr = expressions[state.currentExpr];
     const targetExpr = expressions[state.targetExpr];
@@ -462,10 +493,10 @@ function draw() {
     // Convert to pixels
     const irisRadiusPx = (irisRadius + state.attention * irisDilation) * svg.clientHeight;
     const maxLashPx = maxLashLength * svg.clientHeight * blinkLashMult * lashMultiplier;
-    const maxIrisOffsetXPx = config.maxIrisOffsetX * svg.clientWidth;
-    const maxIrisOffsetYPx = config.maxIrisOffsetY * svg.clientHeight;
+    const maxIrisOffsetXPx = state.maxIrisOffsetX * svg.clientWidth;
+    const maxIrisOffsetYPx = state.maxIrisOffsetY * svg.clientHeight;
 
-    const irisXPx = (svg.clientWidth / 2) + (state.irisY + irisXOffset) * maxIrisOffsetXPx;
+    const irisXPx = (svg.clientWidth / 2) + (state.irisX + irisXOffset) * maxIrisOffsetXPx;
     const irisYPx = (svg.clientHeight / 2) + (state.irisY + irisYOffset) * maxIrisOffsetYPx * scaleY;
 
     // Bar spacing - derived from bar count to maintain aspect ratio
@@ -504,12 +535,6 @@ function draw() {
         const topNormalizedX = wrappedTopPosition / (barCount / 6);
         const bottomNormalizedX = wrappedBottomPosition / (barCount / 6);
 
-        // Bar thickness from fixed position (not traveling)
-        const fixedNormalizedX = (i - barCount / 2) / (barCount / 6);
-        const barThickness = barThicknessVariance +
-            (1 - barThicknessVariance) * Math.exp(-(fixedNormalizedX * fixedNormalizedX) / 2);
-        const thisBarWidth = barWidthPx * barThickness;
-
         // Get shape values - curve is FIXED, bars slide through it
         const currentTopShape = shapeFunctions[currentExpr.top.shape](topNormalizedX, currentExpr.top.params);
         const targetTopShape = shapeFunctions[targetExpr.top.shape](topNormalizedX, targetExpr.top.params);
@@ -519,8 +544,8 @@ function draw() {
         const targetBottomShape = shapeFunctions[targetExpr.bottom.shape](bottomNormalizedX, targetExpr.bottom.params);
         const bottomShape = lerp(currentBottomShape, targetBottomShape, t);
 
-        const topNoise = config.noiseTop * Math.random();
-        const botNoise = config.noiseBottom * Math.random();
+        const topNoise = state.noiseTop * Math.random();
+        const botNoise = state.noiseBottom * Math.random();
 
         const topHeight = topShape * topMaxHeight * svg.clientHeight * scaleY - topNoise * scaleY;
         const bottomHeight = bottomShape * bottomMaxHeight * svg.clientHeight * scaleY - botNoise * scaleY;
@@ -529,10 +554,10 @@ function draw() {
         const lashLengthTop = topShape * maxLashPx;
         const lashLengthBottom = bottomShape * maxLashPx;
 
-        drawBar(topX, topHeight, 'up', tintedPositive, thisBarWidth, irisXPx, irisYPx, irisRadiusPx);
-        drawBar(bottomX, bottomHeight, 'down', tintedNegative, thisBarWidth, irisXPx, irisYPx, irisRadiusPx);
-        drawLashTip(topX, topHeight, lashLengthTop, 'up', currentLashColor, thisBarWidth);
-        drawLashTip(bottomX, bottomHeight, lashLengthBottom, 'down', currentLashColor, thisBarWidth);
+        drawBar(topX, topHeight, 'up', tintedPositive, barWidthPx, irisXPx, irisYPx, irisRadiusPx);
+        drawBar(bottomX, bottomHeight, 'down', tintedNegative, barWidthPx, irisXPx, irisYPx, irisRadiusPx);
+        drawLashTip(topX, topHeight, lashLengthTop, 'up', currentLashColor, barWidthPx);
+        drawLashTip(bottomX, bottomHeight, lashLengthBottom, 'down', currentLashColor, barWidthPx);
     }
 }
 
@@ -540,7 +565,7 @@ function updateCursorTracking() {
     if (!state.awake) return;
 
     const vel = distance(state.cursorX || 0, state.cursorY || 0, state.lastCursorX || 0, state.lastCursorY || 0);
-    let noticed = state.lastCursorX !== undefined && vel >= config.attentionThreshold;
+    let noticed = state.lastCursorX !== undefined && vel >= state.attentionThreshold;
 
     if (state.busy)
         state.attention = 0;
@@ -551,16 +576,18 @@ function updateCursorTracking() {
 
     if (!state.peeved && (state.attention != 0 || (noticed && !state.busy))) {
         state.lastInteraction = Date.now();
-        if (vel > config.attentionThreshold) {
-            state.attention = Math.min(1, state.attention + vel * config.attentionGain);
+        if (vel > state.attentionThreshold) {
+            state.attention = Math.min(1, state.attention + vel * state.attentionGain);
         } else if (!state.beingCornered) {
-            state.attention *= config.attentionDecay;
+            state.attention *= state.attentionDecay;
         }
 
-        if (state.attention < config.boredThreshold && !state.beingCornered) state.attention = 0;
+        if (state.attention < state.boredThreshold && !state.beingCornered) state.attention = 0;
 
-        const dx = state.cursorX - (svg.clientWidth / 2);
-        const dy = state.cursorY - (svg.clientHeight / 2);
+        const w = state.svgWidth || svg.clientWidth;
+        const h = state.svgHeight || svg.clientHeight;
+        const dx = state.cursorX - (w / 2);
+        const dy = state.cursorY - (h / 2);
         const dist = Math.sqrt(dx * dx + dy * dy);
 
         if (dist > 0) {
@@ -632,20 +659,20 @@ function updateIrisPosition(dt) {
     state.irisX += (goalX - state.irisX) * lerpFactor;
     state.irisY += (goalY - state.irisY) * lerpFactor;
 
-    const nervousDrift = state.shy && state.attention < config.boredThreshold;
+    const nervousDrift = state.shy && state.attention < state.boredThreshold;
     const corneredJitter = state.beingCornered ? 0.08 : 0;
-    const driftAmount = nervousDrift ? 0.02 : (1 - state.attention) * config.driftStrength + corneredJitter;
+    const driftAmount = nervousDrift ? 0.02 : (1 - state.attention) * state.driftStrength + corneredJitter;
     const drift = driftAmount * dt * 60;
     state.irisX += (Math.random() - 0.5) * drift;
     state.irisY += (Math.random() - 0.5) * drift;
 
-    if (state.attention < config.boredThreshold) {
-        const dampingAmount = state.shy ? config.damping : config.boredDamping;
+    if (state.attention < state.boredThreshold) {
+        const dampingAmount = state.shy ? state.damping : state.boredDamping;
         state.irisX *= (1 - dampingAmount);
         state.irisY *= (1 - dampingAmount);
     } else {
-        state.irisX *= (1 - config.damping);
-        state.irisY *= (1 - config.damping);
+        state.irisX *= (1 - state.damping);
+        state.irisY *= (1 - state.damping);
     }
 
     state.irisX = clamp(state.irisX, -1, 1);
@@ -656,6 +683,8 @@ function onMouseMove(e) {
     const rect = svg.getBoundingClientRect();
     state.cursorX = e.clientX - rect.left;
     state.cursorY = e.clientY - rect.top;
+    state.svgWidth = rect.width;   // store these
+    state.svgHeight = rect.height;
 }
 
 function snooze() {
@@ -673,7 +702,7 @@ function tick(timestamp) {
     state.bottomSampleOffset += state.bottomSampleSpeed * dt;
 
     const idleTime = (Date.now() - state.lastInteraction) / 1000;
-    if (state.awake && idleTime > config.sleepTimeout) {
+    if (state.awake && idleTime > state.sleepTimeout) {
         snooze();
     }
 
@@ -700,25 +729,30 @@ function tick(timestamp) {
     requestAnimationFrame(tick);
 }
 
+function onPageClick() {
+    const idleTime = (Date.now() - state.lastInteraction) / 1000;
+    if (idleTime > 1) {
+        wake();
+        state.attention = 1;
+    }
+    state.lastInteraction = Date.now();
+}
+
 document.addEventListener('mousemove', onMouseMove);
 svg.addEventListener('click', () => {
-    if (state.awake) {
+    if (state.awake && state.canBlink) {
         blink();
         state.poked = true;
-        config.attentionThreshold *= config.patience;
+        state.attentionThreshold *= state.patience;
 
-        if (config.attentionThreshold < 10) {
+        if (state.attentionThreshold < 10) {
             setPeeved(true, true, false, 0, -0.4);
             setExpression('angry');
-        } else if (config.attentionThreshold < 50) {
+        } else if (state.attentionThreshold < 50) {
             setPeeved(true, false, true, 0, -0.2);
             setExpression('suspicious');
         }
     }
-});
-document.addEventListener('click', () => {
-    state.lastInteraction = Date.now();
-    wake();
 });
 
 requestAnimationFrame(tick);
@@ -771,10 +805,9 @@ function isUnhinged() {
     return state.unhinged || false;
 }
 
-function setBarDensity(numBars = 51, gapRatio = 0.2, variance = 0.8) {
-    config.gapRatio = gapRatio;
-    config.barCount = numBars;
-    config.barThicknessVariance = variance;
+function setBarDensity(numBars = 51, gapRatio = 0.2) {
+    state.gapRatio = gapRatio;
+    state.barCount = numBars;
 }
 
 // Expose for other modules
@@ -791,3 +824,4 @@ window.setEyeUnhinged = setUnhinged;
 window.setEyePeeved = setPeeved;
 window.isEyeUnhinged = isUnhinged;
 window.expressions = expressions;
+window.onPageClick = onPageClick;

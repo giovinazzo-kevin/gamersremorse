@@ -47,7 +47,7 @@ public record SteamReviewRepository(
         var totalReviews = meta.TotalPositive + meta.TotalNegative;
         var targetCount = (int)(totalReviews * Options.Value.LazyRefreshTargetPercent);
         targetCount = Math.Clamp(targetCount, Options.Value.LazyRefreshMinItems, Options.Value.LazyRefreshMaxItems);
-
+        targetCount = Math.Min(totalReviews, targetCount);
         if (cachedCount < targetCount * 0.9) return Status.Stale;
         return Status.Fresh;
     }
