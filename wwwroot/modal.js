@@ -194,8 +194,8 @@ function buildEyeTab(content, refs) {
     refs.barValue.textContent = '20';
     refs.barSlider.oninput = () => {
         refs.barValue.textContent = refs.barSlider.value;
-         setBarDensity(parseInt(refs.barSlider.value));
-        checkAchievements();
+        const val = parseInt(refs.barSlider.value);
+        setBarDensity(val);
     };
     barRow.appendChild(refs.barSlider);
     barRow.appendChild(refs.barValue);
@@ -708,11 +708,8 @@ const commands = {
     reset_achievements: {
         description: 'Reset all achievements',
         execute: () => {
-            if (typeof achievementState !== 'undefined') {
-                resetAchievements();
-            } else {
-                consolePrint('Achievement system not available.', 'error');
-            }
+            resetAchievements();
+            consolePrint('Poof.');
         }
     },
     sv_cheats: {

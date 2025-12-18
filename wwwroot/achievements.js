@@ -57,7 +57,7 @@ const ACHIEVEMENTS = {
         description: 'Decrease the LOD',
         icon: '🔍',
         hidden: false,
-        check: (state) => state.barCount < 20
+        check: (state) => state.barCount < 15
     },
     hires: {
         id: 'hires',
@@ -208,7 +208,7 @@ function resetAchievements() {
         if (key === 'unlocked') {
             achievementState.unlocked = {};
         } else {
-            achievementState[key] = false;
+            achievementState[key] = undefined;
         }
     }
     saveAchievementState();

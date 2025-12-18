@@ -1118,12 +1118,7 @@ function tick(timestamp) {
         draw();
         lastFrame = timestamp;
     }
-    updateAchievementFlags();
     requestAnimationFrame(tick);
-}
-
-function updateAchievementFlags() {
-    setAchievementFlag('barCount', state.barCount);
 }
 
 function onPageClick() {
@@ -1167,9 +1162,11 @@ function isUnhinged() {
     return state.unhinged || false;
 }
 
-function setBarDensity(numBars = 51, gapRatio = 0.2) {
+function setBarDensity(numBars = 50, gapRatio = 0.2) {
     state.gapRatio = gapRatio;
     state.barCount = numBars;
+    setAchievementFlag('barCount', numBars);
+    checkAchievements();
 }
 
 // === DEATH ANIMATIONS ===
