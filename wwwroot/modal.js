@@ -280,13 +280,11 @@ function buildLockedTab(content) {
 }
 
 function buildAchievementsTab(content) {
-    // Trigger "checked early" achievement
-     onAchievementsViewed();
-    
+    onAchievementsViewed();
+
     const container = document.createElement('div');
     container.className = 'achievements-container';
-    
-    // Header with stats
+
     const stats = typeof getAchievementStats === 'function' ? getAchievementStats() : { unlocked: 0, visible: 0 };
     const header = document.createElement('div');
     header.className = 'achievements-header';
@@ -295,47 +293,86 @@ function buildAchievementsTab(content) {
         <span class="achievements-count">${stats.unlocked} / ${stats.visible}</span>
     `;
     container.appendChild(header);
-    
-    // Achievement list
+
     const list = typeof getAchievementList === 'function' ? getAchievementList() : [];
-    
-    for (const ach of list) {
-        const item = document.createElement('div');
-        item.className = 'achievement-item';
-        if (!ach.unlocked) item.classList.add('locked');
-        if (ach.hidden && !ach.unlocked) item.classList.add('hidden');
-        
-        let progressHtml = '';
-        if (ach.progress && !ach.unlocked) {
-            const pct = Math.min(100, (ach.progress.current / ach.progress.target) * 100);
-            progressHtml = `
-                <div class="achievement-progress">
-                    <div class="achievement-progress-bar" style="width: ${pct}%"></div>
-                </div>
-                <div class="achievement-desc">${ach.progress.current.toLocaleString()} / ${ach.progress.target.toLocaleString()}</div>
-            `;
-        }
-        
-        let unlockedHtml = '';
-        if (ach.unlocked && ach.unlockedAt) {
-            const date = new Date(ach.unlockedAt);
-            unlockedHtml = `<div class="achievement-unlocked">✓ ${date.toLocaleDateString()}</div>`;
-        }
-        
-        item.innerHTML = `
-            <div class="achievement-icon">${ach.icon}</div>
-            <div class="achievement-info">
-                <div class="achievement-title">${ach.title}</div>
-                <div class="achievement-desc">${ach.description}</div>
-                ${progressHtml}
-            </div>
-            ${unlockedHtml}
-        `;
-        
-        container.appendChild(item);
+
+    // Split into categories
+    const unlocked = list.filter(a => a.unlocked);
+    const visibleLocked = list.filter(a => !a.hidden && !a.unlocked);
+    const hiddenLocked = list.filter(a => a.hidden && !a.unlocked);
+
+    // Render unlocked achievements
+    for (const ach of unlocked) {
+        container.appendChild(buildAchievementItem(ach));
     }
-    
+
+    // Render locked (visible) section
+    if (visibleLocked.length > 0) {
+        const lockedHeader = document.createElement('div');
+        lockedHeader.className = 'achievements-section-header';
+        lockedHeader.textContent = 'LOCKED ACHIEVEMENTS';
+        container.appendChild(lockedHeader);
+
+        for (const ach of visibleLocked) {
+            container.appendChild(buildAchievementItem(ach));
+        }
+    }
+
+    // Render hidden section if any remain
+    if (hiddenLocked.length > 0) {
+        const hiddenHeader = document.createElement('div');
+        hiddenHeader.className = 'achievements-section-header';
+        hiddenHeader.textContent = 'HIDDEN ACHIEVEMENTS';
+        container.appendChild(hiddenHeader);
+
+        const hiddenSection = document.createElement('div');
+        hiddenSection.className = 'achievement-item hidden-summary';
+        hiddenSection.innerHTML = `
+        <div class="achievement-icon">?</div>
+        <div class="achievement-info">
+            <div class="achievement-title">${hiddenLocked.length} hidden achievement${hiddenLocked.length !== 1 ? 's' : ''} remaining</div>
+            <div class="achievement-desc">Details for each achievement will be revealed once unlocked</div>
+        </div>
+    `;
+        container.appendChild(hiddenSection);
+    }
+
     content.appendChild(container);
+}
+
+function buildAchievementItem(ach) {
+    const item = document.createElement('div');
+    item.className = 'achievement-item';
+    if (!ach.unlocked) item.classList.add('locked');
+
+    let progressHtml = '';
+    if (ach.progress && !ach.unlocked) {
+        const pct = Math.min(100, (ach.progress.current / ach.progress.target) * 100);
+        progressHtml = `
+            <div class="achievement-progress">
+                <div class="achievement-progress-bar" style="width: ${pct}%"></div>
+            </div>
+            <div class="achievement-desc">${ach.progress.current.toLocaleString()} / ${ach.progress.target.toLocaleString()}</div>
+        `;
+    }
+
+    let unlockedHtml = '';
+    if (ach.unlocked && ach.unlockedAt) {
+        const date = new Date(ach.unlockedAt);
+        unlockedHtml = `<div class="achievement-unlocked">✓ ${date.toLocaleDateString()}</div>`;
+    }
+
+    item.innerHTML = `
+        <div class="achievement-icon">${ach.icon}</div>
+        <div class="achievement-info">
+            <div class="achievement-title">${ach.title}</div>
+            <div class="achievement-desc">${ach.description}</div>
+            ${progressHtml}
+        </div>
+        ${unlockedHtml}
+    `;
+
+    return item;
 }
 
 function buildAudioTab(content) {
@@ -495,7 +532,7 @@ function openModal(title, options = {}) {
             if (refs.upperColor) { refs.upperColor.value = settings.upperColor || '#54bebe'; refs.upperColor.oninput(); }
             if (refs.lowerColor) { refs.lowerColor.value = settings.lowerColor || '#c80064'; refs.lowerColor.oninput(); }
             if (refs.lashColor) { refs.lashColor.value = settings.lashColor || '#666666'; refs.lashColor.oninput(); }
-            if (refs.barSlider && refs.barValue) { refs.barSlider.value = settings.barCount || 20; refs.barValue.textContent = settings.barCount || 20; refs.barSlider.oninput(); }
+            if (refs.barSlider && refs.barValue) { refs.barSlider.value = settings.barCount; refs.barValue.textContent = settings.barCount; refs.barSlider.oninput(); }
             setDarkMode(settings.darkMode || false, false);
             setConsoleEnabled(settings.consoleEnabled || false, false);
             loading = false;
