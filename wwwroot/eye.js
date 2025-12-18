@@ -60,7 +60,6 @@ const state = {
     // Blink
     blink: 1,
     blinkTarget: 1,
-    awake: false,
     lastInteraction: 0,
     canBlink: true,
     nextBlinkTime: 0,
@@ -78,6 +77,9 @@ const state = {
     targetBlush: 0,
 
     // Behavior flags
+    dead: false,
+    deathCount: 0,
+    awake: false,
     busy: false,
     poked: false,
     shy: false,
@@ -1173,10 +1175,10 @@ const deathAnimations = {
 function killEye(animation = 'fall') {
     const eyeEl = document.getElementById('eye');
     if (!eyeEl) return;
-    if (state.isDead) return;
+    if (state.dead) return;
     
-    state.isDead = true;
-    
+    state.dead = true;
+
     // Stare at player and play pre-death jingle
     setExpression('shocked');
     setPeeved(true, false, false, 0, 0, 10);
@@ -1193,6 +1195,11 @@ function killEye(animation = 'fall') {
 // For backwards compatibility
 function explodeEye() {
     killEye('explode');
+}
+
+function onDied() {
+    setAchievementFlag('deathCount', ++state.deathCount);
+    checkAchievements();
 }
 
 function doFall(eyeEl) {
@@ -1225,6 +1232,7 @@ function doFall(eyeEl) {
         
         if (y < window.innerHeight) {
             requestAnimationFrame(animateFall);
+            onDied();
         } else {
             eyeEl.style.visibility = 'hidden';
             eyeEl.style.transform = '';
@@ -1314,7 +1322,8 @@ function doExplode(eyeEl) {
     // Play pow + post-death sound
     if (typeof playPowSound === 'function') playPowSound();
     if (typeof playPostDeathSound === 'function') playPostDeathSound();
-    
+    onDied();
+
     requestAnimationFrame(animateExplosion);
 }
 
@@ -1345,7 +1354,7 @@ function showRespawnTimer(container, eyeEl) {
             clearInterval(countdown);
             timer.remove();
             eyeEl.style.visibility = 'visible';
-            state.isDead = false;
+            state.dead = false;
             
             // Disappointed reaction with timeout
             const reaction = Date.now();
@@ -1362,17 +1371,22 @@ function showRespawnTimer(container, eyeEl) {
 
 document.addEventListener('mousemove', onMouseMove);
 svg.addEventListener('click', () => {
-    if (state.awake && state.canBlink) {
+    if (state.awake && !state.dead) {
         blink();
         playPowSound();
         state.poked = true;
         state.attentionThreshold *= state.patience;
 
-        if (state.attentionThreshold < 10) {
-            setPeeved(true, true, false, 0, -0.4);
+        if (state.attentionThreshold < 2) {
+            disableBlinking();
+            killEye('fall');
+            state.attentionThreshold = 100;
+            enableBlinking();
+        } else if (state.attentionThreshold < 5) {
+            setExpression('sad');
+        } else if (state.attentionThreshold < 10) {
             setExpression('angry');
         } else if (state.attentionThreshold < 50) {
-            setPeeved(true, false, true, 0, -0.2);
             setExpression('disappointed');
         }
     }

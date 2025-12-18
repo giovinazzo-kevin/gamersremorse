@@ -207,7 +207,7 @@ function buildEyeTab(content, refs) {
     
     const previewLabel = document.createElement('div');
     previewLabel.className = 'modal-label';
-    previewLabel.textContent = 'Player Model';
+    previewLabel.textContent = 'Preview';
     rightCol.appendChild(previewLabel);
     
     const previewBox = document.createElement('div');
@@ -273,7 +273,7 @@ function buildInterfaceTab(content, refs) {
 function buildLockedTab(content) {
     const locked = document.createElement('div');
     locked.className = 'modal-locked-content';
-    locked.innerHTML = '<span class="lock-icon">ðŸ”’</span><p>Complete achievements to unlock</p>';
+    locked.innerHTML = '<span class="lock-icon">🔒</span><p>Complete achievements to unlock</p>';
     content.appendChild(locked);
 }
 
@@ -358,9 +358,9 @@ function buildAudioTab(content) {
             item.innerHTML = `
                 <div class="audio-icon">${sound.icon}</div>
                 <div class="audio-name">${sound.name}</div>
-                <button class="audio-play">▶</button>
+                <button class="modal-btn">▶</button>
             `;
-            item.querySelector('.audio-play').onclick = () => sound.play();
+            item.querySelector('.modal-btn').onclick = () => sound.play();
         } else {
             item.innerHTML = `
                 <div class="audio-icon">🔒</div>
@@ -443,7 +443,7 @@ function openModal(title, options = {}) {
         if (isLocked) {
             const lock = document.createElement('span');
             lock.className = 'tab-lock';
-            lock.textContent = 'ðŸ”’';
+            lock.textContent = '🔒';
             tabEl.appendChild(lock);
         }
         

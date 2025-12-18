@@ -8,12 +8,12 @@ function N(note, octave) {
 // Sound library - unlocked sounds for the audio panel
 const SOUND_LIBRARY = {
     achievement: { name: 'Achievement', icon: '🏆', play: playAchievementSound },
-    secret: { name: 'Secret', icon: '✨', play: playZeldaSecretJingle },
-    quit: { name: 'Quit', icon: '🚪', play: playRandomJingle },
     screenshot: { name: 'Screenshot', icon: '📸', play: playScreenshotSound },
+    pow: { name: 'Pow', icon: '💥', play: playPowSound },
     preDeath: { name: 'Fatal', icon: '💀', play: playPreDeathSound },
     death: { name: 'Death', icon: '🪦', play: playDeathSound },
-    pow: { name: 'Pow', icon: '💥', play: playPowSound },
+    quit: { name: 'Quit', icon: '🚪', play: playRandomJingle },
+    secret: { name: 'Secret', icon: '✨', play: playZeldaSecretJingle },
 };
 
 let unlockedSounds = {};

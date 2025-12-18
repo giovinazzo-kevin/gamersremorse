@@ -4,26 +4,24 @@ const ACHIEVEMENTS = {
     // === BASIC PROGRESSION ===
     first_analysis: {
         id: 'first_analysis',
-        title: 'Under the Microscope',
+        title: 'I',
         description: 'Analyze your first game',
         icon: '🔬',
         hidden: false,
         check: (state) => state.analyzedGame
     },
-    
     screenshot: {
         id: 'screenshot',
-        title: 'Eye of the Beholder',
+        title: 'You Have To Install CS:S',
         description: 'Take a screenshot',
         icon: '📸',
         hidden: false,
         check: (state) => state.triedScreenshot
     },
-    
     // === CUSTOMIZATION ===
     dark_mode: {
         id: 'dark_mode',
-        title: 'Embrace the Void',
+        title: 'Big Apple, 3AM',
         description: 'Enable dark mode',
         icon: '🌙',
         hidden: false,
@@ -31,7 +29,7 @@ const ACHIEVEMENTS = {
     },
     customize_eye: {
         id: 'customize_eye',
-        title: 'Accessorizing',
+        title: 'Noob Check',
         description: 'Change the eye colors',
         icon: '🎨',
         hidden: false,
@@ -39,13 +37,20 @@ const ACHIEVEMENTS = {
     },
     custom_tagline: {
         id: 'custom_tagline',
-        title: 'Words in Her Mouth',
+        title: 'Mic Spammer',
         description: 'Set a custom tagline',
         icon: '💬',
         hidden: false,
         check: (state) => state.customTaglineSet
     },
-    
+    kill_eye: {
+        id: 'kill_eye',
+        title: 'Dumb Damage',
+        description: 'Kill A-Eye',
+        icon: '💀',
+        hidden: false,
+        check: (state) => state.deathCount > 0
+    },
     // === SECRET ACHIEVEMENTS ===
     sv_cheats: {
         id: 'sv_cheats',
@@ -144,6 +149,7 @@ let achievementState = {
     xyzzyEntered: false,
     impulse101: false,
     checkedEarly: false,
+    deathCount: 0,
 };
 
 // === PERSISTENCE ===

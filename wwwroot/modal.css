@@ -334,7 +334,6 @@ select.modal-input option {
     justify-content: center;
     height: 100%;
     color: #808080;
-    font-style: italic;
 }
 
 .modal-locked-content .lock-icon {
@@ -651,26 +650,4 @@ select.modal-input option {
 
 .audio-item.locked .audio-name {
     color: #808080;
-}
-
-.audio-play {
-    background: #4c5844;
-    border: 1px solid;
-    border-color: #889180 #282e22 #282e22 #889180;
-    color: #fff;
-    width: 28px;
-    height: 24px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 10px;
-}
-
-.audio-play:hover {
-    background: #5c6854;
-}
-
-.audio-play:active {
-    border-color: #282e22 #889180 #889180 #282e22;
 }
