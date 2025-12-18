@@ -237,6 +237,10 @@
                     <label for="track-toggle">Cursor tracking</label>
                 </div>
                 <div class="toggle-row">
+                    <input type="checkbox" autocomplete="off" id="crosshair-toggle">
+                    <label for="crosshair-toggle">Show crosshair</label>
+                </div>
+                <div class="toggle-row">
                     <input type="checkbox" autocomplete="off" id="sleep-toggle">
                     <label for="sleep-toggle">Auto-sleep</label>
                 </div>
@@ -291,6 +295,10 @@
 
         <div class="eye-container">
             <svg id="eye"></svg>
+            <svg id="debug-overlay" style="position: absolute; pointer-events: none; display: none;">
+                <line id="debug-x-axis" stroke="red" stroke-width="1" />
+                <line id="debug-y-axis" stroke="red" stroke-width="1" />
+            </svg>
         </div>
     </div>
 
@@ -471,6 +479,7 @@
             document.getElementById('scale').value = val;
             svg.style.width = val + '%';
             svg.style.height = val + '%';
+            setTimeout(updateDebugAxes, 10);  // update after layout settles
         }
 
         document.getElementById('scale').addEventListener('input', (e) => {
@@ -479,6 +488,38 @@
         });
 
         setScale(25);
+
+        // Debug crosshair overlay
+        const debugOverlay = document.getElementById('debug-overlay');
+        const debugXAxis = document.getElementById('debug-x-axis');
+        const debugYAxis = document.getElementById('debug-y-axis');
+
+        function updateDebugAxes() {
+            const rect = svg.getBoundingClientRect();
+            const cx = rect.width / 2;
+            const cy = rect.height / 2;
+            
+            // Position overlay exactly over the eye svg
+            debugOverlay.style.left = rect.left + 'px';
+            debugOverlay.style.top = rect.top + 'px';
+            debugOverlay.style.width = rect.width + 'px';
+            debugOverlay.style.height = rect.height + 'px';
+            
+            debugXAxis.setAttribute('x1', 0);
+            debugXAxis.setAttribute('y1', cy);
+            debugXAxis.setAttribute('x2', rect.width);
+            debugXAxis.setAttribute('y2', cy);
+            
+            debugYAxis.setAttribute('x1', cx);
+            debugYAxis.setAttribute('y1', 0);
+            debugYAxis.setAttribute('x2', cx);
+            debugYAxis.setAttribute('y2', rect.height);
+        }
+
+        document.getElementById('crosshair-toggle').addEventListener('change', (e) => {
+            debugOverlay.style.display = e.target.checked ? 'block' : 'none';
+            if (e.target.checked) updateDebugAxes();
+        });
     </script>
 </body>
 </html>

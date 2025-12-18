@@ -1,4 +1,4 @@
-window.svg = document.getElementById('eye');
+﻿window.svg = document.getElementById('eye');
 const frameInterval = 1000 / 15;
 let t = 0;
 let lastFrame = 0;
@@ -20,22 +20,22 @@ const state = {
 
     // Lids - LIVE values (now with shapes array)
     top: {
-        shapes: [{ type: 'gaussian', params: { sigma: 1 }, offset: 0, amplitude: 1 }],
+        shapes: [{ type: 'gaussian', params: { width: 2 }, offset: 0, amplitude: 1 }],
         maxHeight: 0.3
     },
     bottom: {
-        shapes: [{ type: 'gaussian', params: { sigma: 1 }, offset: 0, amplitude: 1 }],
+        shapes: [{ type: 'gaussian', params: { width: 2 }, offset: 0, amplitude: 1 }],
         maxHeight: 0.3
     },
     lashMultiplier: 1,
 
     // Lerp targets (set by setExpression)
     targetTop: {
-        shapes: [{ type: 'gaussian', params: { sigma: 1 }, offset: 0, amplitude: 1 }],
+        shapes: [{ type: 'gaussian', params: { width: 2 }, offset: 0, amplitude: 1 }],
         maxHeight: 0.3
     },
     targetBottom: {
-        shapes: [{ type: 'gaussian', params: { sigma: 1 }, offset: 0, amplitude: 1 }],
+        shapes: [{ type: 'gaussian', params: { width: 2 }, offset: 0, amplitude: 1 }],
         maxHeight: 0.3
     },
     targetIrisRadius: 0.15,
@@ -69,7 +69,7 @@ const state = {
     // Expression
     currentExpr: 'neutral',
     targetExpr: 'neutral',
-    exprProgress: 1,
+    exprProgress: 0,
 
     // Dilation/Blush
     dilation: 0,
@@ -133,11 +133,11 @@ const state = {
     targetImpulseMultiplier: 1,
 };
 
-function addImpulse(lid, { amplitude = 0.5, sigma = 0.3, velocity = 3, decay = 0.95, phase = null }) {
+function addImpulse(lid, { amplitude = 0.5, width = 0.3, velocity = 0.5, decay = 0.95, phase = null }) {
     state.impulses[lid].push({
-        offset: phase ?? (velocity > 0 ? -3 : 3),
+        offset: phase ?? (velocity > 0 ? -1 : 1),
         amplitude,
-        sigma,
+        width,
         velocity,
         decay
     });
@@ -150,68 +150,116 @@ function updateImpulses(dt) {
         state.impulses[lid] = state.impulses[lid].filter(imp => {
             imp.offset += imp.velocity * dt;
 
-            // right boundary (offset > 3)
-            if (imp.offset > 3) {
-                if (bounds.right === 'wrap') imp.offset = -3;
-                else if (bounds.right === 'reflect') { imp.offset = 3; imp.velocity *= -1; }
+            // right boundary
+            if (imp.offset > 1) {
+                if (bounds.right === 'reflect') { imp.offset = 2 - imp.offset; imp.velocity *= -1; }
                 else if (bounds.right === 'kill') return false;
-                else if (bounds.right === 'clamp') imp.offset = 3;
+                else if (bounds.right === 'clamp') imp.offset = 1;
+                // wrap: do nothing, handled at sample time
             }
 
-            // left boundary (offset < -3)
-            if (imp.offset < -3) {
-                if (bounds.left === 'wrap') imp.offset = 3;
-                else if (bounds.left === 'reflect') { imp.offset = -3; imp.velocity *= -1; }
+            // left boundary
+            if (imp.offset < -1) {
+                if (bounds.left === 'reflect') { imp.offset = -2 - imp.offset; imp.velocity *= -1; }
                 else if (bounds.left === 'kill') return false;
-                else if (bounds.left === 'clamp') imp.offset = -3;
+                else if (bounds.left === 'clamp') imp.offset = -1;
+                // wrap: do nothing, handled at sample time
             }
 
             const decayFactor = Math.pow(imp.decay, dt * 60);
             imp.amplitude *= decayFactor;
-            imp.sigma *= decayFactor;
+            imp.width *= decayFactor;
 
-            return imp.amplitude > 0.01 && imp.sigma > 0.05;
+            return imp.amplitude > 0.01 && imp.width > 0.05;
         });
     }
 }
 
-// Shape functions
+// Shape functions - all use 'width' param, guaranteed 0 at edges
 const shapeFunctions = {
+    // classic gaussian - NOT zero at edges but close enough, natural falloff
     gaussian: (x, params) => {
-        const sigma = params.sigma ?? 1;
-        return Math.exp(-(x * x) / (2 * sigma * sigma)) + (params.c ?? 0);
+        const width = params.width ?? 2;
+        const sigma = width / 6;  // 3 sigma on each side ≈ 99.7% of curve
+        return Math.exp(-(x * x) / (2 * sigma * sigma));
     },
+    // smooth cosine bump: 0 at edges, 1 at center
+    bump: (x, params) => {
+        const width = params.width ?? 2;
+        const halfW = width / 2;
+        if (Math.abs(x) >= halfW) return 0;
+        return (Math.cos((x / halfW) * Math.PI) + 1) / 2;
+    },
+    // flat top with smooth cosine falloff at edges
     flat: (x, params) => {
-        const falloff = params.falloff ?? 0.3;
+        const width = params.width ?? 2;
+        const plateau = params.plateau ?? 0.5; // fraction of width that's flat
+        const halfW = width / 2;
+        const flatHalf = halfW * plateau;
         const abs = Math.abs(x);
-        return abs < 2 ? 1 : Math.max(0, 1 - (abs - 2) * falloff);
+        if (abs >= halfW) return 0;
+        if (abs <= flatHalf) return 1;
+        const t = (abs - flatHalf) / (halfW - flatHalf);
+        return (Math.cos(t * Math.PI) + 1) / 2;
     },
+    // bump with a base level (never goes to 0)
     raised: (x, params) => {
-        const sigma = params.sigma ?? 1.2;
+        const width = params.width ?? 2;
         const base = params.base ?? 0.3;
-        return base + (1 - base) * Math.exp(-(x * x) / (2 * sigma * sigma));
+        const halfW = width / 2;
+        if (Math.abs(x) >= halfW) return base;
+        const bump = (Math.cos((x / halfW) * Math.PI) + 1) / 2;
+        return base + (1 - base) * bump;
     },
-    skewedLeft: (x, params) => {
-        const sigma = params.sigma ?? 1;
-        const skew = params.skew ?? 0.3;
-        return Math.exp(-((x + skew) * (x + skew)) / (2 * sigma * sigma));
+    // O.O
+    semicircle: (x, params) => {
+        const width = params.width ?? 2;
+        const halfW = width / 2;
+        if (Math.abs(x) >= halfW) return 0;
+        const normalized = x / halfW;  // -1 to 1
+        return Math.sqrt(1 - normalized * normalized);  // semicircle formula
     },
-    skewedRight: (x, params) => {
-        const sigma = params.sigma ?? 1;
-        const skew = params.skew ?? 0.3;
-        return Math.exp(-((x - skew) * (x - skew)) / (2 * sigma * sigma));
+    // asymmetric bump, peak shifted
+    skewed: (x, params) => {
+        const width = params.width ?? 2;
+        const skew = params.skew ?? 0;  // -1 to 1
+        const halfW = width / 2;
+        if (Math.abs(x) >= halfW) return 0;
+
+        const peakX = skew * halfW;
+
+        if (x < peakX) {
+            // left side: from -halfW to peakX
+            const leftWidth = peakX + halfW;
+            if (leftWidth === 0) return 0;
+            const t = (x + halfW) / leftWidth;  // 0 at left edge, 1 at peak
+            return (Math.cos((1 - t) * Math.PI) + 1) / 2;
+        } else {
+            // right side: from peakX to +halfW
+            const rightWidth = halfW - peakX;
+            if (rightWidth === 0) return 0;
+            const t = (x - peakX) / rightWidth;  // 0 at peak, 1 at right edge
+            return (Math.cos(t * Math.PI) + 1) / 2;
+        }
     },
+    // convenience aliases
+    skewedLeft: (x, params) => shapeFunctions.skewed(x, { ...params, skew: -(params.skew ?? 0.3) }),
+    skewedRight: (x, params) => shapeFunctions.skewed(x, { ...params, skew: params.skew ?? 0.3 }),
+    // valley shape: high at edges, low in middle
     vShape: (x, params) => {
-        const intensity = params.intensity ?? 0.3;
-        const base = params.base ?? 0.7;
-        const gaussian = Math.exp(-(x * x) / 2);
-        return base + (1 - gaussian) * intensity;
+        const width = params.width ?? 2;
+        const depth = params.depth ?? 0.5; // how deep the valley goes
+        const halfW = width / 2;
+        if (Math.abs(x) >= halfW) return 1;
+        const bump = (Math.cos((x / halfW) * Math.PI) + 1) / 2;
+        return 1 - bump * depth;
     },
-    vShape2: (x, params) => {
-        const intensity = params.intensity ?? 0.3;
-        const base = params.base ?? 0.7;
-        const gaussian = Math.exp(-(x * x) / 2);
-        return base + (gaussian) * intensity;
+    // inverse valley: low at edges, high in middle (alias for bump basically)
+    peak: (x, params) => {
+        const width = params.width ?? 2;
+        const halfW = width / 2;
+        if (Math.abs(x) >= halfW) return 0;
+        return (Math.cos((x / halfW) * Math.PI) + 1) / 2;
     },
 };
 
@@ -219,8 +267,8 @@ const shapeFunctions = {
 const expressions = {
     neutral: {
         lerp: {
-            top: { shapes: [{ type: 'gaussian', params: { sigma: 1 }, offset: 0, amplitude: 1 }], maxHeight: 0.3 },
-            bottom: { shapes: [{ type: 'gaussian', params: { sigma: 1 }, offset: 0, amplitude: 1 }], maxHeight: 0.3 },
+            top: { shapes: [{ type: 'gaussian', params: { width: 2 }, offset: 0, amplitude: 1 }], maxHeight: 0.45 },
+            bottom: { shapes: [{ type: 'gaussian', params: { width: 2 }, offset: 0, amplitude: 1 }], maxHeight: 0.45 },
             irisRadius: 0.15,
             irisDilation: 0,
             irisXOffset: 0,
@@ -231,6 +279,7 @@ const expressions = {
             bottomSampleSpeed: 0.1,
             targetWidthRatio: 1.2,
             driftStrength: 0.005,
+            dilation: 0,
         },
 
         snap: {
@@ -250,8 +299,8 @@ const expressions = {
     },
     disappointed: {
         lerp: {
-            top: { shapes: [{ type: 'flat', params: { falloff: 1.5 }, offset: 0, amplitude: 1 }], maxHeight: 0.12 },
-            bottom: { shapes: [{ type: 'gaussian', params: { sigma: 1.5, c: -0.2 }, offset: 0, amplitude: 1 }], maxHeight: 0.3 },
+            top: { shapes: [{ type: 'flat', params: { width: 2, plateau: 0.6 }, offset: 0, amplitude: 1 }], maxHeight: 0.12 },
+            bottom: { shapes: [{ type: 'bump', params: { width: 2.5 }, offset: 0, amplitude: 0.8 }], maxHeight: 0.3 },
             irisRadius: 0.11,
             irisYOffset: 0.05,
             irisXOffset: 0,
@@ -264,8 +313,8 @@ const expressions = {
     },
     reading: {
         lerp: {
-            top: { shapes: [{ type: 'gaussian', params: { sigma: 1.3 }, offset: 0, amplitude: 1 }], maxHeight: 0.15 },
-            bottom: { shapes: [{ type: 'gaussian', params: { sigma: 1.3 }, offset: 0, amplitude: 1 }], maxHeight: 0.15 },
+            top: { shapes: [{ type: 'gaussian', params: { width: 2.2 }, offset: 0, amplitude: 1 }], maxHeight: 0.25 },
+            bottom: { shapes: [{ type: 'gaussian', params: { width: 2.2 }, offset: 0, amplitude: 1 }], maxHeight: 0.25 },
             gapRatio: 0,
             irisRadius: 0.22,
             irisYOffset: 0,
@@ -284,8 +333,8 @@ const expressions = {
             }
         },
         onEnter: () => {
-            addImpulse('bottom', { amplitude: 0.15, sigma: 0.6, velocity: 5, decay: 1, phase: 5 });
-            addImpulse('top', { amplitude: 0.15, sigma: 0.6, velocity: -5, decay: 1, phase: 0 });
+            addImpulse('bottom', { amplitude: 0.15, width: 0.4, velocity: 0.8, decay: 1, phase: 1 });
+            addImpulse('top', { amplitude: 0.15, width: 0.4, velocity: -0.8, decay: 1, phase: 0 });
         },
         onExit: () => {
             state.impulses.bottom.forEach(imp => imp.decay = 0.1);
@@ -320,8 +369,8 @@ const expressions = {
     },
     addicted: {
         lerp: {
-            top: { shapes: [{ type: 'gaussian', params: { sigma: 1 }, offset: 0, amplitude: 1 }], maxHeight: 0.2 },
-            bottom: { shapes: [{ type: 'gaussian', params: { sigma: 1 }, offset: 0, amplitude: 1 }], maxHeight: 0.2 },
+            top: { shapes: [{ type: 'bump', params: { width: 2.5 }, offset: 0, amplitude: 1 }], maxHeight: 0.25 },
+            bottom: { shapes: [{ type: 'bump', params: { width: 2.5 }, offset: 0, amplitude: 1 }], maxHeight: 0.25 },
             irisRadius: 0.22,
             irisYOffset: 0,
             irisXOffset: 0,
@@ -334,22 +383,29 @@ const expressions = {
     },
     shocked: {
         lerp: {
-            top: { shapes: [{ type: 'gaussian', params: { sigma: 1.2 }, offset: 0, amplitude: 1 }], maxHeight: 0.5 },
-            bottom: { shapes: [{ type: 'gaussian', params: { sigma: 1.2 }, offset: 0, amplitude: 1 }], maxHeight: 0.5 },
-            irisRadius: 0.22,
+            top: { shapes: [{ type: 'semicircle', params: { width: 1 }, offset: 0, amplitude: 1 }], maxHeight: 0.4 },
+            bottom: { shapes: [{ type: 'semicircle', params: { width: 1 }, offset: 0, amplitude: 1 }], maxHeight: 0.4 },
+            irisRadius: 0.14,
             irisYOffset: 0,
             irisXOffset: 0,
             lashMultiplier: 0.5,
             targetWidthRatio: 1,
             driftStrength: 0.005,
+            topSampleSpeed: 0.1,
+            bottomSampleSpeed: -0.9,
         },
-        snap: {},
+        snap: {
+            impulseBounds: {
+                top: { left: 'reflect', right: 'reflect' },
+                bottom: { left: 'reflect', right: 'reflect' }
+            },
+        },
         update: (dt) => { },
     },
     angry: {
         lerp: {
-            top: { shapes: [{ type: 'skewedLeft', params: { sigma: 0.9, skew: 0.5 }, offset: 0, amplitude: 1 }], maxHeight: 0.2 },
-            bottom: { shapes: [{ type: 'skewedRight', params: { sigma: 1.1, skew: 0.4 }, offset: 0, amplitude: 1 }], maxHeight: 0.26 },
+            top: { shapes: [{ type: 'skewedLeft', params: { width: 2, skew: 0.4 }, offset: 0, amplitude: 1 }], maxHeight: 0.2 },
+            bottom: { shapes: [{ type: 'skewedRight', params: { width: 2.2, skew: 0.3 }, offset: 0, amplitude: 1 }], maxHeight: 0.26 },
             irisRadius: 0.1,
             irisYOffset: -0.05,
             irisXOffset: 0,
@@ -361,8 +417,8 @@ const expressions = {
     },
     sad: {
         lerp: {
-            top: { shapes: [{ type: 'gaussian', params: { sigma: 1 }, offset: 0, amplitude: 1 }], maxHeight: 0.22 },
-            bottom: { shapes: [{ type: 'gaussian', params: { sigma: 1.4 }, offset: 0, amplitude: 1 }], maxHeight: 0.15 },
+            top: { shapes: [{ type: 'bump', params: { width: 2 }, offset: 0, amplitude: 1 }], maxHeight: 0.22 },
+            bottom: { shapes: [{ type: 'bump', params: { width: 2.4 }, offset: 0, amplitude: 1 }], maxHeight: 0.15 },
             irisRadius: 0.25,
             irisYOffset: 0.7,
             irisXOffset: 0,
@@ -377,16 +433,16 @@ const expressions = {
             targetY: 0,
         },
         update: (dt) => {
-            state.top.shapes[0].params.sigma = 1 - Math.cos(t * 40) / 20;
-            state.bottom.shapes[0].params.sigma = 1 - Math.cos(t * 10) / 20;
+            state.top.shapes[0].params.width = 2 + Math.cos(t * 40) / 10;
+            state.bottom.shapes[0].params.width = 2.4 + Math.cos(t * 10) / 10;
         },
     },
     mocking: {
         lerp: {
-            top: { shapes: [{ type: 'skewedLeft', params: { sigma: 0.9, skew: 0.5 }, offset: 0, amplitude: 1 }], maxHeight: 0.4 },
+            top: { shapes: [{ type: 'skewedLeft', params: { width: 1, skew: 0.4 }, offset: 0, amplitude: 1 }], maxHeight: 0.4 },
             bottom: {
                 shapes: [
-                    { type: 'vShape', params: { intensity: 0.5, base: 0.5 }, offset: 0, amplitude: 1 },
+                    { type: 'vShape', params: { width: 2, depth: 0.5 }, offset: 0, amplitude: 1 },
                 ],
                 maxHeight: 0.10
             },
@@ -404,21 +460,20 @@ const expressions = {
             targetY: 0,
         },
         onEnter: () => {
-            addImpulse('bottom', { amplitude: 0.5, sigma: 0.6, velocity: -15, decay: 0.9998 });
+            addImpulse('bottom', { amplitude: 0.5, width: 0.4, velocity: -1.5, decay: 0.998 });
         },
         onExit: () => {
-            state.impulses.bottom.forEach(imp => imp.decay = 0.92);
+            state.impulses.bottom.forEach(imp => imp.decay = 0.9);
         },
         update: (dt) => {
-            state.top.shapes[0].params.sigma = 1 - Math.cos(t * 40) / 20;
-            state.bottom.shapes[0].params.intensity = Math.sin(t * 10) / 5;
-            state.bottom.shapes[0].params.base = (Math.sin(t * 16) + 1) / 4 + 0.25;
+            state.top.shapes[0].params.width = 2 + Math.cos(t * 40) / 10;
+            state.bottom.shapes[0].params.depth = 0.3 + Math.sin(t * 10) / 5;
         },
     },
     flustered: {
         lerp: {
-            top: { shapes: [{ type: 'gaussian', params: { sigma: 0.8 }, offset: 0, amplitude: 1 }], maxHeight: 0.10 },
-            bottom: { shapes: [{ type: 'gaussian', params: { sigma: 0.8 }, offset: 0, amplitude: 1 }], maxHeight: 0.10 },
+            top: { shapes: [{ type: 'gaussian', params: { width: 1.8 }, offset: 0, amplitude: 1 }], maxHeight: 0.10 },
+            bottom: { shapes: [{ type: 'gaussian', params: { width: 1.8 }, offset: 0, amplitude: 1 }], maxHeight: 0.10 },
             irisRadius: 0.08,
             irisYOffset: 0.08,
             irisXOffset: 0,
@@ -472,23 +527,6 @@ const expressions = {
                 state.bottomSampleSpeed = -0.3;
             }
         },
-    },
-    laughing: {
-        lerp: {
-            top: { shapes: [{ type: 'gaussian', params: { sigma: 1 }, offset: 0, amplitude: 1 }], maxHeight: 0.25 },
-            bottom: { shapes: [{ type: 'gaussian', params: { sigma: 1 }, offset: 0, amplitude: 1 }], maxHeight: 0.25 },
-            irisRadius: 0.12,
-            irisYOffset: 0.05,
-            irisXOffset: 0,
-            lashMultiplier: 1.5,
-            driftStrength: 0.02,
-        },
-        snap: {},
-        onEnter: () => {
-            addImpulse('top', { amplitude: 0.4, sigma: 0.4, velocity: 8, decay: 0.97 });
-            addImpulse('bottom', { amplitude: 0.3, sigma: 0.4, velocity: -6, decay: 0.97 });
-        },
-        update: (dt) => { },
     },
 };
 
@@ -699,7 +737,7 @@ function updateBlink(dt) {
 }
 
 // Compute shape value by summing all shapes plus impulses
-function computeShapeValue(shapes, normalizedX, impulses = []) {
+function computeShapeValue(shapes, normalizedX, impulses = [], bounds = { left: 'wrap', right: 'wrap' }) {
     let sum = shapes.reduce((s, shape) => {
         const fn = shapeFunctions[shape.type];
         if (!fn) return s;
@@ -707,7 +745,16 @@ function computeShapeValue(shapes, normalizedX, impulses = []) {
     }, 0);
 
     for (const imp of impulses) {
-        sum += shapeFunctions.gaussian(normalizedX - imp.offset, { sigma: imp.sigma }) * imp.amplitude * state.impulseMultiplier;
+        let sampleDist = normalizedX - imp.offset;
+
+        // Only wrap samples for wrap mode
+        if (bounds.left === 'wrap' && bounds.right === 'wrap') {
+            while (sampleDist > 1) sampleDist -= 2;
+            while (sampleDist < -1) sampleDist += 2;
+        }
+        // reflect/kill/clamp: impulse position is already managed, just sample directly
+
+        sum += shapeFunctions.bump(sampleDist, { width: imp.width }) * imp.amplitude * state.impulseMultiplier;
     }
 
     return sum;
@@ -829,21 +876,21 @@ function draw() {
     const tintedNegative = lerpColor(colorNegative, blushColor, blushAmount);
 
     for (let i = 0; i < barCount; i++) {
-        const topBarPosition = (i - barCount / 2) + state.topSampleOffset;
-        const bottomBarPosition = (i - barCount / 2) + state.bottomSampleOffset;
+        const topBarPosition = (i - (barCount - 1) / 2) + state.topSampleOffset;
+        const bottomBarPosition = (i - (barCount - 1) / 2) + state.bottomSampleOffset;
 
-        const wrappedTopPosition = ((topBarPosition % barCount) + barCount) % barCount - barCount / 2;
-        const wrappedBottomPosition = ((bottomBarPosition % barCount) + barCount) % barCount - barCount / 2;
+        const wrappedTopPosition = ((topBarPosition % barCount) + barCount) % barCount - (barCount - 1) / 2;
+        const wrappedBottomPosition = ((bottomBarPosition % barCount) + barCount) % barCount - (barCount - 1) / 2;
 
         const topX = startX + (wrappedTopPosition + barCount / 2) * spacing + spacing / 2;
         const bottomX = startX + (wrappedBottomPosition + barCount / 2) * spacing + spacing / 2;
 
-        const topNormalizedX = wrappedTopPosition / (barCount / 6);
-        const bottomNormalizedX = wrappedBottomPosition / (barCount / 6);
+        const topNormalizedX = wrappedTopPosition / (barCount / 2);
+        const bottomNormalizedX = wrappedBottomPosition / (barCount / 2);
 
         // Use shape summing with impulses
-        const topShape = computeShapeValue(state.top.shapes, topNormalizedX, state.impulses.top);
-        const bottomShape = computeShapeValue(state.bottom.shapes, bottomNormalizedX, state.impulses.bottom);
+        const topShape = computeShapeValue(state.top.shapes, topNormalizedX, state.impulses.top, state.impulseBounds.top);
+        const bottomShape = computeShapeValue(state.bottom.shapes, bottomNormalizedX, state.impulses.bottom, state.impulseBounds.bottom);
 
         const topNoise = state.noiseTop * Math.random() * (1 - scaleY);
         const botNoise = state.noiseBottom * Math.random() * (1 - scaleY);
