@@ -9,6 +9,7 @@ let timelineData = { months: [], positive: {}, negative: {}, uncertainPos: {}, u
 let timelineSelection = { start: 0, end: 1 };
 let timelineDrag = null;
 let isFirstSnapshot = true;
+let snapshotCount = 0;
 let currentMetrics = null;
 let lastMetrics = null;
 let cachedControversyHtml = null;
@@ -116,6 +117,7 @@ async function analyze() {
     convergenceScore = 0;
     loadingMessageCount = 0;
     isFirstSnapshot = true;
+    snapshotCount = 0;
     timelineData = { months: [], positive: {}, negative: {}, uncertainPos: {}, uncertainNeg: {}, volume: [], maxVolume: 0 };
     timelineSelection = { start: 0, end: 1 };
     tagTimelineData = [];
@@ -164,6 +166,7 @@ async function analyze() {
         updateStats(snapshot);
         updateMetrics(snapshot);
         isFirstSnapshot = false;
+        snapshotCount++;
 
         if (setLoading) setLoading(true);
     };
@@ -205,6 +208,26 @@ async function analyze() {
         // Final metrics update triggers eye emotion
         if (currentMetrics) {
             updateEyeFromMetrics(currentMetrics);
+            
+            const tags = currentMetrics.verdict?.tags?.map(t => t.id) || [];
+            
+            // Roll for item drop (only if multiple snapshots)
+            if (typeof Items !== 'undefined' && snapshotCount > 1) {
+                const item = Items.rollForDrop(tags, currentMetrics);
+                if (item) {
+                    // Delay pedestal spawn for dramatic effect
+                    setTimeout(() => Items.showPedestal(item), 1500);
+                }
+            }
+            
+            // Drop consumables (0-4, skewed toward 0 for low snapshot counts)
+            if (typeof Items !== 'undefined') {
+                const maxDrops = snapshotCount > 1 ? 4 : 1;
+                const dropChance = Math.min(1, snapshotCount / 10); // more snapshots = more drops
+                setTimeout(() => {
+                    Items.dropConsumables(tags, document.getElementById('metrics-detail'), maxDrops, dropChance);
+                }, 2000);
+            }
         }
     };
 }

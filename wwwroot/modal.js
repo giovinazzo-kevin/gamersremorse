@@ -787,15 +787,14 @@ const commands = {
         description: 'Kill the eye',
         hidden: true,
         execute: () => {
-            killEye();
+            Items.damage(1000, 'fall');
         }
     },
     explode: {
         description: 'Explode the eye',
         hidden: true,
         execute: () => {
-            killEye('explode');
-
+            Items.damage(1000, 'explode');
         }
     },
     impulse: {
@@ -811,6 +810,155 @@ const commands = {
                 consolePrint(`Unlocked ${count} achievement${count !== 1 ? 's' : ''}.`, 'success');
                 playZeldaSecretJingle();
             }
+        }
+    },
+    give: {
+        description: 'Give an item',
+        hidden: true,
+        execute: (args) => {
+            if (args.length === 0) {
+                consolePrint('Usage: give <item_id>');
+                consolePrint('Items: ' + (typeof Items !== 'undefined' ? Object.keys(Items.catalog).join(', ') : 'none'));
+                return;
+            }
+            if (typeof Items === 'undefined') {
+                consolePrint('Items system not loaded.', 'error');
+                return;
+            }
+            const itemId = args[0].toLowerCase();
+            const item = Items.catalog[itemId];
+            if (!item) {
+                consolePrint(`Unknown item: ${itemId}`, 'error');
+                consolePrint('Available: ' + Object.keys(Items.catalog).join(', '));
+                return;
+            }
+            Items.pickupItem(item);
+            consolePrint(`Gave ${item.name}`, 'success');
+        }
+    },
+    place: {
+        description: 'Spawn item pedestal',
+        hidden: true,
+        execute: (args) => {
+            if (typeof Items === 'undefined') {
+                consolePrint('Items system not loaded.', 'error');
+                return;
+            }
+            const itemId = args[0]?.toLowerCase();
+            const item = itemId ? Items.catalog[itemId] : Object.values(Items.catalog)[Math.floor(Math.random() * Object.keys(Items.catalog).length)];
+            if (!item) {
+                consolePrint(`Unknown item: ${itemId}`, 'error');
+                return;
+            }
+            Items.showPedestal(item);
+            consolePrint(`Spawned ${item.name} pedestal`, 'success');
+        }
+    },
+    drop: {
+        description: 'Spawn consumable pickup',
+        hidden: true,
+        execute: (args) => {
+            if (typeof Items === 'undefined') {
+                consolePrint('Items system not loaded.', 'error');
+                return;
+            }
+            const consumableId = args[0]?.toLowerCase();
+            if (!consumableId) {
+                consolePrint('Usage: drop <consumable_id>');
+                consolePrint('Available: ' + Object.keys(Items.consumables).join(', '));
+                return;
+            }
+            const consumable = Items.consumables[consumableId];
+            if (!consumable) {
+                consolePrint(`Unknown consumable: ${consumableId}`, 'error');
+                consolePrint('Available: ' + Object.keys(Items.consumables).join(', '));
+                return;
+            }
+            Items.showConsumable(consumableId);
+            consolePrint(`Spawned ${consumable.name}`, 'success');
+        }
+    },
+    items: {
+        description: 'List inventory',
+        execute: () => {
+            if (typeof Items === 'undefined') {
+                consolePrint('Items system not loaded.', 'error');
+                return;
+            }
+            if (Items.inventory.length === 0) {
+                consolePrint('Inventory is empty.');
+                return;
+            }
+            consolePrint('Inventory:');
+            for (const id of Items.inventory) {
+                const item = Items.catalog[id];
+                if (item) consolePrint(`  ${item.icon} ${item.name}`);
+            }
+        }
+    },
+    clear_items: {
+        description: 'Clear all item effects',
+        hidden: true,
+        execute: () => {
+            if (typeof Items === 'undefined') {
+                consolePrint('Items system not loaded.', 'error');
+                return;
+            }
+            Items.clearEffects();
+            consolePrint('Cleared all item effects.');
+        }
+    },
+    hurt: {
+        description: 'Take damage',
+        hidden: true,
+        execute: (args) => {
+            if (typeof Items === 'undefined') {
+                consolePrint('Items system not loaded.', 'error');
+                return;
+            }
+            const amount = parseInt(args[0]) || 1;
+            Items.damage(amount);
+            consolePrint(`Took ${amount} damage. Health: ${Items.health}/${Items.maxHealth}`);
+        }
+    },
+    heal: {
+        description: 'Restore health',
+        hidden: true,
+        execute: (args) => {
+            if (typeof Items === 'undefined') {
+                consolePrint('Items system not loaded.', 'error');
+                return;
+            }
+            const amount = parseInt(args[0]) || 2;
+            Items.heal(amount);
+            consolePrint(`Healed ${amount}. Health: ${Items.health}/${Items.maxHealth}`);
+        }
+    },
+    health: {
+        description: 'Show or set health',
+        execute: (args) => {
+            if (typeof Items === 'undefined') {
+                consolePrint('Items system not loaded.', 'error');
+                return;
+            }
+            if (args.length > 0) {
+                Items.health = Math.min(Items.maxHealth, Math.max(0, parseInt(args[0]) || 0));
+                Items.renderHealthBar();
+                Items.saveInventory();
+            }
+            consolePrint(`Health: ${Items.health}/${Items.maxHealth} (${Items.maxHealth/2} containers)`);
+        }
+    },
+    add_heart: {
+        description: 'Add heart container',
+        hidden: true,
+        execute: () => {
+            if (typeof Items === 'undefined') {
+                consolePrint('Items system not loaded.', 'error');
+                return;
+            }
+            Items.addContainer();
+            consolePrint(`Added heart container. Max health: ${Items.maxHealth/2} hearts`);
         }
     },
 };
@@ -938,7 +1086,7 @@ function loadEyeSettings() {
         if (settings.blinkEnabled === false && typeof disableBlinking === 'function') disableBlinking();
         if (settings.sleepEnabled === false && typeof setSleepEnabled === 'function') setSleepEnabled(false);
         if (settings.trackingEnabled === false && typeof setCursorTrackingEnabled === 'function') setCursorTrackingEnabled(false);
-        if (settings.darkMode) { darkMode = true; document.body.classList.add('dark-mode'); }
+        if (settings.darkMode) { darkMode = true; document.body.classList.add('dark-mode'); setAchievementFlag('darkModeEnabled'); }
         if (settings.consoleEnabled) consoleEnabled = true;
         if (settings.upperColor) document.documentElement.style.setProperty('--color-positive', settings.upperColor);
         if (settings.lowerColor) document.documentElement.style.setProperty('--color-negative', settings.lowerColor);

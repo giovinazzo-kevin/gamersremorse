@@ -1179,7 +1179,7 @@ function killEye(animation = 'fall') {
     const eyeEl = document.getElementById('eye');
     if (!eyeEl) return;
     if (state.dead) return;
-    
+
     state.dead = true;
 
     // Stare at player and play pre-death jingle
@@ -1379,12 +1379,15 @@ svg.addEventListener('click', () => {
         playPowSound();
         state.poked = true;
         state.attentionThreshold *= state.patience;
+        
+        // Take damage from poking
+        if (typeof Items !== 'undefined') {
+            Items.damage(1);
+        }
 
         if (state.attentionThreshold < 2) {
-            disableBlinking();
-            killEye('fall');
+            state.blinkTarget = 1;
             state.attentionThreshold = 100;
-            enableBlinking();
         } else if (state.attentionThreshold < 5) {
             setExpression('sad');
         } else if (state.attentionThreshold < 10) {

@@ -40,7 +40,7 @@ const ACHIEVEMENTS = {
         description: 'Pay respects',
         icon: '🫡',
         hidden: false,
-        check: (state) => state.paidRespectss
+        check: (state) => state.paidRespects
     },
     // === CUSTOMIZATION ===
     dark_mode: {
@@ -65,7 +65,7 @@ const ACHIEVEMENTS = {
         description: 'Decrease the LOD',
         icon: '🔍',
         hidden: false,
-        check: (state) => state.barCount < 15
+        check: (state) => state.barCount !== undefined && state.barCount < 15
     },
     hires: {
         id: 'hires',
@@ -73,7 +73,7 @@ const ACHIEVEMENTS = {
         description: 'Turn the LOD up to 11',
         icon: '🔎',
         hidden: false,
-        check: (state) => state.barCount > 50
+        check: (state) => state.barCount !== undefined && state.barCount > 50
     },
     custom_tagline: {
         id: 'custom_tagline',
@@ -86,10 +86,18 @@ const ACHIEVEMENTS = {
     kill_eye: {
         id: 'kill_eye',
         title: 'Dumb Damage',
+        description: 'Damage the eye',
+        icon: '💢',
+        hidden: false,
+        check: (state) => state.tookDamage
+    },
+    yasd: {
+        id: 'yasd',
+        title: 'YASD',
         description: 'Kill A-Eye',
         icon: '💀',
         hidden: false,
-        check: (state) => state.deathCount > 0
+        check: (state) => state.yasd
     },
     // === SECRET ACHIEVEMENTS ===
     coomer: {
@@ -198,7 +206,7 @@ let achievementState = {
     impulse101: false,
     checkedEarly: false,
     deathCount: 0,
-    barCount: 20,
+    // barCount intentionally not set - only set when user changes it
 };
 
 // === PERSISTENCE ===
@@ -396,6 +404,7 @@ function impulse101() {
 
 // === INIT ===
 loadAchievementState();
+checkAchievements();
 
 // Check for "checked early" achievement
 function onAchievementsViewed() {

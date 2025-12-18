@@ -78,6 +78,10 @@
                 font-weight: bold;
             }
 
+            .header > div:nth-child(2) {
+                min-width: 400px;
+            }
+
             .header #tagline {
                 color: var(--color-positive);
                 font-size: 9px;
@@ -843,6 +847,7 @@
     </style>
 
     <link rel="stylesheet" href="modal.css">
+    <link rel="stylesheet" href="items.css">
     <script src="txt.js" defer></script>
     <script src="sfx.js" defer></script>
     <script src="metrics.js" defer></script>
@@ -850,8 +855,8 @@
     <script src="achievements.js" defer></script>
     <script src="eye.js" defer></script>
     <script src="app.js" defer></script>
+    <script src="items.js" defer></script>
     <script src="modal.js" defer></script>
-
 </head>
 <body>
     <div class="header">
@@ -862,6 +867,8 @@
             <h1>Gamer's Remorse</h1>
             <div id="tagline"></div>
         </div>
+        <div id="health-bar" class="health-bar"></div>
+        <div id="item-bar" class="item-bar"></div>
     </div>
 
     <div class="nav">
