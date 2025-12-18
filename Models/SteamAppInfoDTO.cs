@@ -13,6 +13,8 @@ public record SteamAppInfoDTO
     public SteamContentDescriptorsDTO ContentDescriptors { get; set; } = null!;
     [JsonPropertyName("categories")]
     public SteamCategoryDTO[]? Categories { get; set; }
+    [JsonPropertyName("header_image")]
+    public string HeaderImage { get; set; } = string.Empty;
 
     [JsonIgnore]
     public GameFlags Flags

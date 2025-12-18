@@ -171,6 +171,7 @@
 .health-row {
     display: flex;
     gap: 2px;
+    user-select: none;
 }
 
 .heart {
@@ -241,6 +242,7 @@
     margin-left: auto;
     padding: 4px 8px;
     min-height: 40px;
+    user-select: none;
 }
 
 .item-bar:empty {

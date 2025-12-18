@@ -18,6 +18,7 @@ let convergenceScore = 0;
 let loadingMessageCount = 0;
 let tagTimelineData = [];
 let numReactions = 0;
+let currentBanner = '';
 
 function quitToDesktop() {
     const msg = exitMessages[Math.floor(Math.random() * exitMessages.length)];

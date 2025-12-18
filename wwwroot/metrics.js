@@ -120,7 +120,7 @@ const Metrics = {
             id: 'DEAD',
             condition: (m) => m.isEndDead,
             reason: (m) => `Activity declined - tail end is dead`,
-            severity: 0.15,
+            severity: 0.01,
             color: 'var(--color-tag-dead)'
         },
         {
@@ -154,7 +154,7 @@ const Metrics = {
             id: 'PHOENIX',
             condition: (m) => m.hasRevival && m.firstWaveNegRatio < 0.5 && m.lastWaveNegRatio < 0.5 && m.isStillAlive,
             reason: (m) => `Rose from ashes: ${Math.round((1 - m.firstWaveNegRatio) * 100)}% → ${Math.round((1 - m.lastWaveNegRatio) * 100)}% positive, still flying`,
-            severity: -0.1,
+            severity: -0.15,
             color: 'var(--color-tag-phoenix)'
         },
         {

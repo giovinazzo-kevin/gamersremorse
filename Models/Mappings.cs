@@ -11,7 +11,8 @@ public static class Mappings
             AppId = kv.Key,
             Name = kv.Value.Data.Name,
             IsFree = kv.Value.Data.IsFree,
-            Flags = kv.Value.Data.Flags
+            Flags = kv.Value.Data.Flags,
+            HeaderImage = kv.Value.Data.HeaderImage
         })
         .SingleOrDefault();
     public static SteamReview MapToDomain(this SteamReviewDTO dto, AppId appId)
