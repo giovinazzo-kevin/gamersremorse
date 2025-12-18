@@ -34,6 +34,14 @@ const ACHIEVEMENTS = {
         hidden: false,
         check: (state) => state.baka
     },
+    dead_game: {
+        id: 'dead_game',
+        title: 'Consolation Prize',
+        description: 'Pay respects',
+        icon: '🫡',
+        hidden: false,
+        check: (state) => state.paidRespectss
+    },
     // === CUSTOMIZATION ===
     dark_mode: {
         id: 'dark_mode',

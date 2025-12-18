@@ -1859,6 +1859,20 @@ function displayControversyContext(contexts) {
 
 document.addEventListener('click', onPageClick);
 
+// Press F to pay respects
+document.addEventListener('keydown', (e) => {
+    if (e.key.toLowerCase() === 'f' && !e.ctrlKey && !e.altKey && !e.metaKey) {
+        // Don't trigger if typing in an input
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+        
+        // Check if current game has DEAD or PRESS_F tag
+        const tags = currentMetrics?.verdict?.tags?.map(t => t.id) || [];
+        if (tags.includes('DEAD') || tags.includes('PRESS_F')) {
+            setAchievementFlag('paidRespects');
+        }
+    }
+});
+
 // PrintScreen interception - flash magenta/black chessboard
 document.addEventListener('keyup', (e) => {
     if (e.key === 'PrintScreen') {
