@@ -2,6 +2,14 @@
 
 const ACHIEVEMENTS = {
     // === BASIC PROGRESSION ===
+    first_achievement: {
+        id: 'first_achievement',
+        title: 'Yo Dawg',
+        description: 'Get any achievement',
+        icon: '🏆',
+        hidden: true,
+        check: (state) => state.anyAchievement
+    },
     first_analysis: {
         id: 'first_analysis',
         title: 'I',
@@ -23,7 +31,7 @@ const ACHIEVEMENTS = {
         id: 'dark_mode',
         title: 'Big Apple, 3AM',
         description: 'Enable dark mode',
-        icon: '🌙',
+        icon: '🍎',
         hidden: false,
         check: (state) => state.darkModeEnabled
     },
@@ -34,6 +42,22 @@ const ACHIEVEMENTS = {
         icon: '🎨',
         hidden: false,
         check: (state) => state.customizedEye
+    },
+    lores: {
+        id: 'lores',
+        title: 'Low Poly Aesthetics',
+        description: 'Decrease the LOD',
+        icon: '🔍',
+        hidden: false,
+        check: (state) => state.barCount < 20
+    },
+    hires: {
+        id: 'hires',
+        title: 'Super Ultra Resolution',
+        description: 'Turn the LOD up to 11',
+        icon: '🔎',
+        hidden: false,
+        check: (state) => state.barCount > 50
     },
     custom_tagline: {
         id: 'custom_tagline',
@@ -150,6 +174,7 @@ let achievementState = {
     impulse101: false,
     checkedEarly: false,
     deathCount: 0,
+    barCount: 20,
 };
 
 // === PERSISTENCE ===
@@ -159,6 +184,18 @@ function loadAchievementState() {
         const parsed = JSON.parse(saved);
         achievementState = { ...achievementState, ...parsed };
     }
+}
+
+function resetAchievements() {
+    const count = Object.keys(achievementState.unlocked).length;
+    for (const key in achievementState) {
+        if (key === 'unlocked') {
+            achievementState.unlocked = {};
+        } else {
+            achievementState[key] = false;
+        }
+    }
+    saveAchievementState();
 }
 
 function saveAchievementState() {
@@ -238,12 +275,15 @@ function showAchievementToast(achievement) {
     
     activeToasts.push(toast);
     document.body.appendChild(toast);
-    
-    // Play sound if available
-    if (typeof playAchievementSound === 'function') {
-        playAchievementSound();
+
+    playAchievementSound();
+
+    if (!achievementState.anyAchievement) {
+        setTimeout(() => {
+            setAchievementFlag('anyAchievement', true);
+        }, 500);
     }
-    
+
     // Remove after display time
     setTimeout(() => {
         toast.classList.add('hiding');

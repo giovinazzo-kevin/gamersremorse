@@ -69,7 +69,7 @@ createCheatCodeListener({
     playZeldaSecretJingle();
     
     // Trigger achievements
-    if (typeof setAchievementFlag === 'function') {
+     {
         if (code === 'konami') setAchievementFlag('konamiEntered');
         if (code === 'doom') setAchievementFlag('iddqdEntered');
         if (code === 'doomguns') setAchievementFlag('idkfaEntered');

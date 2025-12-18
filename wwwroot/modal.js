@@ -38,7 +38,7 @@ function setDarkMode(enabled, saveToStorage = true) {
         if (typeof languageChart !== 'undefined' && languageChart) languageChart.update();
     }
     
-    if (typeof drawTimeline === 'function') drawTimeline();
+     drawTimeline();
     
     if (saveToStorage) {
         const saved = localStorage.getItem('eyeSettings');
@@ -98,7 +98,7 @@ function buildEyeTab(content, refs) {
     refs.sleepCheckbox.className = 'modal-checkbox';
     refs.sleepCheckbox.checked = typeof isSleepEnabled === 'function' ? isSleepEnabled() : true;
     refs.sleepCheckbox.onchange = () => {
-        if (typeof setSleepEnabled === 'function') setSleepEnabled(refs.sleepCheckbox.checked);
+         setSleepEnabled(refs.sleepCheckbox.checked);
     };
     sleepRow.appendChild(refs.sleepCheckbox);
     sleepRow.appendChild(document.createTextNode(' Enable sleeping'));
@@ -112,7 +112,7 @@ function buildEyeTab(content, refs) {
     refs.trackingCheckbox.className = 'modal-checkbox';
     refs.trackingCheckbox.checked = typeof isCursorTrackingEnabled === 'function' ? isCursorTrackingEnabled() : true;
     refs.trackingCheckbox.onchange = () => {
-        if (typeof setCursorTrackingEnabled === 'function') setCursorTrackingEnabled(refs.trackingCheckbox.checked);
+         setCursorTrackingEnabled(refs.trackingCheckbox.checked);
     };
     trackingRow.appendChild(refs.trackingCheckbox);
     trackingRow.appendChild(document.createTextNode(' Enable cursor tracking'));
@@ -130,10 +130,10 @@ function buildEyeTab(content, refs) {
     refs.upperColor.type = 'color';
     refs.upperColor.className = 'modal-color';
     refs.upperColor.value = getComputedStyle(document.documentElement).getPropertyValue('--color-positive').trim();
-    refs.upperColor.oninput = () => { 
+    refs.upperColor.oninput = (passive) => { 
         document.documentElement.style.setProperty('--color-positive', refs.upperColor.value); 
-        if (typeof updateColorLegend === 'function') updateColorLegend(); 
-        if (typeof setAchievementFlag === 'function') setAchievementFlag('customizedEye');
+         updateColorLegend(); 
+        if (!passive) setAchievementFlag('customizedEye');
     };
     upperRow.appendChild(refs.upperColor);
     leftCol.appendChild(upperRow);
@@ -148,10 +148,10 @@ function buildEyeTab(content, refs) {
     refs.lowerColor.type = 'color';
     refs.lowerColor.className = 'modal-color';
     refs.lowerColor.value = getComputedStyle(document.documentElement).getPropertyValue('--color-negative').trim();
-    refs.lowerColor.oninput = () => { 
+    refs.lowerColor.oninput = (passive) => { 
         document.documentElement.style.setProperty('--color-negative', refs.lowerColor.value); 
-        if (typeof updateColorLegend === 'function') updateColorLegend(); 
-        if (typeof setAchievementFlag === 'function') setAchievementFlag('customizedEye');
+         updateColorLegend(); 
+        if (!passive) setAchievementFlag('customizedEye');
     };
     lowerRow.appendChild(refs.lowerColor);
     leftCol.appendChild(lowerRow);
@@ -166,10 +166,10 @@ function buildEyeTab(content, refs) {
     refs.lashColor.type = 'color';
     refs.lashColor.className = 'modal-color';
     refs.lashColor.value = getComputedStyle(document.documentElement).getPropertyValue('--color-uncertain').trim();
-    refs.lashColor.oninput = () => { 
+    refs.lashColor.oninput = (passive) => { 
         document.documentElement.style.setProperty('--color-uncertain', refs.lashColor.value); 
-        if (typeof updateColorLegend === 'function') updateColorLegend(); 
-        if (typeof setAchievementFlag === 'function') setAchievementFlag('customizedEye');
+         updateColorLegend(); 
+        if (!passive) setAchievementFlag('customizedEye');
     };
     lashRow.appendChild(refs.lashColor);
     leftCol.appendChild(lashRow);
@@ -193,7 +193,8 @@ function buildEyeTab(content, refs) {
     refs.barValue.textContent = '20';
     refs.barSlider.oninput = () => {
         refs.barValue.textContent = refs.barSlider.value;
-        if (typeof setBarDensity === 'function') setBarDensity(parseInt(refs.barSlider.value));
+         setBarDensity(parseInt(refs.barSlider.value));
+        checkAchievements();
     };
     barRow.appendChild(refs.barSlider);
     barRow.appendChild(refs.barValue);
@@ -230,7 +231,7 @@ function buildEyeTab(content, refs) {
         };
         updatePreview();
         refs.previewInterval = setInterval(updatePreview, 66);
-        if (typeof setTrackingElement === 'function') setTrackingElement(previewBox);
+         setTrackingElement(previewBox);
     }
     
     rightCol.appendChild(previewBox);
@@ -279,7 +280,7 @@ function buildLockedTab(content) {
 
 function buildAchievementsTab(content) {
     // Trigger "checked early" achievement
-    if (typeof onAchievementsViewed === 'function') onAchievementsViewed();
+     onAchievementsViewed();
     
     const container = document.createElement('div');
     container.className = 'achievements-container';
@@ -489,9 +490,9 @@ function openModal(title, options = {}) {
             if (refs.trackingCheckbox) { refs.trackingCheckbox.checked = settings.trackingEnabled !== false; refs.trackingCheckbox.onchange(); }
             if (refs.darkModeCheckbox) refs.darkModeCheckbox.checked = settings.darkMode || false;
             if (refs.consoleCheckbox) refs.consoleCheckbox.checked = settings.consoleEnabled || false;
-            if (refs.upperColor) { refs.upperColor.value = settings.upperColor || '#54bebe'; refs.upperColor.oninput(); }
-            if (refs.lowerColor) { refs.lowerColor.value = settings.lowerColor || '#c80064'; refs.lowerColor.oninput(); }
-            if (refs.lashColor) { refs.lashColor.value = settings.lashColor || '#666666'; refs.lashColor.oninput(); }
+            if (refs.upperColor) { refs.upperColor.value = settings.upperColor || '#54bebe'; refs.upperColor.oninput(true); }
+            if (refs.lowerColor) { refs.lowerColor.value = settings.lowerColor || '#c80064'; refs.lowerColor.oninput(true); }
+            if (refs.lashColor) { refs.lashColor.value = settings.lashColor || '#666666'; refs.lashColor.oninput(true); }
             if (refs.barSlider && refs.barValue) { refs.barSlider.value = settings.barCount || 20; refs.barValue.textContent = settings.barCount || 20; refs.barSlider.oninput(); }
             setDarkMode(settings.darkMode || false, false);
             setConsoleEnabled(settings.consoleEnabled || false, false);
@@ -529,7 +530,7 @@ function openModal(title, options = {}) {
 function closeModal() {
     if (activeModal) {
         if (activeModal.refs?.previewInterval) clearInterval(activeModal.refs.previewInterval);
-        if (typeof clearTrackingElement === 'function') clearTrackingElement();
+         clearTrackingElement();
         activeModal.remove();
         activeModal = null;
     }
@@ -581,12 +582,12 @@ const commands = {
                     consolePrint('tagline = "' + (el ? el.textContent : '') + '" (random)');
                 }
             } else if (args[0].toLowerCase() === 'clear' || args[0].toLowerCase() === 'reset') {
-                if (typeof clearCustomTagline === 'function') clearCustomTagline();
+                 clearCustomTagline();
                 consolePrint('Tagline reset to random.');
             } else {
                 const text = args.join(' ');
-                if (typeof setCustomTagline === 'function') setCustomTagline(text);
-                if (typeof setAchievementFlag === 'function') setAchievementFlag('customTaglineSet');
+                 setCustomTagline(text);
+                 setAchievementFlag('customTaglineSet');
                 consolePrint('Tagline set to: "' + text + '"');
             }
         }
@@ -594,8 +595,8 @@ const commands = {
     eye_blink: {
         description: 'Trigger blink',
         execute: () => {
-            if (typeof blink === 'function') { blink(); consolePrint('Blink triggered.'); }
-            else consolePrint('Eye system not available.');
+            blink();
+            consolePrint('Blink triggered.');
         }
     },
     eye_expression: {
@@ -610,9 +611,20 @@ const commands = {
             }
         }
     },
+    bar_count: {
+        description: 'Set eye bar count',
+        execute: (args) => {
+            const count = parseInt(args[0]);
+            if (isNaN(count) || count < 1) {
+                return 'Usage: bar_count <number>';
+            }
+            setBarDensity(count, state.gapRatio);
+            return `Bar count set to ${count}`;
+        }
+    },
     quit: {
         description: 'Quit to desktop',
-        execute: () => { if (typeof quitToDesktop === 'function') quitToDesktop(); }
+        execute: () => {  quitToDesktop(); }
     },
     save: {
         description: 'Save console settings',
@@ -694,16 +706,7 @@ const commands = {
         description: 'Reset all achievements',
         execute: () => {
             if (typeof achievementState !== 'undefined') {
-                const count = Object.keys(achievementState.unlocked).length;
-                for (const key in achievementState) {
-                    if (key === 'unlocked') {
-                        achievementState.unlocked = {};
-                    } else {
-                        achievementState[key] = false;
-                    }
-                }
-                if (typeof saveAchievementState === 'function') saveAchievementState();
-                consolePrint(`Reset ${count} achievement${count !== 1 ? 's' : ''}.`, 'success');
+                resetAchievements();
             } else {
                 consolePrint('Achievement system not available.', 'error');
             }
@@ -714,11 +717,11 @@ const commands = {
         hidden: true,
         execute: (args) => {
             if (args[0] === '1') {
-                if (typeof setSvCheats === 'function') setSvCheats(true);
-                if (typeof setAchievementFlag === 'function') setAchievementFlag('svCheatsEnabled');
+                 setSvCheats(true);
+                 setAchievementFlag('svCheatsEnabled');
                 consolePrint('sv_cheats enabled.', 'success');
             } else if (args[0] === '0') {
-                if (typeof setSvCheats === 'function') setSvCheats(false);
+                 setSvCheats(false);
                 consolePrint('sv_cheats disabled.');
             } else {
                 consolePrint('sv_cheats = ' + (typeof isSvCheats === 'function' && isSvCheats() ? '1' : '0'));
@@ -747,22 +750,15 @@ const commands = {
         description: 'Kill the eye',
         hidden: true,
         execute: () => {
-            if (typeof killEye === 'function') {
-                killEye();
-            } else {
-                consolePrint('Nothing to kill.');
-            }
+            killEye();
         }
     },
     explode: {
         description: 'Explode the eye',
         hidden: true,
         execute: () => {
-            if (typeof killEye === 'function') {
-                killEye('explode');
-            } else {
-                consolePrint('Nothing to explode.');
-            }
+            killEye('explode');
+
         }
     },
     impulse: {
@@ -774,15 +770,9 @@ const commands = {
                     consolePrint('sv_cheats must be enabled to use this command.', 'error');
                     return;
                 }
-                if (typeof impulse101 === 'function') {
-                    const count = impulse101();
-                    consolePrint(`Unlocked ${count} achievement${count !== 1 ? 's' : ''}.`, 'success');
-                    if (typeof playZeldaSecretJingle === 'function') playZeldaSecretJingle();
-                } else {
-                    consolePrint('Achievement system not available.', 'error');
-                }
-            } else {
-                consolePrint('Unknown impulse command.');
+                const count = impulse101();
+                consolePrint(`Unlocked ${count} achievement${count !== 1 ? 's' : ''}.`, 'success');
+                playZeldaSecretJingle();
             }
         }
     },
@@ -916,7 +906,7 @@ function loadEyeSettings() {
         if (settings.upperColor) document.documentElement.style.setProperty('--color-positive', settings.upperColor);
         if (settings.lowerColor) document.documentElement.style.setProperty('--color-negative', settings.lowerColor);
         if (settings.lashColor) document.documentElement.style.setProperty('--color-uncertain', settings.lashColor);
-        if (typeof updateColorLegend === 'function') updateColorLegend();
+        updateColorLegend();
         if (settings.barCount && typeof setBarDensity === 'function') setBarDensity(settings.barCount);
     }
     

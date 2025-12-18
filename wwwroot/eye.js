@@ -1117,7 +1117,12 @@ function tick(timestamp) {
         draw();
         lastFrame = timestamp;
     }
+    updateAchievementFlags();
     requestAnimationFrame(tick);
+}
+
+function updateAchievementFlags() {
+    setAchievementFlag('barCount', state.barCount);
 }
 
 function onPageClick() {
@@ -1184,12 +1189,7 @@ function killEye(animation = 'fall') {
     setPeeved(true, false, false, 0, 0, 10);
     
     const animFn = deathAnimations[animation] || deathAnimations.explode;
-    
-    if (typeof playPreDeathSound === 'function') {
-        playPreDeathSound(() => animFn(eyeEl));
-    } else {
-        setTimeout(() => animFn(eyeEl), 1000);
-    }
+    playPreDeathSound(() => animFn(eyeEl));
 }
 
 // For backwards compatibility
@@ -1206,7 +1206,7 @@ function doFall(eyeEl) {
     const eyeContainer = document.getElementById('eye-container') || eyeEl.parentElement;
     
     // Play post-death sound
-    if (typeof playPostDeathSound === 'function') playPostDeathSound();
+     playPostDeathSound();
     
     // Hide overflow to prevent scrollbar
     const originalOverflow = document.body.style.overflow;
@@ -1320,8 +1320,8 @@ function doExplode(eyeEl) {
     }
     
     // Play pow + post-death sound
-    if (typeof playPowSound === 'function') playPowSound();
-    if (typeof playPostDeathSound === 'function') playPostDeathSound();
+     playPowSound();
+     playPostDeathSound();
     onDied();
 
     requestAnimationFrame(animateExplosion);

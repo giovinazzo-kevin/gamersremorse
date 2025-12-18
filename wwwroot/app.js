@@ -174,7 +174,7 @@ async function analyze() {
         setExpression('neutral');
         
         // Achievement: first analysis
-        if (typeof setAchievementFlag === 'function') setAchievementFlag('analyzedGame');
+         setAchievementFlag('analyzedGame');
 
         if (currentSnapshot) {
             const sampled = currentSnapshot.totalPositive + currentSnapshot.totalNegative;
@@ -1867,10 +1867,10 @@ document.addEventListener('keyup', (e) => {
 
 function flashChessboard() {
     // Play the screenshot sound
-    if (typeof playScreenshotSound === 'function') playScreenshotSound();
+     playScreenshotSound();
     
     // Achievement: Eye of the Beholder
-    if (typeof setAchievementFlag === 'function') setAchievementFlag('triedScreenshot');
+     setAchievementFlag('triedScreenshot');
     
     const overlay = document.createElement('div');
     overlay.className = 'screenshot-blocker';
