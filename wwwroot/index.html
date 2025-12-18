@@ -668,6 +668,8 @@
             }
     </style>
 
+    <link rel="stylesheet" href="modal.css">
+    <script src="modal.js" defer></script>
     <script src="txt.js" defer></script>
     <script src="sfx.js" defer></script>
     <script src="metrics.js" defer></script>
@@ -689,7 +691,7 @@
         <a href="#">Play</a>
         <a href="#">Hall of Fame</a>
         <a href="#">Wall of Shame</a>
-        <a href="#">Settings</a>
+        <a href="#" onclick="openSettings(); return false;">Settings</a>
         <a href="#">Credits</a>
         <a href="#" onclick="return quitToDesktop();">Quit to Desktop</a>
     </div>

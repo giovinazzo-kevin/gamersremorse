@@ -910,6 +910,7 @@ function draw() {
 
 function updateCursorTracking() {
     if (!state.awake) return;
+    if (state.cursorTrackingEnabled === false) return;
 
     const vel = distance(state.cursorX || 0, state.cursorY || 0, state.lastCursorX || 0, state.lastCursorY || 0);
     let noticed = state.lastCursorX !== undefined && vel >= state.attentionThreshold;
@@ -1027,11 +1028,35 @@ function updateIrisPosition(dt) {
 }
 
 function onMouseMove(e) {
-    const rect = svg.getBoundingClientRect();
+    const refElement = state.trackingElement || svg;
+    const rect = refElement.getBoundingClientRect();
     state.cursorX = e.clientX - rect.left;
     state.cursorY = e.clientY - rect.top;
     state.svgWidth = rect.width;
     state.svgHeight = rect.height;
+}
+
+function setTrackingElement(el) {
+    state.trackingElement = el;
+}
+
+function clearTrackingElement() {
+    state.trackingElement = null;
+}
+
+function setSleepEnabled(enabled) {
+    state.sleepEnabled = enabled;
+    if (!enabled && !state.awake) {
+        wake();
+    }
+}
+
+function setCursorTrackingEnabled(enabled) {
+    state.cursorTrackingEnabled = enabled;
+    if (!enabled) {
+        state.targetX = 0;
+        state.targetY = 0;
+    }
 }
 
 function snooze() {
@@ -1049,7 +1074,7 @@ function tick(timestamp) {
     state.bottomSampleOffset += state.bottomSampleSpeed * dt;
 
     const idleTime = (Date.now() - state.lastInteraction) / 1000;
-    if (state.awake && idleTime > state.sleepTimeout) {
+    if (state.awake && state.sleepEnabled !== false && idleTime > state.sleepTimeout) {
         snooze();
     }
 
