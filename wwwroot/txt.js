@@ -64,7 +64,7 @@ const taglines = {
         "ALLOWS ME TO DRAW 2 REVIEWS FROM MY STEAM DECK",
         "EVERYONE THINKS EYE'M JUST A BLOODY ONE-I'D MONSTER",
         "EYE HAVE THE POWER OF KINO AND SLOP BY MY SIDE",
-    ]
+    ],
 };
 
 const exitMessages = [

@@ -1156,20 +1156,29 @@ function updateEyeFromMetrics(metrics) {
     let targetExpr = 'neutral';
     let emoteDuration = Infinity;
 
+    const isBullshit = tags.includes('PREDATORY') || tags.includes('REFUND_TRAP');
+    const isDisrespectful = tags.includes('EXTRACTIVE') || tags.includes('STOCKHOLM');
+    const isGood = tags.includes('HEALTHY') || tags.includes('HONEST');
+    const isLewd = tags.includes('HORNY');
+    const isDead = tags.includes('DEAD');
+    const isDeadLmao = isDead && (isBullshit | isDisrespectful);
     // Priority-based expression
-    if (tags.includes('PREDATORY') || tags.includes('REFUND_TRAP')) {
-        targetExpr = 'angry';
-        emoteDuration = 6000;
-    } else if (tags.includes('EXTRACTIVE') || tags.includes('STOCKHOLM')) {
-        targetExpr = 'disappointed';
-        emoteDuration = 4000;
-    } else if (tags.includes('HORNY')) {
-        targetExpr = 'flustered';
-        emoteDuration = Infinity;
-    } else if (tags.includes('FLOP') || tags.includes('DEAD')) {
+    if (isDeadLmao) {
         targetExpr = 'mocking';
         emoteDuration = 2500;
-    } else if (tags.includes('HEALTHY') || tags.includes('HONEST')) {
+    } else if (isDead) {
+        targetExpr = 'sad';
+        emoteDuration = 60000;
+    } else if (isBullshit) {
+        targetExpr = 'angry';
+        emoteDuration = 6000;
+    } else if (isDisrespectful) {
+        targetExpr = 'disappointed';
+        emoteDuration = 4000;
+    } else if (isLewd) {
+        targetExpr = 'flustered';
+        emoteDuration = Infinity;
+    } else if (isGood) {
         targetExpr = 'neutral';
     }
     const reaction = numReactions++;

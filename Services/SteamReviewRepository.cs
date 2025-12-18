@@ -22,7 +22,7 @@ public record SteamReviewRepository(
         public bool AllowLazyRefreshIfStale { get; set; } = true;
         public int LazyRefreshMinItems { get; set; } = 10000;
         public int LazyRefreshMaxItems { get; set; } = 100000;
-        public double LazyRefreshTargetPercent { get; set; } = 0.5;
+        public double LazyRefreshTargetPercent { get; set; } = 1;
         public int LazyRefreshBatchSize { get; set; } = 100;
     }
 
@@ -111,8 +111,8 @@ public record SteamReviewRepository(
         };
 
         var filters = totalReviews switch {
-            > 100000 => ["updated", "recent"],
-            > 10000 => ["recent", "all"],
+            > 100000 => ["all", "updated", "recent"],
+            > 10000 => ["all", "updated"],
             _ => new[] { "all" }
         };
 

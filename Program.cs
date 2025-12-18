@@ -44,7 +44,7 @@ app.MapGet("/controversies", async (string game, string months, string? types, G
         string query;
         string? overview = null;
 
-        const string bullets = " bullet points";
+        const string bullets = " key points";
 
         var parts = month.Split('-');
         var year = parts[0];
@@ -53,14 +53,14 @@ app.MapGet("/controversies", async (string game, string months, string? types, G
             ? monthNames[monthNumber.Value] : "";
 
         query = eventType switch {
-            "launch" => $"{game} (video game) launch reception {year}",
+            "launch" => $"{game} (video game) launch reception",
             "launch_troubled" => $"{game} (video game) launch controversy",
             "launch_flop" => $"Why did {game} (video game) flop",
             "death" => $"Why did {game} (video game) die in {year}",
             "review_bomb" when !string.IsNullOrEmpty(monthName)
                 => $"What was the {game} (video game) controversy in {monthName} {year}",
             "review_bomb" => $"What was the {game} (video game) controversy in {year}",
-            "mass_edits" => $"What happened to {game} (video game) in {year} that made players angry",
+            "mass_edits" => $"Why did people talk about {game} (video game) so much in {year}",
             _ => $"What was the {game} (video game) controversy in {year}"
         } + bullets;
 

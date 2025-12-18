@@ -250,8 +250,8 @@ const expressions = {
     },
     disappointed: {
         lerp: {
-            top: { shapes: [{ type: 'flat', params: { falloff: 0.7 }, offset: 0, amplitude: 1 }], maxHeight: 0.12 },
-            bottom: { shapes: [{ type: 'raised', params: { sigma: 1.2, base: 0.6 }, offset: 0, amplitude: 1 }], maxHeight: 0.32 },
+            top: { shapes: [{ type: 'flat', params: { falloff: 1.5 }, offset: 0, amplitude: 1 }], maxHeight: 0.12 },
+            bottom: { shapes: [{ type: 'gaussian', params: { sigma: 1.5, c: -0.2 }, offset: 0, amplitude: 1 }], maxHeight: 0.3 },
             irisRadius: 0.11,
             irisYOffset: 0.05,
             irisXOffset: 0,
@@ -284,8 +284,8 @@ const expressions = {
             }
         },
         onEnter: () => {
-            addImpulse('bottom', { amplitude: 0.15, sigma: 0.6, velocity: 5, decay: 0.9998, phase: 5 });
-            addImpulse('top', { amplitude: 0.15, sigma: 0.6, velocity: -5, decay: 0.9998, phase: 0 });
+            addImpulse('bottom', { amplitude: 0.15, sigma: 0.6, velocity: 5, decay: 1, phase: 5 });
+            addImpulse('top', { amplitude: 0.15, sigma: 0.6, velocity: -5, decay: 1, phase: 0 });
         },
         onExit: () => {
             state.impulses.bottom.forEach(imp => imp.decay = 0.1);
@@ -431,6 +431,9 @@ const expressions = {
             corneredTime: 0,
             targetBlush: 1,
         },
+        onExit: () => {
+            enableBlinking();
+        },
         update: (dt) => {
             if (state.lookingAtGraph) {
                 state.corneredTime += dt * 1000;
@@ -440,6 +443,7 @@ const expressions = {
                     state.engrossed = true;
                     state.targetBlush = 1;
                     state.targetDilation = 0.8;
+                    disableBlinking();
                     return;
                 }
             }

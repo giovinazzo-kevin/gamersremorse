@@ -92,7 +92,7 @@ public class GoogleScraper(IDbContextFactory<AppDbContext> dbFactory) : IAsyncDi
                         .filter(t => t && t.length > 2)
                         .map(t => '• ' + t);
 
-                    return items.length ? items.join('\n') : null;
+                    return items.length ? items.join('\n') : mainCol.innerText.trim();
                 }
             ");
 
