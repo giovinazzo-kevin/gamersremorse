@@ -315,6 +315,7 @@ function setLoading(loading) {
 
 function wake() {
     if (!state.awake) {
+        setRandomTagline();
         state.awake = true;
         state.blinkTarget = 0;
         setExpression('neutral');
@@ -354,7 +355,10 @@ function updateBlink(dt) {
 
     if (state.awake && state.canBlink && state.blinkTarget === 1 && state.blink >= 0.95) {
         state.blinkTarget = 0;
+        setRandomTagline();
     }
+
+    tagline.style.opacity = 1 - state.blink;
 }
 
 function drawBar(x, barHeight, direction, color, barWidth, irisX, irisY, irisRadius) {
@@ -653,6 +657,7 @@ function onMouseMove(e) {
 }
 
 function snooze() {
+    clearTagline();
     state.awake = false;
     state.blinkTarget = 1;
     setExpression('neutral');
