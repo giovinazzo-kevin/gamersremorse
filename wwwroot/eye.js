@@ -460,7 +460,7 @@ const expressions = {
             targetY: 0,
         },
         onEnter: () => {
-            addImpulse('bottom', { amplitude: 0.5, width: 0.4, velocity: -1.5, decay: 0.998 });
+            addImpulse('bottom', { amplitude: 0.5, width: 1, velocity: -4.5, decay: 1 });
         },
         onExit: () => {
             state.impulses.bottom.forEach(imp => imp.decay = 0.9);
