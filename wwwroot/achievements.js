@@ -6,7 +6,7 @@ const ACHIEVEMENTS = {
         id: 'first_achievement',
         title: 'Yo Dawg',
         description: 'Get any achievement',
-        icon: '🏆',
+        icon: '🥈',
         hidden: true,
         check: (state) => state.anyAchievement
     },
@@ -25,6 +25,14 @@ const ACHIEVEMENTS = {
         icon: '📸',
         hidden: false,
         check: (state) => state.triedScreenshot
+    },
+    pervert: {
+        id: 'pervert',
+        title: 'Hide This Game',
+        description: 'Look up your favorite genre',
+        icon: '🍆',
+        hidden: false,
+        check: (state) => state.baka
     },
     // === CUSTOMIZATION ===
     dark_mode: {
@@ -76,6 +84,14 @@ const ACHIEVEMENTS = {
         check: (state) => state.deathCount > 0
     },
     // === SECRET ACHIEVEMENTS ===
+    coomer: {
+        id: 'coomer',
+        title: 'Eye Play It For The Plot',
+        description: 'Make a VERY compelling argument',
+        icon: '💦',
+        hidden: true,
+        check: (state) => state.wasForcedToLook
+    },
     sv_cheats: {
         id: 'sv_cheats',
         title: 'Developer Mode',

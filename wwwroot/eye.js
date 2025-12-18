@@ -498,6 +498,7 @@ const expressions = {
                 state.corneredTime += dt * 1000;
 
                 if (state.corneredTime >= 3000) {
+                    setAchievementFlag('wasForcedToLook', true);
                     setExpression('addicted');
                     state.engrossed = true;
                     state.targetBlush = 1;

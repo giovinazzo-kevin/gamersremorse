@@ -1239,6 +1239,10 @@ function updateEyeFromMetrics(metrics) {
     if (isDeadLmao) {
         targetExpr = 'mocking';
         emoteDuration = 2500;
+    } else if (isLewd) {
+        setAchievementFlag('baka', true);
+        targetExpr = 'flustered';
+        emoteDuration = Infinity;
     } else if (isDead) {
         targetExpr = 'sad';
         emoteDuration = 60000;
@@ -1248,10 +1252,7 @@ function updateEyeFromMetrics(metrics) {
     } else if (isDisrespectful) {
         targetExpr = 'disappointed';
         emoteDuration = 4000;
-    } else if (isLewd) {
-        targetExpr = 'flustered';
-        emoteDuration = Infinity;
-    } else if (isGood) {
+    }  else if (isGood) {
         targetExpr = 'neutral';
     }
     const reaction = numReactions++;

@@ -1,6 +1,7 @@
 ﻿/* Modal JS - HTML/CSS Source Engine UI */
 
 let activeModal = null;
+let loading = false;
 
 const UI = {
     bg: '#4c5844',
@@ -130,10 +131,10 @@ function buildEyeTab(content, refs) {
     refs.upperColor.type = 'color';
     refs.upperColor.className = 'modal-color';
     refs.upperColor.value = getComputedStyle(document.documentElement).getPropertyValue('--color-positive').trim();
-    refs.upperColor.oninput = (passive) => { 
+    refs.upperColor.oninput = () => { 
         document.documentElement.style.setProperty('--color-positive', refs.upperColor.value); 
-         updateColorLegend(); 
-        if (!passive) setAchievementFlag('customizedEye');
+        updateColorLegend(); 
+        if (!loading) setAchievementFlag('customizedEye'); 
     };
     upperRow.appendChild(refs.upperColor);
     leftCol.appendChild(upperRow);
@@ -148,10 +149,10 @@ function buildEyeTab(content, refs) {
     refs.lowerColor.type = 'color';
     refs.lowerColor.className = 'modal-color';
     refs.lowerColor.value = getComputedStyle(document.documentElement).getPropertyValue('--color-negative').trim();
-    refs.lowerColor.oninput = (passive) => { 
+    refs.lowerColor.oninput = () => { 
         document.documentElement.style.setProperty('--color-negative', refs.lowerColor.value); 
-         updateColorLegend(); 
-        if (!passive) setAchievementFlag('customizedEye');
+        updateColorLegend(); 
+        if (!loading) setAchievementFlag('customizedEye'); 
     };
     lowerRow.appendChild(refs.lowerColor);
     leftCol.appendChild(lowerRow);
@@ -166,10 +167,10 @@ function buildEyeTab(content, refs) {
     refs.lashColor.type = 'color';
     refs.lashColor.className = 'modal-color';
     refs.lashColor.value = getComputedStyle(document.documentElement).getPropertyValue('--color-uncertain').trim();
-    refs.lashColor.oninput = (passive) => { 
+    refs.lashColor.oninput = () => { 
         document.documentElement.style.setProperty('--color-uncertain', refs.lashColor.value); 
-         updateColorLegend(); 
-        if (!passive) setAchievementFlag('customizedEye');
+        updateColorLegend(); 
+        if (!loading) setAchievementFlag('customizedEye'); 
     };
     lashRow.appendChild(refs.lashColor);
     leftCol.appendChild(lashRow);
@@ -485,17 +486,19 @@ function openModal(title, options = {}) {
         const saved = localStorage.getItem('eyeSettings');
         if (saved) {
             const settings = JSON.parse(saved);
+            loading = true;
             if (refs.blinkCheckbox) { refs.blinkCheckbox.checked = settings.blinkEnabled !== false; refs.blinkCheckbox.onchange(); }
             if (refs.sleepCheckbox) { refs.sleepCheckbox.checked = settings.sleepEnabled !== false; refs.sleepCheckbox.onchange(); }
             if (refs.trackingCheckbox) { refs.trackingCheckbox.checked = settings.trackingEnabled !== false; refs.trackingCheckbox.onchange(); }
             if (refs.darkModeCheckbox) refs.darkModeCheckbox.checked = settings.darkMode || false;
             if (refs.consoleCheckbox) refs.consoleCheckbox.checked = settings.consoleEnabled || false;
-            if (refs.upperColor) { refs.upperColor.value = settings.upperColor || '#54bebe'; refs.upperColor.oninput(true); }
-            if (refs.lowerColor) { refs.lowerColor.value = settings.lowerColor || '#c80064'; refs.lowerColor.oninput(true); }
-            if (refs.lashColor) { refs.lashColor.value = settings.lashColor || '#666666'; refs.lashColor.oninput(true); }
+            if (refs.upperColor) { refs.upperColor.value = settings.upperColor || '#54bebe'; refs.upperColor.oninput(); }
+            if (refs.lowerColor) { refs.lowerColor.value = settings.lowerColor || '#c80064'; refs.lowerColor.oninput(); }
+            if (refs.lashColor) { refs.lashColor.value = settings.lashColor || '#666666'; refs.lashColor.oninput(); }
             if (refs.barSlider && refs.barValue) { refs.barSlider.value = settings.barCount || 20; refs.barValue.textContent = settings.barCount || 20; refs.barSlider.oninput(); }
             setDarkMode(settings.darkMode || false, false);
             setConsoleEnabled(settings.consoleEnabled || false, false);
+            loading = false;
         }
     };
     bottomRow.appendChild(loadBtn);
