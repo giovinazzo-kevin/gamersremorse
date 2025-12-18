@@ -1187,7 +1187,12 @@ function killEye(animation = 'fall') {
     setPeeved(true, false, false, 0, 0, 10);
     
     const animFn = deathAnimations[animation] || deathAnimations.explode;
-    playPreDeathSound(() => animFn(eyeEl));
+    if (animation == 'fall') {
+        playPreDeathSound(() => animFn(eyeEl));
+    }
+    else {
+        animFn(eyeEl);
+    }
 }
 
 // For backwards compatibility
