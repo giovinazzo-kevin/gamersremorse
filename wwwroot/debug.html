@@ -221,10 +221,6 @@
             <div class="section">
                 <div class="section-header">State</div>
                 <div class="toggle-row">
-                    <input type="checkbox" autocomplete="off" id="shy-toggle">
-                    <label for="shy-toggle">Shy (sexual content)</label>
-                </div>
-                <div class="toggle-row">
                     <input type="checkbox" autocomplete="off" id="unhinged-toggle">
                     <label for="unhinged-toggle">Unhinged (predatory)</label>
                 </div>
@@ -353,11 +349,6 @@
             const val = parseFloat(e.target.value);
             document.getElementById('bottom-speed-val').textContent = val.toFixed(1);
             state.bottomSampleSpeed = val;
-        });
-
-        // Toggles
-        document.getElementById('shy-toggle').addEventListener('change', (e) => {
-            setShy(e.target.checked);
         });
 
         document.getElementById('unhinged-toggle').addEventListener('change', (e) => {

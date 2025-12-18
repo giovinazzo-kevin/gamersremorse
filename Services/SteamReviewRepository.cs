@@ -111,8 +111,9 @@ public record SteamReviewRepository(
         };
 
         var filters = totalReviews switch {
-            > 100000 => new[] { "all", "updated", "recent" },
-            _ => new[] { "all", "recent" }
+            > 100000 => ["updated", "recent"],
+            > 10000 => ["recent", "all"],
+            _ => new[] { "all" }
         };
 
         // Build all cursors

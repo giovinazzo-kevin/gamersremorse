@@ -104,6 +104,9 @@ const state = {
     blinkVariance: 2,
     doubleBlinkChance: 0.2,
     expressionSpeed: 2,
+
+    fromLerp: null,
+    targetLerp: null,
 };
 
 // Shape functions
@@ -149,49 +152,57 @@ const shapeFunctions = {
 // Expression DEFINITIONS - just data, applied via setExpression
 const expressions = {
     neutral: {
-        top: { shape: 'gaussian', params: { sigma: 1 }, maxHeight: 0.3 },
-        bottom: { shape: 'gaussian', params: { sigma: 1 }, maxHeight: 0.3 },
+        lerp: {
+            top: { shape: 'gaussian', params: { sigma: 1 }, maxHeight: 0.3 },
+            bottom: { shape: 'gaussian', params: { sigma: 1 }, maxHeight: 0.3 },
+            irisRadius: 0.15,
+            irisDilation: 0,
+            irisXOffset: 0,
+            irisYOffset: 0,
+            lashMultiplier: 1,
+            gapRatio: 0.2,
+            topSampleSpeed: -0.1,
+            bottomSampleSpeed: 0.1,
+            targetWidthRatio: 1.2,
+            driftStrength: 0.005,
+        },
         barCount: 20,
-        gapRatio: 0.2,
-        irisRadius: 0.15,
-        irisYOffset: 0,
-        irisXOffset: 0,
-        lashMultiplier: 1,
-        topSampleSpeed: -0.1,
-        bottomSampleSpeed: 0.1,
-        targetWidthRatio: 1.2,
-        driftStrength: 0.005,
+        noiseTop: 0,
+        noiseBottom: 0,
         shy: false,
         engrossed: false,
-        corneredTime: 0,
+        peeved: false,
         targetBlush: 0,
         update: (dt) => { },
     },
     suspicious: {
-        top: { shape: 'flat', params: { falloff: 0.7 }, maxHeight: 0.12 },
-        bottom: { shape: 'raised', params: { sigma: 1.2, base: 0.6 }, maxHeight: 0.32 },
-        irisRadius: 0.11,
-        irisYOffset: 0.05,
-        irisXOffset: 0,
-        lashMultiplier: 1.3,
-        targetWidthRatio: 1.2,
-        driftStrength: 0.005,
+        lerp: {
+            top: { shape: 'flat', params: { falloff: 0.7 }, maxHeight: 0.12 },
+            bottom: { shape: 'raised', params: { sigma: 1.2, base: 0.6 }, maxHeight: 0.32 },
+            irisRadius: 0.11,
+            irisYOffset: 0.05,
+            irisXOffset: 0,
+            lashMultiplier: 1.3,
+            targetWidthRatio: 1.2,
+            driftStrength: 0.005,
+        },
         update: (dt) => { },
     },
     reading: {
-        top: { shape: 'gaussian', params: { sigma: 1.3 }, maxHeight: 0.15 },
-        bottom: { shape: 'gaussian', params: { sigma: 1.3 }, maxHeight: 0.15 },
+        lerp: {
+            top: { shape: 'gaussian', params: { sigma: 1.3 }, maxHeight: 0.15 },
+            bottom: { shape: 'gaussian', params: { sigma: 1.3 }, maxHeight: 0.15 },
+            gapRatio: 0,
+            irisRadius: 0.22,
+            irisYOffset: 0,
+            irisXOffset: 0,
+            lashMultiplier: 2,
+            topSampleSpeed: 0.6,
+            bottomSampleSpeed: -0.2,
+            targetWidthRatio: 1,
+            driftStrength: 0.15,
+        },
         barCount: 20,
-        gapRatio: 0,
-        irisRadius: 0.22,
-        irisYOffset: 0,
-        irisXOffset: 0,
-        lashMultiplier: 2,
-        topSampleSpeed: 0.6,
-        bottomSampleSpeed: -0.2,
-        targetWidthRatio: 1,
-        noiseBottom: 1,
-        driftStrength: 0.15,
         update: (dt) => {
             const lfo0 = Math.sin(Math.pow(Math.cos(t / 20), 2));
             const lfo1 = Math.sin(t / 4);
@@ -214,60 +225,75 @@ const expressions = {
 
             state.driftStrength = blend / 4;
             state.barCount = Math.floor(lfo1 * 10) + 30;
+            state.noiseTop = Math.floor(lfo0 * 10) + 10;
+            state.noiseBottom = Math.floor(lfo2 * 10) + 10;
             state.gapRatio = (lfo2 + 1) / 2;
         },
     },
     addicted: {
-        top: { shape: 'gaussian', params: { sigma: 1 }, maxHeight: 0.2 },
-        bottom: { shape: 'gaussian', params: { sigma: 1 }, maxHeight: 0.2 },
-        irisRadius: 0.22,
-        irisYOffset: 0,
-        irisXOffset: 0,
-        lashMultiplier: 1,
-        targetWidthRatio: 1,
-        driftStrength: 0.005,
+        lerp: {
+            top: { shape: 'gaussian', params: { sigma: 1 }, maxHeight: 0.2 },
+            bottom: { shape: 'gaussian', params: { sigma: 1 }, maxHeight: 0.2 },
+            irisRadius: 0.22,
+            irisYOffset: 0,
+            irisXOffset: 0,
+            lashMultiplier: 1,
+            targetWidthRatio: 1,
+            driftStrength: 0.005,
+        },
         update: (dt) => { },
     },
     shocked: {
-        top: { shape: 'gaussian', params: { sigma: 1.2 }, maxHeight: 0.5 },
-        bottom: { shape: 'gaussian', params: { sigma: 1.2 }, maxHeight: 0.5 },
-        irisRadius: 0.22,
-        irisYOffset: 0,
-        irisXOffset: 0,
-        lashMultiplier: 0.5,
-        targetWidthRatio: 1,
-        driftStrength: 0.005,
+        lerp: {
+            top: { shape: 'gaussian', params: { sigma: 1.2 }, maxHeight: 0.5 },
+            bottom: { shape: 'gaussian', params: { sigma: 1.2 }, maxHeight: 0.5 },
+            irisRadius: 0.22,
+            irisYOffset: 0,
+            irisXOffset: 0,
+            lashMultiplier: 0.5,
+            targetWidthRatio: 1,
+            driftStrength: 0.005,
+        },
         update: (dt) => { },
     },
     angry: {
-        top: { shape: 'skewedLeft', params: { sigma: 0.9, skew: 0.5 }, maxHeight: 0.2 },
-        bottom: { shape: 'skewedRight', params: { sigma: 1.1, skew: 0.4 }, maxHeight: 0.26 },
-        irisRadius: 0.1,
-        irisYOffset: -0.05,
-        irisXOffset: 0,
-        lashMultiplier: 1.2,
-        driftStrength: 0.005,
+        lerp: {
+            top: { shape: 'skewedLeft', params: { sigma: 0.9, skew: 0.5 }, maxHeight: 0.2 },
+            bottom: { shape: 'skewedRight', params: { sigma: 1.1, skew: 0.4 }, maxHeight: 0.26 },
+            irisRadius: 0.1,
+            irisYOffset: -0.05,
+            irisXOffset: 0,
+            lashMultiplier: 1.2,
+            driftStrength: 0.005,
+        },
         update: (dt) => { },
     },
     sad: {
-        top: { shape: 'skewedRight', params: { sigma: 0.8, skew: 0.6 }, maxHeight: 0.22 },
-        bottom: { shape: 'gaussian', params: { sigma: 1.4 }, maxHeight: 0.35 },
-        irisRadius: 0.18,
-        irisYOffset: 0.12,
-        irisXOffset: 0,
-        lashMultiplier: 1,
-        driftStrength: 0.005,
+        lerp: {
+            top: { shape: 'skewedRight', params: { sigma: 0.8, skew: 0.6 }, maxHeight: 0.22 },
+            bottom: { shape: 'gaussian', params: { sigma: 1.4 }, maxHeight: 0.35 },
+            irisRadius: 0.18,
+            irisYOffset: 0.12,
+            irisXOffset: 0,
+            lashMultiplier: 1,
+            driftStrength: 0.005,
+        },
         update: (dt) => { },
     },
     mocking: {
-        top: { shape: 'skewedLeft', params: { sigma: 0.9, skew: 0.5 }, maxHeight: 0.4 },
-        bottom: { shape: 'vShape', params: { intensity: 0.5, base: 0.5 }, maxHeight: 0.1 },
-        irisRadius: 0.14,
-        irisYOffset: -0.08,
-        irisXOffset: -0.18,
-        lashMultiplier: 1.3,
-        topSampleSpeed: -0.1,
-        bottomSampleSpeed: -0.1,
+        lerp: {
+            top: { shape: 'skewedLeft', params: { sigma: 0.9, skew: 0.5 }, maxHeight: 0.4 },
+            bottom: { shape: 'vShape', params: { intensity: 0.5, base: 0.5 }, maxHeight: 0.1 },
+            irisRadius: 0.14,
+            lashMultiplier: 1.3,
+            topSampleSpeed: -0.1,
+            bottomSampleSpeed: -0.1,
+            irisYOffset: 0.08,
+            irisXOffset: 0.18,
+        },
+        peeved: true,
+        targetX: 0,
+        targetY: 0,
         driftStrength: 0.05,
         update: (dt) => {
             state.bottom.params.intensity = Math.sin(t * 10) / 5;
@@ -275,13 +301,15 @@ const expressions = {
         },
     },
     flustered: {
-        top: { shape: 'gaussian', params: { sigma: 0.8 }, maxHeight: 0.10 },
-        bottom: { shape: 'gaussian', params: { sigma: 0.8 }, maxHeight: 0.10 },
-        irisRadius: 0.08,
-        irisYOffset: 0.08,
-        irisXOffset: 0,
-        lashMultiplier: 2.0,
-        driftStrength: 0.5,
+        lerp: {
+            top: { shape: 'gaussian', params: { sigma: 0.8 }, maxHeight: 0.10 },
+            bottom: { shape: 'gaussian', params: { sigma: 0.8 }, maxHeight: 0.10 },
+            irisRadius: 0.08,
+            irisYOffset: 0.08,
+            irisXOffset: 0,
+            lashMultiplier: 2.0,
+            driftStrength: 0.5,
+        },
         shy: true,
         engrossed: false,
         corneredTime: 0,
@@ -291,23 +319,29 @@ const expressions = {
                 state.corneredTime += dt * 1000;
 
                 if (state.corneredTime >= 5000) {
-                    state.shy = false;
+                    setExpression('addicted');
                     state.engrossed = true;
                     state.targetBlush = 0.3;
                     state.targetDilation = 0.8;
-                    setExpression('neutral');
                     return;
                 }
             }
 
             if (state.beingCornered) {
                 state.targetDilation = Math.min(1.5, state.targetDilation + dt * 2);
-                setExpression('shocked');
+                // shocked lids
+                state.top.maxHeight = 0.35;
+                state.bottom.maxHeight = 0.35;
             } else if (state.lookingAtGraph) {
                 state.targetDilation = 1;
-                setExpression('shocked');
+                // shocked lids
+                state.top.maxHeight = 0.5;
+                state.bottom.maxHeight = 0.5;
             } else {
                 state.targetDilation = 0;
+                // flustered lids
+                state.top.maxHeight = 0.10;
+                state.bottom.maxHeight = 0.10;
             }
         },
     },
@@ -317,46 +351,63 @@ function deepCopy(obj) {
     return JSON.parse(JSON.stringify(obj));
 }
 
-function setExpression(name) {
-    if (!expressions[name]) return;
-    if (state.targetExpr === name && state.exprProgress > 0.5) return; // already going there
+function getCurrentLerpValues() {
+    const neutral = expressions['neutral'];
+    const result = {};
+    for (const key of Object.keys(neutral.lerp)) {
+        if (key === 'top' || key === 'bottom') {
+            result[key] = deepCopy(state[key]);
+        } else {
+            result[key] = state[key];
+        }
+    }
+    return result;
+}
 
-    // Store current state as "from" values
-    state.fromTop = deepCopy(state.top);
-    state.fromBottom = deepCopy(state.bottom);
-    state.fromIrisRadius = state.irisRadius;
-    state.fromIrisXOffset = state.irisXOffset;
-    state.fromIrisYOffset = state.irisYOffset;
-    state.fromLashMultiplier = state.lashMultiplier;
+function setExpression(name, reset = true) {
+    if (!expressions[name]) return;
+    if (state.targetExpr === name && state.exprProgress > 0) return;
+
+    const expr = expressions[name];
+    const neutral = expressions['neutral'];
+
+    // Capture current state as "from"
+    state.fromLerp = getCurrentLerpValues();
+
+    // Build target: start with neutral, overlay expression
+    const targetLerp = deepCopy(neutral.lerp);
+    if (name !== 'neutral') {
+        for (const key of Object.keys(expr.lerp)) {
+            if (key === 'top' || key === 'bottom') {
+                targetLerp[key] = deepCopy(expr.lerp[key]);
+            } else {
+                targetLerp[key] = expr.lerp[key];
+            }
+        }
+    }
+    state.targetLerp = targetLerp;
+
+    // Only apply immediate values if reset = true
+    if (reset) {
+        for (const key of Object.keys(neutral)) {
+            if (key === 'lerp' || key === 'update') continue;
+            if (key in state) {
+                state[key] = neutral[key];
+            }
+        }
+        if (name !== 'neutral') {
+            for (const key of Object.keys(expr)) {
+                if (key === 'lerp' || key === 'update') continue;
+                if (key in state) {
+                    state[key] = expr[key];
+                }
+            }
+        }
+    }
 
     state.currentExpr = state.targetExpr;
     state.targetExpr = name;
     state.exprProgress = 0;
-
-    // Apply non-lerped properties immediately from neutral first, then expression
-    const applyImmediate = (expr) => {
-        for (const key of Object.keys(expr)) {
-            if (key === 'top' || key === 'bottom' || key === 'update') continue;
-            if (key === 'irisRadius' || key === 'irisXOffset' || key === 'irisYOffset' || key === 'lashMultiplier') continue;
-            if (key in state) {
-                state[key] = expr[key];
-            }
-        }
-    };
-
-    applyImmediate(expressions['neutral']);
-    if (name !== 'neutral') {
-        applyImmediate(expressions[name]);
-    }
-
-    // Set lerp targets
-    const expr = expressions[name];
-    state.targetTop = deepCopy(expr.top);
-    state.targetBottom = deepCopy(expr.bottom);
-    state.targetIrisRadius = expr.irisRadius;
-    state.targetIrisXOffset = expr.irisXOffset;
-    state.targetIrisYOffset = expr.irisYOffset;
-    state.targetLashMultiplier = expr.lashMultiplier;
 }
 
 function enableBlinking() {
@@ -394,32 +445,26 @@ function lerpParams(from, to, t) {
 }
 
 function updateExpression(dt) {
-    if (state.exprProgress < 1) {
+    if (state.exprProgress < 1 && state.fromLerp && state.targetLerp) {
         state.exprProgress = Math.min(1, state.exprProgress + state.expressionSpeed * dt);
 
-        const t = easeInOut(state.exprProgress);
+        const progress = easeInOut(state.exprProgress);
 
-        // Lerp scalar values
-        state.irisRadius = lerp(state.fromIrisRadius, state.targetIrisRadius, t);
-        state.irisXOffset = lerp(state.fromIrisXOffset, state.targetIrisXOffset, t);
-        state.irisYOffset = lerp(state.fromIrisYOffset, state.targetIrisYOffset, t);
-        state.lashMultiplier = lerp(state.fromLashMultiplier, state.targetLashMultiplier, t);
+        for (const key of Object.keys(state.targetLerp)) {
+            if (key === 'top' || key === 'bottom') {
+                state[key].maxHeight = lerp(state.fromLerp[key].maxHeight, state.targetLerp[key].maxHeight, progress);
 
-        // Lerp lid heights
-        state.top.maxHeight = lerp(state.fromTop.maxHeight, state.targetTop.maxHeight, t);
-        state.bottom.maxHeight = lerp(state.fromBottom.maxHeight, state.targetBottom.maxHeight, t);
-
-        // Lerp shape params
-        state.top.params = lerpParams(state.fromTop.params, state.targetTop.params, t);
-        state.bottom.params = lerpParams(state.fromBottom.params, state.targetBottom.params, t);
-
-        // Shape names snap at halfway
-        if (t >= 0.5) {
-            state.top.shape = state.targetTop.shape;
-            state.bottom.shape = state.targetBottom.shape;
+                if (progress >= 0.5 && state[key].shape !== state.targetLerp[key].shape) {
+                    state[key].shape = state.targetLerp[key].shape;
+                    state[key].params = deepCopy(state.targetLerp[key].params);
+                } else {
+                    state[key].params = lerpParams(state.fromLerp[key].params, state.targetLerp[key].params, progress);
+                }
+            } else {
+                state[key] = lerp(state.fromLerp[key], state.targetLerp[key], progress);
+            }
         }
     }
-
     const dilationSpeed = 2;
     state.dilation += (state.targetDilation - state.dilation) * dilationSpeed * dt;
     const blushSpeed = 3;
@@ -631,8 +676,8 @@ function draw() {
         const topShape = shapeFunctions[state.top.shape](topNormalizedX, state.top.params);
         const bottomShape = shapeFunctions[state.bottom.shape](bottomNormalizedX, state.bottom.params);
 
-        const topNoise = state.noiseTop * Math.random();
-        const botNoise = state.noiseBottom * Math.random();
+        const topNoise = state.noiseTop * Math.random() * (1-scaleY);
+        const botNoise = state.noiseBottom * Math.random() * (1-scaleY);
 
         const topHeight = topShape * topMaxHeight * svg.clientHeight * scaleY - topNoise * scaleY;
         const bottomHeight = bottomShape * bottomMaxHeight * svg.clientHeight * scaleY - botNoise * scaleY;
@@ -690,7 +735,7 @@ function updateCursorTracking() {
 function getGraphCenter() {
     const chart = document.getElementById('chart');
     const eye = document.getElementById('eye');
-    if (!chart || !eye) return { x: 0, y: 0.2 };
+    if (!chart || !eye) return { x: 0.5, y: 1 };
 
     const chartRect = chart.getBoundingClientRect();
     const eyeRect = eye.getBoundingClientRect();
@@ -823,26 +868,6 @@ function onPageClick() {
     state.lastInteraction = Date.now();
 }
 
-document.addEventListener('mousemove', onMouseMove);
-svg.addEventListener('click', () => {
-    if (state.awake && state.canBlink) {
-        blink();
-        state.poked = true;
-        state.attentionThreshold *= state.patience;
-
-        if (state.attentionThreshold < 10) {
-            setPeeved(true, true, false, 0, -0.4);
-            setExpression('angry');
-        } else if (state.attentionThreshold < 50) {
-            setPeeved(true, false, true, 0, -0.2);
-            setExpression('suspicious');
-        }
-    }
-});
-
-requestAnimationFrame(tick);
-scheduleNextBlink();
-
 function setPeeved(isPeeved, snap, canBlink, targetX = 0, targetY = 0, gazeSpeed = 1.5) {
     state.peeved = isPeeved;
     if (isPeeved && !canBlink) {
@@ -879,3 +904,25 @@ function setBarDensity(numBars = 51, gapRatio = 0.2) {
     state.gapRatio = gapRatio;
     state.barCount = numBars;
 }
+
+
+document.addEventListener('mousemove', onMouseMove);
+svg.addEventListener('click', () => {
+    if (state.awake && state.canBlink) {
+        blink();
+        state.poked = true;
+        state.attentionThreshold *= state.patience;
+
+        if (state.attentionThreshold < 10) {
+            setPeeved(true, true, false, 0, -0.4);
+            setExpression('angry');
+        } else if (state.attentionThreshold < 50) {
+            setPeeved(true, false, true, 0, -0.2);
+            setExpression('suspicious');
+        }
+    }
+});
+
+requestAnimationFrame(tick);
+scheduleNextBlink();
+setExpression('neutral');

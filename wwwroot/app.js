@@ -16,6 +16,7 @@ let isStreaming = true;
 let convergenceScore = 0;
 let loadingMessageCount = 0;
 let tagTimelineData = [];
+let numReactions = 0;
 
 function quitToDesktop() {
     const msg = exitMessages[Math.floor(Math.random() * exitMessages.length)];
@@ -73,8 +74,7 @@ function getLoadingMessage() {
 
     // Filter based on unhinged state
     // ALL CAPS messages only allowed when unhinged
-    const isUnhinged = isUnhinged?.() || false;
-    if (!isUnhinged) {
+    if (!isUnhinged()) {
         pool = pool.filter(msg => msg !== msg.toUpperCase());
     }
 
@@ -150,7 +150,9 @@ async function analyze() {
 
         // Check for sexual content (flag bit 3 = 8)
         const isSexual = (currentGameInfo.flags & 8) !== 0;
-        setExpression('flustered');
+        if (isSexual) {
+            setExpression('flustered');
+        }
     }
 
     const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -1157,6 +1159,26 @@ function updateTagTimeline(timeline) {
 function updateEyeFromMetrics(metrics) {
     const tags = metrics.verdict.tags.map(t => t.id);
 
+    let targetExpr = 'neutral';
+    let emoteDuration = Infinity;
+
+    // Priority-based expression
+    if (tags.includes('PREDATORY') || tags.includes('REFUND_TRAP')) {
+        targetExpr = 'angry';
+        emoteDuration = 6000;
+    } else if (tags.includes('EXTRACTIVE') || tags.includes('STOCKHOLM')) {
+        targetExpr = 'suspicious';
+        emoteDuration = 4000;
+    } else if (tags.includes('FLOP') || tags.includes('DEAD')) {
+        targetExpr = 'mocking';
+        emoteDuration = 2500;
+    } else if (tags.includes('HEALTHY') || tags.includes('HONEST')) {
+        targetExpr = 'neutral';
+    }
+    const reaction = numReactions++;
+    state.lastReaction = reaction;
+    setExpression(targetExpr);
+
     // Pupil dilation for addictive games
     setDilation(tags.includes('ADDICTIVE') ? 1 : 0);
 
@@ -1164,17 +1186,12 @@ function updateEyeFromMetrics(metrics) {
     const unhingedTags = ['PREDATORY', 'ENSHITTIFIED', 'PLAGUE', 'CURSED', 'FLOP'];
     setUnhinged(unhingedTags.some(t => tags.includes(t)));
 
-    // Priority-based expression
-    if (tags.includes('PREDATORY') || tags.includes('REFUND_TRAP')) {
-        setExpression('angry');
-    } else if (tags.includes('EXTRACTIVE') || tags.includes('STOCKHOLM')) {
-        setExpression('suspicious');
-    } else if (tags.includes('FLOP') || tags.includes('DEAD')) {
-        setExpression('mocking');
-    } else if (tags.includes('HEALTHY') || tags.includes('HONEST')) {
-        setExpression('neutral');
-    } else {
-        setExpression('neutral');
+    if (emoteDuration != Infinity) {
+        setTimeout(() => {
+            if (state.lastReaction == reaction) {
+                setExpression('neutral');
+            }
+        }, emoteDuration);
     }
 }
 
