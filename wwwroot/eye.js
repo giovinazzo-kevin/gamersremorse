@@ -18,14 +18,26 @@ const state = {
     attention: 0,
     gazeSpeed: 1.5,
 
-    // Lids - LIVE values
-    top: { shape: 'gaussian', params: { sigma: 1 }, maxHeight: 0.3 },
-    bottom: { shape: 'gaussian', params: { sigma: 1 }, maxHeight: 0.3 },
+    // Lids - LIVE values (now with shapes array)
+    top: {
+        shapes: [{ type: 'gaussian', params: { sigma: 1 }, offset: 0, amplitude: 1 }],
+        maxHeight: 0.3
+    },
+    bottom: {
+        shapes: [{ type: 'gaussian', params: { sigma: 1 }, offset: 0, amplitude: 1 }],
+        maxHeight: 0.3
+    },
     lashMultiplier: 1,
 
     // Lerp targets (set by setExpression)
-    targetTop: { shape: 'gaussian', params: { sigma: 1 }, maxHeight: 0.3 },
-    targetBottom: { shape: 'gaussian', params: { sigma: 1 }, maxHeight: 0.3 },
+    targetTop: {
+        shapes: [{ type: 'gaussian', params: { sigma: 1 }, offset: 0, amplitude: 1 }],
+        maxHeight: 0.3
+    },
+    targetBottom: {
+        shapes: [{ type: 'gaussian', params: { sigma: 1 }, offset: 0, amplitude: 1 }],
+        maxHeight: 0.3
+    },
     targetIrisRadius: 0.15,
     targetIrisXOffset: 0,
     targetIrisYOffset: 0,
@@ -93,7 +105,7 @@ const state = {
     boredDamping: 0.5,
     attentionDecay: 0.99,
     attentionGain: 0.01,
-    attentionThreshold: 300,
+    attentionThreshold: 100,
     patience: 0.9,
     boredThreshold: 0.5,
     blinkSpeed: 30,
@@ -107,7 +119,61 @@ const state = {
 
     fromLerp: null,
     targetLerp: null,
+
+    // Impulses - traveling waves independent of expressions
+    impulses: {
+        top: [],
+        bottom: []
+    },
+    impulseBounds: {
+        top: { left: 'wrap', right: 'wrap' },
+        bottom: { left: 'wrap', right: 'wrap' }
+    },
+    impulseMultiplier: 1,
+    targetImpulseMultiplier: 1,
 };
+
+function addImpulse(lid, { amplitude = 0.5, sigma = 0.3, velocity = 3, decay = 0.95, phase = null }) {
+    state.impulses[lid].push({
+        offset: phase ?? (velocity > 0 ? -3 : 3),
+        amplitude,
+        sigma,
+        velocity,
+        decay
+    });
+}
+
+function updateImpulses(dt) {
+    for (const lid of ['top', 'bottom']) {
+        const bounds = state.impulseBounds[lid];
+
+        state.impulses[lid] = state.impulses[lid].filter(imp => {
+            imp.offset += imp.velocity * dt;
+
+            // right boundary (offset > 3)
+            if (imp.offset > 3) {
+                if (bounds.right === 'wrap') imp.offset = -3;
+                else if (bounds.right === 'reflect') { imp.offset = 3; imp.velocity *= -1; }
+                else if (bounds.right === 'kill') return false;
+                else if (bounds.right === 'clamp') imp.offset = 3;
+            }
+
+            // left boundary (offset < -3)
+            if (imp.offset < -3) {
+                if (bounds.left === 'wrap') imp.offset = 3;
+                else if (bounds.left === 'reflect') { imp.offset = -3; imp.velocity *= -1; }
+                else if (bounds.left === 'kill') return false;
+                else if (bounds.left === 'clamp') imp.offset = -3;
+            }
+
+            const decayFactor = Math.pow(imp.decay, dt * 60);
+            imp.amplitude *= decayFactor;
+            imp.sigma *= decayFactor;
+
+            return imp.amplitude > 0.01 && imp.sigma > 0.05;
+        });
+    }
+}
 
 // Shape functions
 const shapeFunctions = {
@@ -149,12 +215,12 @@ const shapeFunctions = {
     },
 };
 
-// Expression DEFINITIONS - just data, applied via setExpression
+// Expression DEFINITIONS - lerp for smooth transitions, snap for immediate values
 const expressions = {
     neutral: {
         lerp: {
-            top: { shape: 'gaussian', params: { sigma: 1 }, maxHeight: 0.3 },
-            bottom: { shape: 'gaussian', params: { sigma: 1 }, maxHeight: 0.3 },
+            top: { shapes: [{ type: 'gaussian', params: { sigma: 1 }, offset: 0, amplitude: 1 }], maxHeight: 0.3 },
+            bottom: { shapes: [{ type: 'gaussian', params: { sigma: 1 }, offset: 0, amplitude: 1 }], maxHeight: 0.3 },
             irisRadius: 0.15,
             irisDilation: 0,
             irisXOffset: 0,
@@ -166,19 +232,26 @@ const expressions = {
             targetWidthRatio: 1.2,
             driftStrength: 0.005,
         },
-        barCount: 20,
-        noiseTop: 0,
-        noiseBottom: 0,
-        shy: false,
-        engrossed: false,
-        peeved: false,
-        targetBlush: 0,
+
+        snap: {
+            barCount: 20,
+            noiseTop: 0,
+            noiseBottom: 0,
+            shy: false,
+            engrossed: false,
+            peeved: false,
+            targetBlush: 0,
+            impulseBounds: {
+                top: { left: 'wrap', right: 'wrap' },
+                bottom: { left: 'wrap', right: 'wrap' }
+            }
+        },
         update: (dt) => { },
     },
-    suspicious: {
+    disappointed: {
         lerp: {
-            top: { shape: 'flat', params: { falloff: 0.7 }, maxHeight: 0.12 },
-            bottom: { shape: 'raised', params: { sigma: 1.2, base: 0.6 }, maxHeight: 0.32 },
+            top: { shapes: [{ type: 'flat', params: { falloff: 0.7 }, offset: 0, amplitude: 1 }], maxHeight: 0.12 },
+            bottom: { shapes: [{ type: 'raised', params: { sigma: 1.2, base: 0.6 }, offset: 0, amplitude: 1 }], maxHeight: 0.32 },
             irisRadius: 0.11,
             irisYOffset: 0.05,
             irisXOffset: 0,
@@ -186,12 +259,13 @@ const expressions = {
             targetWidthRatio: 1.2,
             driftStrength: 0.005,
         },
+        snap: {},
         update: (dt) => { },
     },
     reading: {
         lerp: {
-            top: { shape: 'gaussian', params: { sigma: 1.3 }, maxHeight: 0.15 },
-            bottom: { shape: 'gaussian', params: { sigma: 1.3 }, maxHeight: 0.15 },
+            top: { shapes: [{ type: 'gaussian', params: { sigma: 1.3 }, offset: 0, amplitude: 1 }], maxHeight: 0.15 },
+            bottom: { shapes: [{ type: 'gaussian', params: { sigma: 1.3 }, offset: 0, amplitude: 1 }], maxHeight: 0.15 },
             gapRatio: 0,
             irisRadius: 0.22,
             irisYOffset: 0,
@@ -202,7 +276,21 @@ const expressions = {
             targetWidthRatio: 1,
             driftStrength: 0.15,
         },
-        barCount: 20,
+        snap: {
+            barCount: 20,
+            impulseBounds: {
+                top: { left: 'reflect', right: 'reflect' },
+                bottom: { left: 'reflect', right: 'reflect' }
+            }
+        },
+        onEnter: () => {
+            addImpulse('bottom', { amplitude: 0.15, sigma: 0.6, velocity: 5, decay: 0.9998, phase: 5 });
+            addImpulse('top', { amplitude: 0.15, sigma: 0.6, velocity: -5, decay: 0.9998, phase: 0 });
+        },
+        onExit: () => {
+            state.impulses.bottom.forEach(imp => imp.decay = 0.1);
+            state.impulses.top.forEach(imp => imp.decay = 0.1);
+        },
         update: (dt) => {
             const lfo0 = Math.sin(Math.pow(Math.cos(t / 20), 2));
             const lfo1 = Math.sin(t / 4);
@@ -224,16 +312,16 @@ const expressions = {
             state.bottom.maxHeight = lerp(0.45, 0.10, blend);
 
             state.driftStrength = blend / 4;
-            state.barCount = Math.floor(lfo1 * 10) + 30;
             state.noiseTop = Math.floor(lfo0 * 10) + 10;
             state.noiseBottom = Math.floor(lfo2 * 10) + 10;
-            state.gapRatio = (lfo2 + 1) / 2;
+            state.gapRatio = (lfo2 + 1) / 2 + 0.25;
+            state.targetImpulseMultiplier = 1-blend;
         },
     },
     addicted: {
         lerp: {
-            top: { shape: 'gaussian', params: { sigma: 1 }, maxHeight: 0.2 },
-            bottom: { shape: 'gaussian', params: { sigma: 1 }, maxHeight: 0.2 },
+            top: { shapes: [{ type: 'gaussian', params: { sigma: 1 }, offset: 0, amplitude: 1 }], maxHeight: 0.2 },
+            bottom: { shapes: [{ type: 'gaussian', params: { sigma: 1 }, offset: 0, amplitude: 1 }], maxHeight: 0.2 },
             irisRadius: 0.22,
             irisYOffset: 0,
             irisXOffset: 0,
@@ -241,12 +329,13 @@ const expressions = {
             targetWidthRatio: 1,
             driftStrength: 0.005,
         },
+        snap: {},
         update: (dt) => { },
     },
     shocked: {
         lerp: {
-            top: { shape: 'gaussian', params: { sigma: 1.2 }, maxHeight: 0.5 },
-            bottom: { shape: 'gaussian', params: { sigma: 1.2 }, maxHeight: 0.5 },
+            top: { shapes: [{ type: 'gaussian', params: { sigma: 1.2 }, offset: 0, amplitude: 1 }], maxHeight: 0.5 },
+            bottom: { shapes: [{ type: 'gaussian', params: { sigma: 1.2 }, offset: 0, amplitude: 1 }], maxHeight: 0.5 },
             irisRadius: 0.22,
             irisYOffset: 0,
             irisXOffset: 0,
@@ -254,74 +343,102 @@ const expressions = {
             targetWidthRatio: 1,
             driftStrength: 0.005,
         },
+        snap: {},
         update: (dt) => { },
     },
     angry: {
         lerp: {
-            top: { shape: 'skewedLeft', params: { sigma: 0.9, skew: 0.5 }, maxHeight: 0.2 },
-            bottom: { shape: 'skewedRight', params: { sigma: 1.1, skew: 0.4 }, maxHeight: 0.26 },
+            top: { shapes: [{ type: 'skewedLeft', params: { sigma: 0.9, skew: 0.5 }, offset: 0, amplitude: 1 }], maxHeight: 0.2 },
+            bottom: { shapes: [{ type: 'skewedRight', params: { sigma: 1.1, skew: 0.4 }, offset: 0, amplitude: 1 }], maxHeight: 0.26 },
             irisRadius: 0.1,
             irisYOffset: -0.05,
             irisXOffset: 0,
             lashMultiplier: 1.2,
             driftStrength: 0.005,
         },
+        snap: {},
         update: (dt) => { },
     },
     sad: {
         lerp: {
-            top: { shape: 'skewedRight', params: { sigma: 0.8, skew: 0.6 }, maxHeight: 0.22 },
-            bottom: { shape: 'gaussian', params: { sigma: 1.4 }, maxHeight: 0.35 },
-            irisRadius: 0.18,
-            irisYOffset: 0.12,
+            top: { shapes: [{ type: 'gaussian', params: { sigma: 1 }, offset: 0, amplitude: 1 }], maxHeight: 0.22 },
+            bottom: { shapes: [{ type: 'gaussian', params: { sigma: 1.4 }, offset: 0, amplitude: 1 }], maxHeight: 0.15 },
+            irisRadius: 0.25,
+            irisYOffset: 0.7,
             irisXOffset: 0,
             lashMultiplier: 1,
             driftStrength: 0.005,
+            topSampleSpeed: -0.1,
+            bottomSampleSpeed: 0.1,
         },
-        update: (dt) => { },
+        snap: {
+            peeved: true,
+            targetX: 0,
+            targetY: 0,
+        },
+        update: (dt) => {
+            state.top.shapes[0].params.sigma = 1 - Math.cos(t * 40) / 20;
+            state.bottom.shapes[0].params.sigma = 1 - Math.cos(t * 10) / 20;
+        },
     },
     mocking: {
         lerp: {
-            top: { shape: 'skewedLeft', params: { sigma: 0.9, skew: 0.5 }, maxHeight: 0.4 },
-            bottom: { shape: 'vShape', params: { intensity: 0.5, base: 0.5 }, maxHeight: 0.1 },
+            top: { shapes: [{ type: 'skewedLeft', params: { sigma: 0.9, skew: 0.5 }, offset: 0, amplitude: 1 }], maxHeight: 0.4 },
+            bottom: {
+                shapes: [
+                    { type: 'vShape', params: { intensity: 0.5, base: 0.5 }, offset: 0, amplitude: 1 },
+                ],
+                maxHeight: 0.10
+            },
             irisRadius: 0.14,
             lashMultiplier: 1.3,
-            topSampleSpeed: -0.1,
+            topSampleSpeed: 0.4,
             bottomSampleSpeed: -0.1,
             irisYOffset: 0.08,
             irisXOffset: 0.18,
+            driftStrength: 0.05,
         },
-        peeved: true,
-        targetX: 0,
-        targetY: 0,
-        driftStrength: 0.05,
+        snap: {
+            peeved: true,
+            targetX: 0,
+            targetY: 0,
+        },
+        onEnter: () => {
+            addImpulse('bottom', { amplitude: 0.5, sigma: 0.6, velocity: -15, decay: 0.9998 });
+        },
+        onExit: () => {
+            state.impulses.bottom.forEach(imp => imp.decay = 0.92);
+        },
         update: (dt) => {
-            state.bottom.params.intensity = Math.sin(t * 10) / 5;
-            state.bottom.params.base = (Math.sin(t * 16) + 1) / 4 + 0.25;
+            state.top.shapes[0].params.sigma = 1 - Math.cos(t * 40) / 20;
+            state.bottom.shapes[0].params.intensity = Math.sin(t * 10) / 5;
+            state.bottom.shapes[0].params.base = (Math.sin(t * 16) + 1) / 4 + 0.25;
         },
     },
     flustered: {
         lerp: {
-            top: { shape: 'gaussian', params: { sigma: 0.8 }, maxHeight: 0.10 },
-            bottom: { shape: 'gaussian', params: { sigma: 0.8 }, maxHeight: 0.10 },
+            top: { shapes: [{ type: 'gaussian', params: { sigma: 0.8 }, offset: 0, amplitude: 1 }], maxHeight: 0.10 },
+            bottom: { shapes: [{ type: 'gaussian', params: { sigma: 0.8 }, offset: 0, amplitude: 1 }], maxHeight: 0.10 },
             irisRadius: 0.08,
             irisYOffset: 0.08,
             irisXOffset: 0,
             lashMultiplier: 2.0,
-            driftStrength: 0.5,
+            driftStrength: 0.15,
         },
-        shy: true,
-        engrossed: false,
-        corneredTime: 0,
-        targetBlush: 1,
+        snap: {
+            shy: true,
+            engrossed: false,
+            corneredTime: 0,
+            targetBlush: 1,
+        },
         update: (dt) => {
-            if (state.beingCornered) {
+            if (state.lookingAtGraph) {
                 state.corneredTime += dt * 1000;
 
-                if (state.corneredTime >= 5000) {
+                if (state.corneredTime >= 3000) {
                     setExpression('addicted');
                     state.engrossed = true;
-                    state.targetBlush = 0.3;
+                    state.targetBlush = 1;
                     state.targetDilation = 0.8;
                     return;
                 }
@@ -329,21 +446,45 @@ const expressions = {
 
             if (state.beingCornered) {
                 state.targetDilation = Math.min(1.5, state.targetDilation + dt * 2);
-                // shocked lids
-                state.top.maxHeight = 0.35;
-                state.bottom.maxHeight = 0.35;
+                state.top.maxHeight = 0.25;
+                state.bottom.maxHeight = 0.25;
+                state.driftStrength = 0;
+                state.topSampleSpeed = -0.3;
+                state.bottomSampleSpeed = 0.4;
+                state.irisRadius = 0.16;
             } else if (state.lookingAtGraph) {
                 state.targetDilation = 1;
-                // shocked lids
-                state.top.maxHeight = 0.5;
-                state.bottom.maxHeight = 0.5;
+                state.top.maxHeight = 0.4;
+                state.bottom.maxHeight = 0.4;
+                state.topSampleSpeed = (state.corneredTime / 3000 + 0.3);
+                state.bottomSampleSpeed = -(state.corneredTime / 3000 + 0.3);
+                state.targetDilation = (state.corneredTime / 3000) * 0.8 + 0.16;
             } else {
                 state.targetDilation = 0;
-                // flustered lids
                 state.top.maxHeight = 0.10;
                 state.bottom.maxHeight = 0.10;
+                state.driftStrength = 0.15;
+                state.topSampleSpeed = 0.1;
+                state.bottomSampleSpeed = -0.3;
             }
         },
+    },
+    laughing: {
+        lerp: {
+            top: { shapes: [{ type: 'gaussian', params: { sigma: 1 }, offset: 0, amplitude: 1 }], maxHeight: 0.25 },
+            bottom: { shapes: [{ type: 'gaussian', params: { sigma: 1 }, offset: 0, amplitude: 1 }], maxHeight: 0.25 },
+            irisRadius: 0.12,
+            irisYOffset: 0.05,
+            irisXOffset: 0,
+            lashMultiplier: 1.5,
+            driftStrength: 0.02,
+        },
+        snap: {},
+        onEnter: () => {
+            addImpulse('top', { amplitude: 0.4, sigma: 0.4, velocity: 8, decay: 0.97 });
+            addImpulse('bottom', { amplitude: 0.3, sigma: 0.4, velocity: -6, decay: 0.97 });
+        },
+        update: (dt) => { },
     },
 };
 
@@ -371,12 +512,17 @@ function setExpression(name, reset = true) {
     const expr = expressions[name];
     const neutral = expressions['neutral'];
 
+    // Exit hook for old expression
+    if (expressions[state.targetExpr]?.onExit) {
+        expressions[state.targetExpr].onExit();
+    }
+
     // Capture current state as "from"
     state.fromLerp = getCurrentLerpValues();
 
-    // Build target: start with neutral, overlay expression
+    // Build target: start with neutral lerp, overlay expression lerp
     const targetLerp = deepCopy(neutral.lerp);
-    if (name !== 'neutral') {
+    if (expr.lerp) {
         for (const key of Object.keys(expr.lerp)) {
             if (key === 'top' || key === 'bottom') {
                 targetLerp[key] = deepCopy(expr.lerp[key]);
@@ -387,22 +533,15 @@ function setExpression(name, reset = true) {
     }
     state.targetLerp = targetLerp;
 
-    // Only apply immediate values if reset = true
+    // Apply snaps: neutral first, then expression
     if (reset) {
-        for (const key of Object.keys(neutral)) {
-            if (key === 'lerp' || key === 'update') continue;
-            if (key in state) {
-                state[key] = neutral[key];
-            }
-        }
-        if (name !== 'neutral') {
-            for (const key of Object.keys(expr)) {
-                if (key === 'lerp' || key === 'update') continue;
-                if (key in state) {
-                    state[key] = expr[key];
-                }
-            }
-        }
+        if (neutral.snap) Object.assign(state, neutral.snap);
+        if (expr.snap) Object.assign(state, expr.snap);
+    }
+
+    // Enter hook for new expression
+    if (expr.onEnter) {
+        expr.onEnter();
     }
 
     state.currentExpr = state.targetExpr;
@@ -412,7 +551,7 @@ function setExpression(name, reset = true) {
 
 function enableBlinking() {
     state.canBlink = true;
-    state.nextBlinkTime = 0;
+    scheduleNextBlink();
 }
 
 function disableBlinking() {
@@ -444,6 +583,24 @@ function lerpParams(from, to, t) {
     return result;
 }
 
+function lerpShapes(from, to, t) {
+    const maxLen = Math.max(from.length, to.length);
+    const result = [];
+
+    for (let i = 0; i < maxLen; i++) {
+        const f = from[i] || { ...to[i], amplitude: 0 };
+        const g = to[i] || { ...from[i], amplitude: 0 };
+
+        result.push({
+            type: t < 0.5 ? f.type : g.type,
+            params: lerpParams(f.params, g.params, t),
+            offset: lerp(f.offset, g.offset, t),
+            amplitude: lerp(f.amplitude, g.amplitude, t)
+        });
+    }
+    return result;
+}
+
 function updateExpression(dt) {
     if (state.exprProgress < 1 && state.fromLerp && state.targetLerp) {
         state.exprProgress = Math.min(1, state.exprProgress + state.expressionSpeed * dt);
@@ -453,13 +610,7 @@ function updateExpression(dt) {
         for (const key of Object.keys(state.targetLerp)) {
             if (key === 'top' || key === 'bottom') {
                 state[key].maxHeight = lerp(state.fromLerp[key].maxHeight, state.targetLerp[key].maxHeight, progress);
-
-                if (progress >= 0.5 && state[key].shape !== state.targetLerp[key].shape) {
-                    state[key].shape = state.targetLerp[key].shape;
-                    state[key].params = deepCopy(state.targetLerp[key].params);
-                } else {
-                    state[key].params = lerpParams(state.fromLerp[key].params, state.targetLerp[key].params, progress);
-                }
+                state[key].shapes = lerpShapes(state.fromLerp[key].shapes, state.targetLerp[key].shapes, progress);
             } else {
                 state[key] = lerp(state.fromLerp[key], state.targetLerp[key], progress);
             }
@@ -469,8 +620,12 @@ function updateExpression(dt) {
     state.dilation += (state.targetDilation - state.dilation) * dilationSpeed * dt;
     const blushSpeed = 3;
     state.blush += (state.targetBlush - state.blush) * blushSpeed * dt;
-
-    expressions[state.targetExpr].update(dt);
+    const impulseMultSpeed = 3;
+    state.impulseMultiplier += (state.targetImpulseMultiplier - state.impulseMultiplier) * impulseMultSpeed * dt;
+    // Run update for target expression
+    if (expressions[state.targetExpr]?.update) {
+        expressions[state.targetExpr].update(dt);
+    }
 }
 
 function clamp(val, min, max) {
@@ -537,6 +692,21 @@ function updateBlink(dt) {
     }
 
     if (tagline) tagline.style.opacity = 1 - state.blink;
+}
+
+// Compute shape value by summing all shapes plus impulses
+function computeShapeValue(shapes, normalizedX, impulses = []) {
+    let sum = shapes.reduce((s, shape) => {
+        const fn = shapeFunctions[shape.type];
+        if (!fn) return s;
+        return s + fn(normalizedX - shape.offset, shape.params) * shape.amplitude;
+    }, 0);
+
+    for (const imp of impulses) {
+        sum += shapeFunctions.gaussian(normalizedX - imp.offset, { sigma: imp.sigma }) * imp.amplitude * state.impulseMultiplier;
+    }
+
+    return sum;
 }
 
 function drawBar(x, barHeight, direction, color, barWidth, irisX, irisY, irisRadius) {
@@ -617,7 +787,6 @@ function draw() {
 
     const { barCount, gapRatio, maxLashLength, irisDilation, targetWidthRatio } = state;
 
-    // All values come from state now
     const baseIrisRadius = state.irisRadius;
     const dilationBonus = state.dilation * 0.08;
     const irisRadius = baseIrisRadius + dilationBonus;
@@ -627,11 +796,9 @@ function draw() {
     const topMaxHeight = state.top.maxHeight;
     const bottomMaxHeight = state.bottom.maxHeight;
 
-    // Blink affects scale
     const scaleY = 1 - state.blink;
     const blinkLashMult = 1 + state.blink * 2 * scaleY + 0.5;
 
-    // Convert to pixels
     const irisRadiusPx = (irisRadius + state.attention * irisDilation) * svg.clientHeight;
     const maxLashPx = maxLashLength * svg.clientHeight * blinkLashMult * lashMultiplier;
     const maxIrisOffsetXPx = state.maxIrisOffsetX * svg.clientWidth;
@@ -640,7 +807,6 @@ function draw() {
     const irisXPx = (svg.clientWidth / 2) + (state.irisX + irisXOffset) * maxIrisOffsetXPx;
     const irisYPx = (svg.clientHeight / 2) + (state.irisY + irisYOffset) * maxIrisOffsetYPx * scaleY;
 
-    // Bar spacing
     const totalTargetWidth = svg.clientWidth * targetWidthRatio;
     const spacing = totalTargetWidth / barCount;
     const barWidthPx = spacing * (1 / (1 + gapRatio));
@@ -653,7 +819,6 @@ function draw() {
     const lashColor = styles.getPropertyValue('--color-uncertain').trim();
     const currentLashColor = lerpColor(navbarBg, lashColor, 1 - state.blink);
 
-    // Blush tints the colors pink
     const blushColor = '#ff6b9d';
     const blushAmount = state.blush * 0.4;
     const tintedPositive = lerpColor(colorPositive, blushColor, blushAmount);
@@ -672,12 +837,12 @@ function draw() {
         const topNormalizedX = wrappedTopPosition / (barCount / 6);
         const bottomNormalizedX = wrappedBottomPosition / (barCount / 6);
 
-        // Use state.top and state.bottom directly
-        const topShape = shapeFunctions[state.top.shape](topNormalizedX, state.top.params);
-        const bottomShape = shapeFunctions[state.bottom.shape](bottomNormalizedX, state.bottom.params);
+        // Use shape summing with impulses
+        const topShape = computeShapeValue(state.top.shapes, topNormalizedX, state.impulses.top);
+        const bottomShape = computeShapeValue(state.bottom.shapes, bottomNormalizedX, state.impulses.bottom);
 
-        const topNoise = state.noiseTop * Math.random() * (1-scaleY);
-        const botNoise = state.noiseBottom * Math.random() * (1-scaleY);
+        const topNoise = state.noiseTop * Math.random() * (1 - scaleY);
+        const botNoise = state.noiseBottom * Math.random() * (1 - scaleY);
 
         const topHeight = topShape * topMaxHeight * svg.clientHeight * scaleY - topNoise * scaleY;
         const bottomHeight = bottomShape * bottomMaxHeight * svg.clientHeight * scaleY - botNoise * scaleY;
@@ -838,6 +1003,7 @@ function tick(timestamp) {
     }
 
     if (dt >= frameInterval / 1000) {
+        updateImpulses(dt);
         updateExpression(dt);
         updateBlink(dt);
 
@@ -905,7 +1071,6 @@ function setBarDensity(numBars = 51, gapRatio = 0.2) {
     state.barCount = numBars;
 }
 
-
 document.addEventListener('mousemove', onMouseMove);
 svg.addEventListener('click', () => {
     if (state.awake && state.canBlink) {
@@ -918,7 +1083,7 @@ svg.addEventListener('click', () => {
             setExpression('angry');
         } else if (state.attentionThreshold < 50) {
             setPeeved(true, false, true, 0, -0.2);
-            setExpression('suspicious');
+            setExpression('disappointed');
         }
     }
 });

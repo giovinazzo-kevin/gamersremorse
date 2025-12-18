@@ -147,12 +147,6 @@ async function analyze() {
     if (infoRes.ok) {
         currentGameInfo = await infoRes.json();
         document.getElementById('game-title').textContent = currentGameInfo.name;
-
-        // Check for sexual content (flag bit 3 = 8)
-        const isSexual = (currentGameInfo.flags & 8) !== 0;
-        if (isSexual) {
-            setExpression('flustered');
-        }
     }
 
     const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -1167,8 +1161,11 @@ function updateEyeFromMetrics(metrics) {
         targetExpr = 'angry';
         emoteDuration = 6000;
     } else if (tags.includes('EXTRACTIVE') || tags.includes('STOCKHOLM')) {
-        targetExpr = 'suspicious';
+        targetExpr = 'disappointed';
         emoteDuration = 4000;
+    } else if (tags.includes('HORNY')) {
+        targetExpr = 'flustered';
+        emoteDuration = Infinity;
     } else if (tags.includes('FLOP') || tags.includes('DEAD')) {
         targetExpr = 'mocking';
         emoteDuration = 2500;
