@@ -178,12 +178,12 @@
                     <input type="range" id="scale" min="5" max="100" step="1" value="100">
                 </div>
                 <div class="slider-row">
-                    <label>Bar Count <span class="slider-value" id="bar-count-val">20</span></label>
-                    <input type="range" id="bar-count" min="8" max="120" step="1" value="20">
+                    <label>Bar Count <span class="slider-value" id="barCount-val">20</span></label>
+                    <input type="range" id="barCount" min="8" max="120" step="1" value="20">
                 </div>
                 <div class="slider-row">
-                    <label>Gap Ratio <span class="slider-value" id="gap-ratio-val">0.2</span></label>
-                    <input type="range" id="gap-ratio" min="0" max="1" step="0.05" value="0.2">
+                    <label>Gap Ratio <span class="slider-value" id="gapRatio-val">0.2</span></label>
+                    <input type="range" id="gapRatio" min="0" max="1" step="0.05" value="0.2">
                 </div>
             </div>
 
@@ -195,12 +195,12 @@
                     <input type="range" id="dilation" min="-1" max="1" step="0.05" value="0">
                 </div>
                 <div class="slider-row">
-                    <label>Iris X Offset <span class="slider-value" id="iris-x-val">0.0</span></label>
-                    <input type="range" id="iris-x" min="-1" max="1" step="0.05" value="0">
+                    <label>Iris X Offset <span class="slider-value" id="irisXOffset-val">0.0</span></label>
+                    <input type="range" id="irisXOffset" min="-1" max="1" step="0.05" value="0">
                 </div>
                 <div class="slider-row">
-                    <label>Iris Y Offset <span class="slider-value" id="iris-y-val">0.0</span></label>
-                    <input type="range" id="iris-y" min="-1" max="1" step="0.05" value="0">
+                    <label>Iris Y Offset <span class="slider-value" id="irisYOffset-val">0.0</span></label>
+                    <input type="range" id="irisYOffset" min="-1" max="1" step="0.05" value="0">
                 </div>
             </div>
 
@@ -208,12 +208,12 @@
             <div class="section">
                 <div class="section-header">Traveling Wave</div>
                 <div class="slider-row">
-                    <label>Top Speed <span class="slider-value" id="top-speed-val">-0.1</span></label>
-                    <input type="range" id="top-speed" min="-1" max="1" step="0.1" value="-0.1">
+                    <label>Top Speed <span class="slider-value" id="topSampleSpeed-val">-0.1</span></label>
+                    <input type="range" id="topSampleSpeed" min="-1" max="1" step="0.1" value="-0.1">
                 </div>
                 <div class="slider-row">
-                    <label>Bottom Speed <span class="slider-value" id="bottom-speed-val">0.1</span></label>
-                    <input type="range" id="bottom-speed" min="-1" max="1" step="0.1" value="0.1">
+                    <label>Bottom Speed <span class="slider-value" id="bottomSampleSpeed-val">0.1</span></label>
+                    <input type="range" id="bottomSampleSpeed" min="-1" max="1" step="0.1" value="0.1">
                 </div>
             </div>
 
@@ -324,30 +324,30 @@
         });
 
         // Iris position (manual override)
-        document.getElementById('iris-x').addEventListener('input', (e) => {
+        document.getElementById('irisXOffset').addEventListener('input', (e) => {
             const val = parseFloat(e.target.value);
-            document.getElementById('iris-x-val').textContent = val.toFixed(2);
+            document.getElementById('irisXOffset-val').textContent = val.toFixed(2);
             state.targetX = val;
             state.attention = 1;
         });
 
-        document.getElementById('iris-y').addEventListener('input', (e) => {
+        document.getElementById('irisYOffset').addEventListener('input', (e) => {
             const val = parseFloat(e.target.value);
-            document.getElementById('iris-y-val').textContent = val.toFixed(2);
+            document.getElementById('irisYOffset-val').textContent = val.toFixed(2);
             state.targetY = val;
             state.attention = 1;
         });
 
         // Wave speeds
-        document.getElementById('top-speed').addEventListener('input', (e) => {
+        document.getElementById('topSampleSpeed').addEventListener('input', (e) => {
             const val = parseFloat(e.target.value);
-            document.getElementById('top-speed-val').textContent = val.toFixed(1);
+            document.getElementById('topSampleSpeed-val').textContent = val.toFixed(1);
             state.topSampleSpeed = val;
         });
 
-        document.getElementById('bottom-speed').addEventListener('input', (e) => {
+        document.getElementById('bottomSampleSpeed').addEventListener('input', (e) => {
             const val = parseFloat(e.target.value);
-            document.getElementById('bottom-speed-val').textContent = val.toFixed(1);
+            document.getElementById('bottomSampleSpeed-val').textContent = val.toFixed(1);
             state.bottomSampleSpeed = val;
         });
 
@@ -435,33 +435,30 @@
             state.sleepTimeout = e.target.checked ? 30 : Infinity;
         });
 
-        document.getElementById('bar-count').addEventListener('input', (e) => {
+        document.getElementById('barCount').addEventListener('input', (e) => {
             const val = parseInt(e.target.value);
-            document.getElementById('bar-count-val').textContent = val;
+            document.getElementById('barCount-val').textContent = val;
             state.barCount = val;
         });
 
-        document.getElementById('gap-ratio').addEventListener('input', (e) => {
+        document.getElementById('gapRatio').addEventListener('input', (e) => {
             const val = parseFloat(e.target.value);
-            document.getElementById('gap-ratio-val').textContent = val.toFixed(2);
+            document.getElementById('gapRatio-val').textContent = val.toFixed(2);
             state.gapRatio = val;
         });
 
         function syncControlsToState() {
-            document.getElementById('dilation').value = state.targetDilation;
-            document.getElementById('dilation-val').textContent = state.targetDilation.toFixed(2);
-
-            document.getElementById('top-speed').value = state.topSampleSpeed;
-            document.getElementById('top-speed-val').textContent = state.topSampleSpeed.toFixed(1);
-
-            document.getElementById('bottom-speed').value = state.bottomSampleSpeed;
-            document.getElementById('bottom-speed-val').textContent = state.bottomSampleSpeed.toFixed(1);
-
-            document.getElementById('bar-count').value = state.barCount;
-            document.getElementById('bar-count-val').textContent = state.barCount;
-
-            document.getElementById('gap-ratio').value = state.gapRatio;
-            document.getElementById('gap-ratio-val').textContent = state.gapRatio.toFixed(2);
+            for (let key of Object.keys(state)) {
+                key = key.replace(/_/g, '-');
+                const el = document.getElementById(key);
+                const label = document.getElementById(`${key}-val`);
+                if (el) {
+                    el.value = state[key];
+                }
+                if (label) {
+                    label.textContent = state[key].toFixed(2);
+                }
+            }
         }
 
         setInterval(() => {
@@ -469,12 +466,19 @@
             syncControlsToState();
         }, 100);
 
-        document.getElementById('scale').addEventListener('input', (e) => {
-            const val = parseInt(e.target.value);
+        function setScale(val) {
             document.getElementById('scale-val').textContent = val + '%';
+            document.getElementById('scale').value = val;
             svg.style.width = val + '%';
             svg.style.height = val + '%';
+        }
+
+        document.getElementById('scale').addEventListener('input', (e) => {
+            const val = parseInt(e.target.value);
+            setScale(val);
         });
+
+        setScale(25);
     </script>
 </body>
 </html>

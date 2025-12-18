@@ -35,15 +35,15 @@ function quitToDesktop() {
             width: 100%;
             height: 100%;
         ">
-            <svg id="eye" style="width: 1200px; height: 800px"></svg>
+            <svg id="eye" style="width: 600px; height: 400px"></svg>
         </div>
     `;
         svg = document.getElementById('eye');
+        setPeeved(true, false, false);
         playRandomJingle();
-        setBarDensity(151, -0.1, 1.1);
-        setPeeved(true, false, false, (Math.random() - 0.5), (Math.random() - 0.5), 4.5);
         setTimeout(() => {
             setExpression(expr);
+            setPeeved(true, false, false, (Math.random() - 0.5), (Math.random() - 0.5), 4.5);
             state.nextBlink
         }, 100 + Math.random() * 500);
         setTimeout(() => {
