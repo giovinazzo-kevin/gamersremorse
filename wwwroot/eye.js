@@ -2,6 +2,7 @@ window.svg = document.getElementById('eye');
 const frameInterval = 1000 / 15;
 let t = 0;
 let lastFrame = 0;
+let numBlinks = 0;
 
 const config = {
     barCount: 20,
@@ -315,7 +316,7 @@ function setLoading(loading) {
 
 function wake() {
     if (!state.awake) {
-        setRandomTagline();
+        setRandomTagline(numBlinks);
         state.awake = true;
         state.blinkTarget = 0;
         setExpression('neutral');
@@ -355,7 +356,8 @@ function updateBlink(dt) {
 
     if (state.awake && state.canBlink && state.blinkTarget === 1 && state.blink >= 0.95) {
         state.blinkTarget = 0;
-        setRandomTagline();
+        tagline.style.color = numBlinks++ % 2 == 0 ? 'var(--color-negative)' : 'var(--color-positive)';
+        setRandomTagline(numBlinks);
     }
 
     tagline.style.opacity = 1 - state.blink;
