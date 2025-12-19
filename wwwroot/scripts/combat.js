@@ -14,6 +14,11 @@ const Combat = {
     holding: false,
     lastFire: 0,
     splashes: [],
+    config: {
+        tearStyle: 'fancy',
+        shadows: true,
+        splash: true,
+    },
 
     init() {
         this.canvas = document.createElement('canvas');
@@ -23,7 +28,17 @@ const Combat = {
         this.ctx = this.canvas.getContext('2d');
         this.resize();
         window.addEventListener('resize', () => this.resize());
+        this.loadConfig();
         this.frameEffects = Items.getMergedEffects();
+    },
+
+    loadConfig() {
+        const saved = localStorage.getItem('combatConfig');
+        if (saved) Object.assign(this.config, JSON.parse(saved));
+    },
+
+    saveConfig() {
+        localStorage.setItem('combatConfig', JSON.stringify(this.config));
     },
 
     resize() {
@@ -119,83 +134,108 @@ const Combat = {
     render() {
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
-        // All shadows first
+        // Shadows (if enabled)
+        if (this.config.shadows) {
+            for (const t of this.tears) {
+                const pos = t.position;
+                const size = t.size;
+                const arc = Math.sin(t.progress * Math.PI);
+                const shadowOffset = arc * 15;
+
+                this.ctx.beginPath();
+                this.ctx.arc(pos.x + shadowOffset, pos.y + shadowOffset, size, 0, Math.PI * 2);
+                this.ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+                this.ctx.fill();
+            }
+        }
+
+        // Tears
         for (const t of this.tears) {
             const pos = t.position;
             const size = t.size;
-            const arc = Math.sin(t.progress * Math.PI); // 0 -> 1 -> 0
-            const shadowOffset = arc * 15; // max 15px at peak, 0 at start/end
 
-            this.ctx.beginPath();
-            this.ctx.arc(pos.x + shadowOffset, pos.y + shadowOffset, size, 0, Math.PI * 2);
-            this.ctx.fillStyle = 'rgba(50, 50, 50, 0.6)';  // grey, more visible
-            this.ctx.fill();
+            if (this.config.tearStyle === 'fancy') {
+                // Gradient bubble
+                const gradient = this.ctx.createRadialGradient(
+                    pos.x, pos.y, 0,
+                    pos.x, pos.y, size
+                );
+                gradient.addColorStop(0, t.color + '00');
+                gradient.addColorStop(0.6, t.color + '88');
+                gradient.addColorStop(1, t.color + 'cc');
+
+                this.ctx.beginPath();
+                this.ctx.arc(pos.x, pos.y, size, 0, Math.PI * 2);
+                this.ctx.fillStyle = gradient;
+                this.ctx.fill();
+
+                // Highlight
+                const highlightX = pos.x - size * 0.3;
+                const highlightY = pos.y - size * 0.3;
+                const highlightSize = size * 0.25;
+
+                const highlightGradient = this.ctx.createRadialGradient(
+                    highlightX, highlightY, 0,
+                    highlightX, highlightY, highlightSize
+                );
+                highlightGradient.addColorStop(0, 'rgba(255, 255, 255, 0.8)');
+                highlightGradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+
+                this.ctx.beginPath();
+                this.ctx.arc(highlightX, highlightY, highlightSize, 0, Math.PI * 2);
+                this.ctx.fillStyle = highlightGradient;
+                this.ctx.fill();
+
+                // Rim
+                this.ctx.beginPath();
+                this.ctx.arc(pos.x, pos.y, size - 0.5, 0, Math.PI * 2);
+                this.ctx.strokeStyle = t.color;
+                this.ctx.lineWidth = 1;
+                this.ctx.stroke();
+
+            } else if (this.config.tearStyle === 'simple') {
+                // Solid fill
+                this.ctx.beginPath();
+                this.ctx.arc(pos.x, pos.y, size, 0, Math.PI * 2);
+                this.ctx.fillStyle = t.color + 'aa';
+                this.ctx.fill();
+
+                // Rim
+                this.ctx.beginPath();
+                this.ctx.arc(pos.x, pos.y, size - 0.5, 0, Math.PI * 2);
+                this.ctx.strokeStyle = t.color;
+                this.ctx.lineWidth = 1;
+                this.ctx.stroke();
+
+            } else {
+                // Minimal - solid only
+                this.ctx.beginPath();
+                this.ctx.arc(pos.x, pos.y, size, 0, Math.PI * 2);
+                this.ctx.fillStyle = t.color;
+                this.ctx.fill();
+            }
         }
 
-        // Then all tears
-        for (const t of this.tears) {
-            const pos = t.position;
-            const size = t.size;
+        // Splashes (if enabled)
+        if (this.config.splash) {
+            for (const s of this.splashes) {
+                const progress = s.elapsed / s.duration;
+                const radius = s.size * (1 + progress * 2);
+                const alpha = 1 - progress;
 
-            // Gradient fill (bubble)
-            const gradient = this.ctx.createRadialGradient(
-                pos.x, pos.y, 0,
-                pos.x, pos.y, size
-            );
-            gradient.addColorStop(0, t.color + '00');    // center: transparent
-            gradient.addColorStop(0.6, t.color + '88');  // middle: semi
-            gradient.addColorStop(1, t.color + 'cc');    // edge: more opaque
+                const gradient = this.ctx.createRadialGradient(
+                    s.x, s.y, 0,
+                    s.x, s.y, radius
+                );
+                gradient.addColorStop(0, s.color + '00');
+                gradient.addColorStop(0.6, s.color + Math.floor(alpha * 100).toString(16).padStart(2, '0'));
+                gradient.addColorStop(1, s.color + Math.floor(alpha * 200).toString(16).padStart(2, '0'));
 
-            this.ctx.beginPath();
-            this.ctx.arc(pos.x, pos.y, size, 0, Math.PI * 2);
-            this.ctx.fillStyle = gradient;
-            this.ctx.fill();
-
-            // Bright rim
-            this.ctx.beginPath();
-            this.ctx.arc(pos.x, pos.y, size - 0.5, 0, Math.PI * 2);
-            this.ctx.strokeStyle = t.color;
-            this.ctx.lineWidth = 1;
-            this.ctx.stroke();
-
-            // After the gradient fill, before the rim
-
-            // Highlight
-            const highlightX = pos.x - size * 0.3;
-            const highlightY = pos.y - size * 0.3;
-            const highlightSize = size * 0.25;
-
-            const highlightGradient = this.ctx.createRadialGradient(
-                highlightX, highlightY, 0,
-                highlightX, highlightY, highlightSize
-            );
-            highlightGradient.addColorStop(0, 'rgba(255, 255, 255, 0.8)');
-            highlightGradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
-
-            this.ctx.beginPath();
-            this.ctx.arc(highlightX, highlightY, highlightSize, 0, Math.PI * 2);
-            this.ctx.fillStyle = highlightGradient;
-            this.ctx.fill();
-        }
-
-        // Splashes
-        for (const s of this.splashes) {
-            const progress = s.elapsed / s.duration;
-            const radius = s.size * (1 + progress * 2);
-            const alpha = 1 - progress;
-
-            const gradient = this.ctx.createRadialGradient(
-                s.x, s.y, 0,
-                s.x, s.y, radius
-            );
-            gradient.addColorStop(0, s.color + '00');
-            gradient.addColorStop(0.6, s.color + Math.floor(alpha * 100).toString(16).padStart(2, '0'));
-            gradient.addColorStop(1, s.color + Math.floor(alpha * 200).toString(16).padStart(2, '0'));
-
-            this.ctx.beginPath();
-            this.ctx.arc(s.x, s.y, radius, 0, Math.PI * 2);
-            this.ctx.fillStyle = gradient;
-            this.ctx.fill();
+                this.ctx.beginPath();
+                this.ctx.arc(s.x, s.y, radius, 0, Math.PI * 2);
+                this.ctx.fillStyle = gradient;
+                this.ctx.fill();
+            }
         }
     },
 };
