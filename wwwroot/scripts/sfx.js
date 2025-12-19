@@ -18,7 +18,6 @@ const sfx = {
     shame: () => Audio.play('shame', 'sfx'),
     fame: () => Audio.play('fame', 'sfx'),
     error: () => Audio.play('error', 'sfx'),
-    lowHp: () => Audio.play('low_hp', 'sfx'),
     quit: () => {
         const jingles = ['zelda_secret', 'achievement', 'fame'];
         Audio.play(jingles[Math.floor(Math.random() * jingles.length)], 'sfx');
@@ -52,10 +51,4 @@ function playPickupSound() { sfx.pow(); }
 function playItemPickupSound() { sfx.fame(); }
 function playPedestalSound() { sfx.secret(); }
 
-// Register Tracker as an instrument
-// Use setTimeout to ensure all scripts have finished executing
-setTimeout(() => {
-    if (typeof Audio !== 'undefined' && typeof Tracker !== 'undefined') {
-        Audio.registerInstrument('tracker', Tracker);
-    }
-}, 0);
+Audio.registerInstrument('tracker', Tracker);

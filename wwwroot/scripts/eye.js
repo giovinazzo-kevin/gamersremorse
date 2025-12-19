@@ -1414,7 +1414,6 @@ function showRespawnTimer(container, eyeEl) {
 // Single source of truth for eye entity state
 // Low HP music trigger
 function checkDangerMusic() {
-    if (typeof music === 'undefined') return;
     const ratio = state.health / state.maxHealth;
     const isLow = ratio <= LOW_HP_THRESHOLD && ratio > 0;
     
