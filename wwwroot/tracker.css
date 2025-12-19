@@ -66,6 +66,39 @@
     color: #fff;
 }
 
+.tracker-help-btn {
+    background: #333;
+    border: 1px solid #555;
+    color: #888;
+    width: 24px;
+    height: 24px;
+    border-radius: 12px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: bold;
+    margin-right: 8px;
+}
+
+.tracker-help-btn:hover {
+    background: #444;
+    color: #fff;
+}
+
+.tracker-param {
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 3px;
+    transition: background 0.1s;
+}
+
+.tracker-param:hover {
+    background: #333;
+}
+
+.tracker-param span {
+    color: #54bebe;
+}
+
 .tracker-btn {
     background: #333;
     border: 1px solid #555;
@@ -83,6 +116,12 @@
 
 .tracker-btn:active {
     background: #222;
+}
+
+.tracker-btn.active {
+    background: #2a4a6a;
+    border-color: #54bebe;
+    color: #54bebe;
 }
 
 .tracker-channel-headers {
@@ -116,8 +155,76 @@
     background: #1a2a3a;
 }
 
-.tracker-pattern {
+/* Body layout - library + main */
+.tracker-body {
+    display: flex;
     height: 400px;
+}
+
+.tracker-library {
+    width: 140px;
+    background: #111;
+    border-right: 1px solid #333;
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+}
+
+.library-header {
+    padding: 8px;
+    font-size: 10px;
+    font-weight: bold;
+    color: #666;
+    letter-spacing: 1px;
+    border-bottom: 1px solid #222;
+}
+
+.library-list {
+    flex: 1;
+    overflow-y: auto;
+}
+
+.library-item {
+    padding: 8px 10px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-bottom: 1px solid #1a1a2a;
+    transition: background 0.1s;
+}
+
+.library-item:hover {
+    background: #1a2a3a;
+}
+
+.library-item.locked {
+    opacity: 0.4;
+    cursor: default;
+}
+
+.library-item.locked:hover {
+    background: transparent;
+}
+
+.library-icon {
+    font-size: 16px;
+}
+
+.library-name {
+    font-size: 11px;
+    color: #aaa;
+}
+
+.tracker-main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.tracker-pattern {
+    flex: 1;
     overflow-y: auto;
     overflow-x: hidden;
     background: #0d0d1a;
@@ -285,4 +392,67 @@ body.dark-mode .tracker {
 
 body.dark-mode .tracker-header {
     background: linear-gradient(to bottom, #333, #222);
+}
+
+/* Help overlay */
+.tracker-help-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+}
+
+.tracker-help-content {
+    background: #1a1a2e;
+    border: 2px solid #444;
+    border-radius: 8px;
+    padding: 20px;
+    max-width: 400px;
+    color: #ccc;
+}
+
+.tracker-help-content h3 {
+    color: #54bebe;
+    margin: 0 0 15px 0;
+    font-size: 16px;
+}
+
+.tracker-help-content h4 {
+    color: #888;
+    margin: 15px 0 8px 0;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.help-section:first-of-type h4 {
+    margin-top: 0;
+}
+
+.help-row {
+    display: flex;
+    margin: 4px 0;
+    font-size: 12px;
+}
+
+.help-key {
+    background: #333;
+    padding: 2px 8px;
+    border-radius: 3px;
+    margin-right: 10px;
+    min-width: 100px;
+    text-align: center;
+    color: #fff;
+    font-family: monospace;
+}
+
+.tracker-help-content .tracker-btn {
+    margin-top: 15px;
+    width: 100%;
 }
