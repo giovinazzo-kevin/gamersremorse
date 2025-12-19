@@ -76,7 +76,8 @@ const state = {
     blink: 1,
     blinkTarget: 1,
     lastInteraction: 0,
-    canBlink: true,
+    blinkEnabled: true,    // user preference (checkbox)
+    canBlink: true,        // business logic (expressions, death, etc)
     nextBlinkTime: 0,
     pendingDoubleBlink: false,
 
@@ -506,7 +507,7 @@ const expressions = {
             targetBlush: 1,
         },
         onExit: () => {
-            enableBlinking();
+            allowBlinking();
         },
         update: (dt) => {
             if (state.lookingAtGraph) {
@@ -518,7 +519,7 @@ const expressions = {
                     state.engrossed = true;
                     state.targetBlush = 1;
                     state.targetDilation = 0.8;
-                    disableBlinking();
+                    disallowBlinking();
                     return;
                 }
             }
@@ -611,12 +612,12 @@ function setExpression(name, reset = true) {
     state.exprProgress = 0;
 }
 
-function enableBlinking() {
+function allowBlinking() {
     state.canBlink = true;
     scheduleNextBlink();
 }
 
-function disableBlinking() {
+function disallowBlinking() {
     state.canBlink = false;
     state.blinkTarget = 0;
     state.nextBlinkTime = Number.MAX_VALUE;
@@ -722,6 +723,8 @@ function wake() {
 
 function blink() {
     if (!state.awake) return;
+    if (!state.blinkEnabled) return;  // user said no
+    if (!state.canBlink) return;       // business logic said no
     state.blinkTarget = 1;
 }
 
@@ -1074,6 +1077,10 @@ function setSleepEnabled(enabled) {
     }
 }
 
+function setBlinkingEnabled(enabled) {
+    state.allowBlinking = enabled;
+}
+
 function setCursorTrackingEnabled(enabled) {
     state.cursorTrackingEnabled = enabled;
     if (!enabled) {
@@ -1139,6 +1146,8 @@ function tick(timestamp) {
         draw();
         Combat.update(dt);
         Combat.render();
+        ScreenShake.update(dt);
+        DepthOfField.update(dt);
         lastFrame = timestamp;
     }
     requestAnimationFrame(tick);
@@ -1156,10 +1165,10 @@ function onPageClick() {
 function setPeeved(isPeeved, snap, canBlink, targetX = 0, targetY = 0, gazeSpeed = 1.5) {
     state.peeved = isPeeved;
     if (isPeeved && !canBlink) {
-        disableBlinking();
+        disallowBlinking();
     }
     else if (!canBlink) {
-        enableBlinking();
+        allowBlinking();
     }
     if (isPeeved) {
         if (snap) {
@@ -1189,7 +1198,6 @@ function setBarDensity(numBars = 50, gapRatio = 0.2) {
     state.gapRatio = gapRatio;
     state.barCount = numBars;
     setAchievementFlag('barCount', numBars);
-    checkAchievements();
 }
 
 // === DEATH ANIMATIONS ===
@@ -1385,7 +1393,7 @@ function showRespawnTimer(container, eyeEl) {
             // Reset blink state
             state.blink = 0;
             state.blinkTarget = 0;
-            enableBlinking();
+            allowBlinking();
             
             // Disappointed reaction with timeout
             const reaction = Date.now();
@@ -1422,6 +1430,8 @@ const Eye = {
         state.health = Math.max(0, state.health - halfHearts);
         this.renderHealthBar();
         this.save();
+
+        ScreenShake.shake(halfHearts * 4);
         
         if (state.health <= 0) {
             this.kill(anim);
@@ -1568,7 +1578,7 @@ svg.addEventListener('click', () => {
             state.blink = 1;
             state.blinkTarget = 0; // Will open back up
             state.attentionThreshold = 100;
-            enableBlinking();
+            allowBlinking();
         } else if (state.attentionThreshold < 5) {
             setExpression('sad');
         } else if (state.attentionThreshold < 10) {

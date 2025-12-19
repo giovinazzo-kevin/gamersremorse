@@ -22,6 +22,8 @@ const Combat = {
         tearStyle: 'fancy',
         shadows: 'high',  // 'off' | 'low' | 'medium' | 'high'
         splash: true,
+        screenShake: 1,  // 0 to 1
+        depthOfField: 0,
     },
 
     init() {
@@ -39,6 +41,9 @@ const Combat = {
     loadConfig() {
         const saved = localStorage.getItem('combatConfig');
         if (saved) Object.assign(this.config, JSON.parse(saved));
+        ScreenShake.multiplier = this.config.screenShake ?? 1;
+        DepthOfField.init();
+        DepthOfField.setIntensity(this.config.depthOfField ?? 0);
     },
 
     saveConfig() {
@@ -176,8 +181,8 @@ const Combat = {
             e.y += e.direction.y * e.speed * dt;
 
             if (!getAchievementFlag('combatUnlocked')) {
-                const pupil = Combat.getPupilPosition();
-                const dist = Math.sqrt((e.x - pupil.x) ** 2 + (e.y - pupil.y) ** 2);
+                const pupil = this.getPupilPosition();
+                const dist = Math.sqrt((pos.x - pupil.x) ** 2 + (pos.y - pupil.y) ** 2);
 
                 if (dist < 1200 && !this.tutorialTriggered) {
                     this.tutorialTriggered = true;
@@ -218,8 +223,14 @@ const Combat = {
         }
     },
 
+
     render() {
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+        const pupil = this.getPupilPosition();
+        const maxDist = Math.max(window.innerWidth, window.innerHeight) * 0.5;
+        const dofIntensity = typeof DepthOfField !== 'undefined' ? DepthOfField.intensity : 0;
+
 
         // Shadows (if enabled)
         if (this.config.shadows !== 'off') {
@@ -228,6 +239,9 @@ const Combat = {
                 const size = t.size;
                 const arc = Math.sin(t.progress * Math.PI);
                 const shadowOffset = arc * 15;
+
+                const blur = DepthOfField.getBlur(pos.x, pos.y);
+                this.ctx.filter = blur > 0.5 ? `blur(${blur}px)` : 'none';
 
                 this.ctx.beginPath();
                 this.ctx.arc(pos.x + shadowOffset, pos.y + shadowOffset, size, 0, Math.PI * 2);
@@ -252,13 +266,17 @@ const Combat = {
             }
         }
 
+        this.ctx.filter = 'none';
+
         // Tears
         for (const t of this.tears) {
             const pos = t.position;
             const size = t.size;
 
+            const blur = DepthOfField.getBlur(pos.x, pos.y);
+            this.ctx.filter = blur > 0.5 ? `blur(${blur}px)` : 'none';
+
             if (this.config.tearStyle === 'fancy') {
-                // Gradient bubble
                 const gradient = this.ctx.createRadialGradient(
                     pos.x, pos.y, 0,
                     pos.x, pos.y, size
@@ -272,7 +290,6 @@ const Combat = {
                 this.ctx.fillStyle = gradient;
                 this.ctx.fill();
 
-                // Highlight
                 const highlightX = pos.x - size * 0.3;
                 const highlightY = pos.y - size * 0.3;
                 const highlightSize = size * 0.25;
@@ -289,7 +306,6 @@ const Combat = {
                 this.ctx.fillStyle = highlightGradient;
                 this.ctx.fill();
 
-                // Rim
                 this.ctx.beginPath();
                 this.ctx.arc(pos.x, pos.y, size - 0.5, 0, Math.PI * 2);
                 this.ctx.strokeStyle = t.color;
@@ -297,13 +313,11 @@ const Combat = {
                 this.ctx.stroke();
 
             } else if (this.config.tearStyle === 'simple') {
-                // Solid fill
                 this.ctx.beginPath();
                 this.ctx.arc(pos.x, pos.y, size, 0, Math.PI * 2);
                 this.ctx.fillStyle = t.color + 'aa';
                 this.ctx.fill();
 
-                // Rim
                 this.ctx.beginPath();
                 this.ctx.arc(pos.x, pos.y, size - 0.5, 0, Math.PI * 2);
                 this.ctx.strokeStyle = t.color;
@@ -311,7 +325,6 @@ const Combat = {
                 this.ctx.stroke();
 
             } else {
-                // Minimal - solid only
                 this.ctx.beginPath();
                 this.ctx.arc(pos.x, pos.y, size, 0, Math.PI * 2);
                 this.ctx.fillStyle = t.color;
@@ -319,12 +332,17 @@ const Combat = {
             }
         }
 
+        this.ctx.filter = 'none';
+
         // Splashes (if enabled)
         if (this.config.splash) {
             for (const s of this.splashes) {
                 const progress = s.elapsed / s.duration;
                 const radius = s.size * (1 + progress * 2);
                 const alpha = 1 - progress;
+
+                const blur = DepthOfField.getBlur(s.x, s.y);
+                this.ctx.filter = blur > 0.5 ? `blur(${blur}px)` : 'none';
 
                 const gradient = this.ctx.createRadialGradient(
                     s.x, s.y, 0,
@@ -341,10 +359,15 @@ const Combat = {
             }
         }
 
+        this.ctx.filter = 'none';
+
         // Enemies
         for (const e of this.enemies) {
             const img = this.enemyImages[e.appId];
             if (img && img.complete) {
+                const blur = DepthOfField.getBlur(e.x, e.y);
+                this.ctx.filter = blur > 0.5 ? `blur(${blur}px)` : 'none';
+
                 this.ctx.drawImage(
                     img,
                     e.x - e.width / 2,
@@ -354,6 +377,8 @@ const Combat = {
                 );
             }
         }
+
+        this.ctx.filter = 'none';
     },
 };
 

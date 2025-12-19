@@ -140,6 +140,14 @@ const ACHIEVEMENTS = {
         hidden: true,
         check: (state) => state.polyphonyOverload
     },
+    earthquake: {
+        id: 'earthquake',
+        icon: '💥',
+        title: 'POW!',
+        description: 'Become an earthbender',
+        hidden: true,
+        check: (state) => state.maxScreenShake
+    },
     coomer: {
         id: 'coomer',
         title: 'Eye Play It For The Plot',

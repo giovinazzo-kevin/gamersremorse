@@ -374,6 +374,7 @@ button {
 
 #eye-container {
     position: relative;
+    z-index: 1000;
     width: 120px;
     height: 80px;
 }

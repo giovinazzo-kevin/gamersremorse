@@ -81,8 +81,8 @@ function buildEyeTab(content, refs) {
     refs.blinkCheckbox.className = 'modal-checkbox';
     refs.blinkCheckbox.checked = isBlinkingEnabled();
     refs.blinkCheckbox.onchange = () => {
-        if (refs.blinkCheckbox.checked) enableBlinking();
-        else disableBlinking();
+        if (refs.blinkCheckbox.checked) setBlinkingEnabled(true);
+        else disallowBlinking();
     };
     blinkRow.appendChild(refs.blinkCheckbox);
     blinkRow.appendChild(document.createTextNode(' Enable blinking'));
@@ -349,6 +349,67 @@ function buildGraphicsTab(content, refs) {
     splashRow.appendChild(document.createTextNode(' Splash effects'));
     col.appendChild(splashRow);
 
+    // Screen shake slider
+    const shakeRow = document.createElement('div');
+    shakeRow.className = 'modal-slider-row';
+
+    const shakeLabel = document.createElement('span');
+    shakeLabel.textContent = 'Screen shake';
+    shakeRow.appendChild(shakeLabel);
+
+    refs.shakeSlider = document.createElement('input');
+    refs.shakeSlider.type = 'range';
+    refs.shakeSlider.className = 'modal-slider';
+    refs.shakeSlider.min = 0;
+    refs.shakeSlider.max = 1000;
+    refs.shakeSlider.value = (Combat.config.screenShake ?? 1) * 100;
+
+    refs.shakeValue = document.createElement('span');
+    refs.shakeValue.className = 'modal-slider-value';
+    refs.shakeValue.textContent = refs.shakeSlider.value + '%';
+
+    refs.shakeSlider.oninput = () => {
+        refs.shakeValue.textContent = refs.shakeSlider.value + '%';
+        const raw = refs.shakeSlider.value / 100; // 0 to 10
+        Combat.config.screenShake = raw * raw; // 0 to 100 at max
+        ScreenShake.multiplier = Combat.config.screenShake;
+        Combat.saveConfig();
+    };
+
+    shakeRow.appendChild(refs.shakeSlider);
+    shakeRow.appendChild(refs.shakeValue);
+    col.appendChild(shakeRow);
+
+    // Depth of field slider
+    const dofRow = document.createElement('div');
+    dofRow.className = 'modal-slider-row';
+
+    const dofLabel = document.createElement('span');
+    dofLabel.textContent = 'Depth of field';
+    dofRow.appendChild(dofLabel);
+
+    refs.dofSlider = document.createElement('input');
+    refs.dofSlider.type = 'range';
+    refs.dofSlider.className = 'modal-slider';
+    refs.dofSlider.min = 0;
+    refs.dofSlider.max = 100;
+    refs.dofSlider.value = (Combat.config.depthOfField ?? 0) * 100;
+
+    refs.dofValue = document.createElement('span');
+    refs.dofValue.className = 'modal-slider-value';
+    refs.dofValue.textContent = refs.dofSlider.value + '%';
+
+    refs.dofSlider.oninput = () => {
+        refs.dofValue.textContent = refs.dofSlider.value + '%';
+        const val = refs.dofSlider.value / 100;
+        Combat.config.depthOfField = val;
+        DepthOfField.setIntensity(val);
+        Combat.saveConfig();
+    };
+
+    dofRow.appendChild(refs.dofSlider);
+    dofRow.appendChild(refs.dofValue);
+    col.appendChild(dofRow);
 
     content.appendChild(col);
 }
@@ -1343,7 +1404,7 @@ function loadEyeSettings() {
     const saved = localStorage.getItem('eyeSettings');
     if (saved) {
         const settings = JSON.parse(saved);
-        if (settings.blinkEnabled === false) disableBlinking();
+        if (settings.blinkEnabled === false) setBlinkingEnabled(false);
         if (settings.sleepEnabled === false) setSleepEnabled(false);
         if (settings.trackingEnabled === false) setCursorTrackingEnabled(false);
         if (settings.darkMode) { darkMode = true; document.body.classList.add('dark-mode'); setAchievementFlag('darkModeEnabled'); }
