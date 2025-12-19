@@ -387,28 +387,111 @@ function buildAudioTab(content) {
     // ONE SOURCE OF TRUTH: Tracker library
     const sounds = Tracker.getLibrary();
     
-    for (const sound of sounds) {
-        const item = document.createElement('div');
-        item.className = 'audio-item' + (sound.unlocked ? '' : ' locked');
+    // Split into categories
+    const effects = sounds.filter(s => !s.hasPatterns && !s.custom);
+    const patterns = sounds.filter(s => s.hasPatterns && !s.custom);
+    const custom = sounds.filter(s => s.custom);
+    
+    // EFFECTS section (synths)
+    if (effects.length > 0) {
+        const sectionHeader = document.createElement('div');
+        sectionHeader.className = 'achievements-section-header';
+        sectionHeader.textContent = 'EFFECTS';
+        container.appendChild(sectionHeader);
         
-        if (sound.unlocked) {
-            item.innerHTML = `
-                <div class="audio-icon">${sound.icon}</div>
-                <div class="audio-name">${sound.name}</div>
-                <button class="modal-btn">▶</button>
-            `;
-            item.querySelector('.modal-btn').onclick = () => sound.play();
-        } else {
-            item.innerHTML = `
-                <div class="audio-icon">🔒</div>
-                <div class="audio-name">???</div>
-            `;
+        for (const sound of effects) {
+            container.appendChild(buildAudioItem(sound));
         }
+    }
+    
+    // PATTERNS section (built-in patterns)
+    if (patterns.length > 0) {
+        const sectionHeader = document.createElement('div');
+        sectionHeader.className = 'achievements-section-header';
+        sectionHeader.textContent = 'PATTERNS';
+        container.appendChild(sectionHeader);
         
-        container.appendChild(item);
+        for (const sound of patterns) {
+            container.appendChild(buildAudioItem(sound));
+        }
+    }
+    
+    // CUSTOM section (user-created) - show if has custom sounds OR achievement unlocked
+    const trackerUnlocked = typeof getAchievementFlag === 'function' && getAchievementFlag('openedTracker');
+    if (custom.length > 0 || trackerUnlocked) {
+        const sectionHeader = document.createElement('div');
+        sectionHeader.className = 'achievements-section-header';
+        sectionHeader.textContent = 'CUSTOM';
+        container.appendChild(sectionHeader);
+        
+        if (custom.length > 0) {
+            for (const sound of custom) {
+                container.appendChild(buildAudioItem(sound, true));
+            }
+        } else {
+            const hint = document.createElement('div');
+            hint.className = 'audio-item';
+            hint.innerHTML = `
+                <div class="audio-icon">🎹</div>
+                <div class="audio-name" style="color: #808080; font-style: italic;">Create sounds in the tracker</div>
+                <button class="modal-btn">🎹</button>
+            `;
+            hint.querySelector('.modal-btn').onclick = () => {
+                closeModal();
+                openTracker();
+            };
+            container.appendChild(hint);
+        }
     }
     
     content.appendChild(container);
+}
+
+function buildAudioItem(sound, showDelete = false) {
+    const item = document.createElement('div');
+    item.className = 'audio-item' + (sound.unlocked ? '' : ' locked');
+    
+    if (sound.unlocked) {
+        item.innerHTML = `
+            <div class="audio-icon">${sound.icon}</div>
+            <div class="audio-name">${sound.name}</div>
+            ${showDelete ? '<button class="modal-btn audio-delete">×</button>' : ''}
+            ${sound.hasPatterns ? '<button class="modal-btn audio-edit">✎</button>' : ''}
+            <button class="modal-btn audio-play">▶</button>
+        `;
+        item.querySelector('.audio-play').onclick = () => sound.play();
+        if (sound.hasPatterns) {
+            item.querySelector('.audio-edit').onclick = () => {
+                if (sound.custom) {
+                    Tracker.loadCustomSong(sound.id);
+                } else {
+                    Tracker.loadFromLibrary(sound.id);
+                }
+                closeModal();
+                openTracker();
+            };
+        }
+        if (showDelete) {
+            item.querySelector('.audio-delete').onclick = () => {
+                if (confirm(`Delete "${sound.name}"?`)) {
+                    Tracker.deleteCustomSong(sound.id);
+                    // Rebuild the tab
+                    const content = item.closest('.modal-content');
+                    if (content) {
+                        content.innerHTML = '';
+                        buildAudioTab(content);
+                    }
+                }
+            };
+        }
+    } else {
+        item.innerHTML = `
+            <div class="audio-icon">🔒</div>
+            <div class="audio-name">???</div>
+        `;
+    }
+    
+    return item;
 }
 
 function openModal(title, options = {}) {
@@ -932,6 +1015,21 @@ const commands = {
             consolePrint(`Added heart container. Max health: ${Eye.maxHealth/2} hearts`);
         }
     },
+    unlock_sounds: {
+        description: 'Unlock all sounds in the audio library',
+        hidden: true,
+        execute: () => {
+            const lib = Tracker.getLibrary();
+            let count = 0;
+            for (const sound of lib) {
+                if (!sound.unlocked) {
+                    Tracker.unlockLibraryItem(sound.id);
+                    count++;
+                }
+            }
+            consolePrint(`Unlocked ${count} sound${count !== 1 ? 's' : ''}.`, 'success');
+        }
+    },
 };
 
 function createConsole() {
@@ -1011,7 +1109,11 @@ function toggleConsole() {
     
     consoleVisible = !consoleVisible;
     consoleElement.classList.toggle('visible', consoleVisible);
-    if (consoleVisible) consoleElement.querySelector('.console-input').focus();
+    if (consoleVisible) {
+        consoleElement.querySelector('.console-input').focus();
+    } else {
+        consoleElement.querySelector('.console-input').blur();
+    }
 }
 
 function executeCommand(cmd) {
@@ -1029,9 +1131,12 @@ let trackerVisible = false;
 let trackerModal = null;
 
 function openTracker() {
+    setAchievementFlag('openedTracker');
+    
     if (trackerModal) {
         trackerModal.style.display = 'block';
         trackerVisible = true;
+        trackerModal.querySelector('.tracker')?.focus();
         return;
     }
     
@@ -1054,8 +1159,7 @@ function openTracker() {
     trackerVisible = true;
     
     // Focus tracker for keyboard input
-    const trackerEl = container.querySelector('.tracker-pattern')?.parentElement;
-    if (trackerEl) trackerEl.focus();
+    trackerModal.querySelector('.tracker')?.focus();
 }
 
 function closeTracker() {

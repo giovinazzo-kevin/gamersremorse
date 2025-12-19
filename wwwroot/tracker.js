@@ -77,6 +77,7 @@ const Tracker = (() => {
     
     // Selection (for Shift+arrows)
     let selection = null; // { startRow, startCh, startCol, endRow, endCh, endCol }
+    let isDragging = false;
     
     let trackerElement = null;
     let patternElement = null;
@@ -108,22 +109,41 @@ const Tracker = (() => {
         'achievement': {
             name: 'Achievement',
             icon: '🏆',
-            bpm: 400,
-            speed: 6,
-            delay: { time: 0.08, feedback: 0.5 },
-            patterns: {
-                0: createPatternFromNotes([
-                    // Melody - triangle for body
-                    { row: 0, ch: 'pulse1', note: 'A#', octave: 4, inst: 3, vol: 15 },
-                    { row: 1, ch: 'pulse1', note: 'A-', octave: 5, inst: 3, vol: 14 },
-                    { row: 2, ch: 'pulse1', note: 'C-', octave: 6, inst: 3, vol: 13 },
-                    // Harmony - quieter
-                    { row: 0, ch: 'triangle', note: 'C-', octave: 4, inst: 3, vol: 10 },
-                    { row: 1, ch: 'triangle', note: 'C-', octave: 5, inst: 3, vol: 9 },
-                    { row: 2, ch: 'triangle', note: 'C-', octave: 7, inst: 3, vol: 8 },
-                ], 4)
-            },
-            sequence: [0]
+            synth: (ctx) => {
+                const N = (note, octave) => {
+                    const offsets = { 'C': 0, 'C#': 1, 'D': 2, 'D#': 3, 'E': 4, 'F': 5, 'F#': 6, 'G': 7, 'G#': 8, 'A': 9, 'A#': 10, 'B': 11 };
+                    return 261.63 * Math.pow(2, (offsets[note] + (octave - 4) * 12) / 12);
+                };
+                
+                const melody1 = [N('A#', 4), N('A', 5), N('C', 6)];
+                const melody2 = [N('C', 4), N('C', 5), N('C', 7)];
+                const noteLength = 0.1;
+                
+                // 50% volume delay
+                const delay = ctx.createDelay();
+                const delayGain = ctx.createGain();
+                delay.delayTime.value = 0.08;
+                delayGain.gain.value = 0.5;
+                delay.connect(delayGain);
+                delayGain.connect(ctx.destination);
+                
+                const playNote = (freq, startTime, vol, i) => {
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    osc.type = 'triangle';
+                    osc.frequency.value = freq;
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+                    gain.connect(delay);
+                    gain.gain.setValueAtTime(vol, startTime);
+                    gain.gain.exponentialRampToValueAtTime(0.01, startTime + noteLength * 2);
+                    osc.start(startTime);
+                    osc.stop(startTime + noteLength * (i === 2 ? 0.5 : 1));
+                };
+                
+                melody1.forEach((freq, i) => playNote(freq, ctx.currentTime + i * noteLength, 0.2 - i * 0.03, i));
+                melody2.forEach((freq, i) => playNote(freq, ctx.currentTime + i * noteLength, 0.12 - i * 0.02, i));
+            }
         },
         'death': {
             name: 'Death',
@@ -174,33 +194,89 @@ const Tracker = (() => {
         'pow': {
             name: 'Pow',
             icon: '💥',
-            bpm: 400,
-            speed: 6,
-            patterns: {
-                0: createPatternFromNotes([
-                    // Noise burst + low thump
-                    { row: 0, ch: 'noise', note: 'C-', octave: 4, inst: 7, vol: 15 },
-                    { row: 0, ch: 'pulse1', note: 'C-', octave: 3, inst: 0, vol: 12 },
-                ], 2)
-            },
-            sequence: [0]
+            synth: (ctx) => {
+                // NES-style POW - bitcrushed noise burst with filter sweep + square thump
+                const noise = ctx.createBufferSource();
+                const noiseBuffer = ctx.createBuffer(1, ctx.sampleRate * 0.15, ctx.sampleRate);
+                const data = noiseBuffer.getChannelData(0);
+                
+                // 4-bit bitcrushed noise
+                const levels = Math.pow(2, 4);
+                for (let i = 0; i < data.length; i++) {
+                    let sample = Math.random() * 2 - 1;
+                    data[i] = Math.round(sample * levels) / levels;
+                }
+                noise.buffer = noiseBuffer;
+                
+                // Bandpass filter sweep 2000→200 Hz
+                const filter = ctx.createBiquadFilter();
+                filter.type = 'bandpass';
+                filter.frequency.setValueAtTime(2000, ctx.currentTime);
+                filter.frequency.exponentialRampToValueAtTime(200, ctx.currentTime + 0.1);
+                filter.Q.value = 5;
+                
+                const noiseGain = ctx.createGain();
+                noiseGain.gain.setValueAtTime(0.4, ctx.currentTime);
+                noiseGain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.12);
+                
+                noise.connect(filter);
+                filter.connect(noiseGain);
+                noiseGain.connect(ctx.destination);
+                noise.start();
+                
+                // Square thump 300→80 Hz
+                const thump = ctx.createOscillator();
+                const thumpGain = ctx.createGain();
+                thump.type = 'square';
+                thump.frequency.setValueAtTime(300, ctx.currentTime);
+                thump.frequency.exponentialRampToValueAtTime(80, ctx.currentTime + 0.08);
+                thumpGain.gain.setValueAtTime(0.25, ctx.currentTime);
+                thumpGain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.1);
+                thump.connect(thumpGain);
+                thumpGain.connect(ctx.destination);
+                thump.start();
+                thump.stop(ctx.currentTime + 0.15);
+            }
         },
         'screenshot': {
             name: 'Screenshot',
             icon: '📸',
-            bpm: 500,
-            speed: 6,
-            patterns: {
-                0: createPatternFromNotes([
-                    // Click
-                    { row: 0, ch: 'noise', note: 'C-', octave: 4, inst: 8, vol: 12 },
-                    // Rising sweep
-                    { row: 0, ch: 'pulse1', note: 'E-', octave: 6, inst: 2, vol: 12 },
-                    { row: 1, ch: 'pulse1', note: 'G-', octave: 6, inst: 2, vol: 11 },
-                    { row: 2, ch: 'pulse1', note: 'B-', octave: 6, inst: 2, vol: 10 },
-                ], 4)
-            },
-            sequence: [0]
+            synth: (ctx) => {
+                // Click transient - short noise burst
+                const noise = ctx.createBufferSource();
+                const noiseBuffer = ctx.createBuffer(1, ctx.sampleRate * 0.02, ctx.sampleRate);
+                const data = noiseBuffer.getChannelData(0);
+                for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+                noise.buffer = noiseBuffer;
+                const noiseGain = ctx.createGain();
+                noiseGain.gain.setValueAtTime(0.15, ctx.currentTime);
+                noiseGain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.015);
+                noise.connect(noiseGain);
+                noiseGain.connect(ctx.destination);
+                noise.start();
+                
+                // 4 harmonic layers gliding up ~30% over 120ms
+                const layers = [
+                    { freq: [1600, 2100], type: 'sine', vol: 0.15 },
+                    { freq: [3300, 3700], type: 'triangle', vol: 0.10 },
+                    { freq: [6500, 7200], type: 'sawtooth', vol: 0.06 },
+                    { freq: [9900, 10700], type: 'sawtooth', vol: 0.02 },
+                ];
+                
+                layers.forEach(layer => {
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    osc.type = layer.type;
+                    osc.frequency.setValueAtTime(layer.freq[0], ctx.currentTime);
+                    osc.frequency.exponentialRampToValueAtTime(layer.freq[1], ctx.currentTime + 0.12);
+                    gain.gain.setValueAtTime(layer.vol, ctx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+                    osc.start();
+                    osc.stop(ctx.currentTime + 0.45);
+                });
+            }
         },
         'shame': {
             name: 'Shame',
@@ -263,6 +339,9 @@ const Tracker = (() => {
     // Unlocked library items (by id)
     let unlockedLibrary = new Set(['zelda_secret']); // Start with one unlocked
     
+    // Custom user-created songs
+    let customLibrary = {};
+    
     function createPatternFromNotes(notes, length = 16) {
         const rows = [];
         for (let i = 0; i < length; i++) {
@@ -317,6 +396,16 @@ const Tracker = (() => {
     function playLibraryItem(id) {
         const item = library[id];
         if (!item) return false;
+        
+        // If item has custom synth function, use that instead of pattern playback
+        if (item.synth) {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            item.synth(audioCtx);
+            return true;
+        }
+        
         if (!audioCtx) {
             audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         }
@@ -437,12 +526,73 @@ const Tracker = (() => {
         }
     }
     
+    function saveCustomLibrary() {
+        localStorage.setItem('trackerCustomLibrary', JSON.stringify(customLibrary));
+    }
+    
+    function loadCustomLibrary() {
+        const saved = localStorage.getItem('trackerCustomLibrary');
+        if (saved) {
+            customLibrary = JSON.parse(saved);
+        }
+    }
+    
+    function saveToCustomLibrary(name, icon = '🎵') {
+        const id = 'custom_' + Date.now();
+        customLibrary[id] = {
+            name,
+            icon,
+            bpm,
+            speed,
+            patterns: JSON.parse(JSON.stringify(patterns)),
+            sequence: [...sequence]
+        };
+        saveCustomLibrary();
+        updateLibraryDisplay();
+        return id;
+    }
+    
+    function deleteCustomSong(id) {
+        if (customLibrary[id]) {
+            delete customLibrary[id];
+            saveCustomLibrary();
+            updateLibraryDisplay();
+            return true;
+        }
+        return false;
+    }
+    
+    function loadCustomSong(id) {
+        const item = customLibrary[id];
+        if (!item) return false;
+        
+        patterns = JSON.parse(JSON.stringify(item.patterns));
+        sequence = [...item.sequence];
+        bpm = item.bpm || DEFAULT_BPM;
+        speed = item.speed || DEFAULT_SPEED;
+        currentPattern = 0;
+        currentRow = 0;
+        updateDisplay();
+        return true;
+    }
+    
+    function promptSaveCustom() {
+        const name = prompt('Enter a name for this sound:', 'My Sound');
+        if (!name) return;
+        const icon = prompt('Enter an emoji icon:', '🎵') || '🎵';
+        saveToCustomLibrary(name, icon);
+    }
+    
     function updateLibraryDisplay() {
         const list = trackerElement?.querySelector('#tracker-library-list');
         if (!list) return;
         
         let html = '';
+        
+        // Built-in patterns
         for (const [id, item] of Object.entries(library)) {
+            if (item.synth) continue;
+            
             const unlocked = unlockedLibrary.has(id);
             if (unlocked) {
                 html += `<div class="library-item" data-id="${id}" onclick="Tracker.loadFromLibrary('${id}')">
@@ -456,7 +606,31 @@ const Tracker = (() => {
                 </div>`;
             }
         }
+        
+        // Custom songs
+        const customIds = Object.keys(customLibrary);
+        if (customIds.length > 0) {
+            html += `<div class="library-section-header">CUSTOM</div>`;
+            for (const id of customIds) {
+                const item = customLibrary[id];
+                html += `<div class="library-item custom" data-id="${id}">
+                    <span class="library-icon">${item.icon}</span>
+                    <span class="library-name">${item.name}</span>
+                    <span class="library-delete" onclick="event.stopPropagation(); Tracker.deleteCustomSong('${id}')">×</span>
+                </div>`;
+            }
+        }
+        
         list.innerHTML = html;
+        
+        // Add click handlers for custom songs
+        list.querySelectorAll('.library-item.custom').forEach(el => {
+            el.onclick = (e) => {
+                if (!e.target.classList.contains('library-delete')) {
+                    Tracker.loadCustomSong(el.dataset.id);
+                }
+            };
+        });
     }
     
     // === INSTRUMENTS ===
@@ -477,6 +651,7 @@ const Tracker = (() => {
         patterns[0] = createEmptyPattern();
         audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         loadUnlockedLibrary();
+        loadCustomLibrary();
     }
     
     function createEmptyPattern(length = DEFAULT_ROWS) {
@@ -735,6 +910,30 @@ const Tracker = (() => {
         }
         const pattern = patterns[sequence[currentPattern]];
         if (!pattern) return;
+        
+        // If selection exists and ALL selected cells are note columns, fill all
+        if (selection && isSelectionAllNoteColumns()) {
+            const minRow = Math.min(selection.startRow, selection.endRow);
+            const maxRow = Math.max(selection.startRow, selection.endRow);
+            const minCh = Math.min(selection.startCh, selection.endCh);
+            const maxCh = Math.max(selection.startCh, selection.endCh);
+            
+            for (let r = minRow; r <= maxRow; r++) {
+                const row = pattern.rows[r];
+                for (let c = minCh; c <= maxCh; c++) {
+                    const ch = CHANNELS[c];
+                    row[ch].note = note;
+                    row[ch].octave = octave;
+                    row[ch].inst = currentInstrument;
+                    if (row[ch].vol === null) row[ch].vol = 15;
+                }
+            }
+            previewNote(note, octave);
+            updateDisplay();
+            return;
+        }
+        
+        // Otherwise just current cell
         const row = pattern.rows[currentRow];
         const ch = CHANNELS[currentChannel];
         row[ch].note = note;
@@ -744,6 +943,14 @@ const Tracker = (() => {
         previewNote(note, octave);
         currentRow = (currentRow + 1) % pattern.length;
         updateDisplay();
+    }
+    
+    function isSelectionAllNoteColumns() {
+        if (!selection) return false;
+        const minCol = Math.min(selection.startCol, selection.endCol);
+        const maxCol = Math.max(selection.startCol, selection.endCol);
+        // All columns must be COL_NOTE (0)
+        return minCol === COL_NOTE && maxCol === COL_NOTE;
     }
     
     function deleteNote() {
@@ -775,6 +982,61 @@ const Tracker = (() => {
         row[ch].octave = null;
         currentRow = (currentRow + 1) % pattern.length;
         updateDisplay();
+    }
+    
+    function transposeCurrentNote(semitones) {
+        const pattern = patterns[sequence[currentPattern]];
+        if (!pattern) return;
+        
+        // If selection exists, transpose all notes in selection
+        if (selection) {
+            const minRow = Math.min(selection.startRow, selection.endRow);
+            const maxRow = Math.max(selection.startRow, selection.endRow);
+            const minCh = Math.min(selection.startCh, selection.endCh);
+            const maxCh = Math.max(selection.startCh, selection.endCh);
+            
+            for (let r = minRow; r <= maxRow; r++) {
+                const row = pattern.rows[r];
+                for (let c = minCh; c <= maxCh; c++) {
+                    const ch = CHANNELS[c];
+                    const cell = row[ch];
+                    transposeCell(cell, semitones);
+                }
+            }
+            updateDisplay();
+            return;
+        }
+        
+        // Otherwise transpose single cell
+        const row = pattern.rows[currentRow];
+        const ch = CHANNELS[currentChannel];
+        const cell = row[ch];
+        
+        if (transposeCell(cell, semitones)) {
+            previewNote(cell.note, cell.octave);
+        }
+        updateDisplay();
+    }
+    
+    function transposeCell(cell, semitones) {
+        if (!cell.note || cell.note === '---' || cell.note === '===') return false;
+        
+        // Get current note index
+        const noteIndex = NOTE_NAMES.indexOf(cell.note.length === 2 ? cell.note : cell.note + '-');
+        if (noteIndex === -1) return false;
+        
+        // Calculate new position
+        let totalSemitones = (cell.octave * 12) + noteIndex + semitones;
+        
+        // Clamp to valid range (C-0 to B-7)
+        totalSemitones = Math.max(0, Math.min(95, totalSemitones));
+        
+        const newOctave = Math.floor(totalSemitones / 12);
+        const newNoteIndex = totalSemitones % 12;
+        
+        cell.note = NOTE_NAMES[newNoteIndex];
+        cell.octave = newOctave;
+        return true;
     }
     
     // === NAVIGATION ===
@@ -917,6 +1179,7 @@ const Tracker = (() => {
                 <div class="tracker-controls">
                     <button class="tracker-btn" id="tracker-play">▶</button>
                     <button class="tracker-btn" id="tracker-stop">■</button>
+                    <button class="tracker-btn" id="tracker-save" title="Save to library">💾</button>
                 </div>
                 <span class="edit-indicator ${editMode ? 'active' : ''}">EDIT</span>
                 <span>Oct: ${currentOctave} [+/-]</span>
@@ -926,9 +1189,65 @@ const Tracker = (() => {
         
         patternElement = trackerElement.querySelector('#tracker-pattern-grid');
         
+        // Mouse selection handlers
+        patternElement.addEventListener('mousedown', (e) => {
+            const cell = e.target.closest('.tracker-cell');
+            if (!cell) return;
+            
+            const row = parseInt(cell.dataset.row);
+            const channel = parseInt(cell.dataset.channel);
+            const column = parseInt(cell.dataset.column);
+            
+            isDragging = true;
+            currentRow = row;
+            currentChannel = channel;
+            currentColumn = column;
+            selection = {
+                startRow: row, startCh: channel, startCol: column,
+                endRow: row, endCh: channel, endCol: column
+            };
+            updateDisplay();
+        });
+        
+        patternElement.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            const cell = e.target.closest('.tracker-cell');
+            if (!cell) return;
+            
+            const row = parseInt(cell.dataset.row);
+            const channel = parseInt(cell.dataset.channel);
+            const column = parseInt(cell.dataset.column);
+            
+            if (selection) {
+                selection.endRow = row;
+                selection.endCh = channel;
+                selection.endCol = column;
+                currentRow = row;
+                currentChannel = channel;
+                currentColumn = column;
+                updateDisplay();
+            }
+        });
+        
+        document.addEventListener('mouseup', () => {
+            if (isDragging) {
+                isDragging = false;
+                // If start == end, clear selection (was just a click)
+                if (selection && 
+                    selection.startRow === selection.endRow && 
+                    selection.startCh === selection.endCh && 
+                    selection.startCol === selection.endCol) {
+                    selection = null;
+                    updateDisplay();
+                }
+                trackerElement?.focus();
+            }
+        });
+        
         // Event listeners
         trackerElement.querySelector('#tracker-play').onclick = () => play();
         trackerElement.querySelector('#tracker-stop').onclick = () => stop();
+        trackerElement.querySelector('#tracker-save').onclick = () => promptSaveCustom();
         
         const closeBtn = trackerElement.querySelector('#tracker-close');
         if (closeBtn) {
@@ -1027,7 +1346,7 @@ const Tracker = (() => {
                     if (isCurrentCell) cellClass += ' current';
                     if (inSelection) cellClass += ' selected';
                     
-                    html += `<span class="${cellClass}" data-row="${r}" data-channel="${c}" data-column="${col}" onclick="Tracker.selectCell(${r}, ${c}, ${col})">${formatCell(cell, col)}</span>`;
+                    html += `<span class="${cellClass}" data-row="${r}" data-channel="${c}" data-column="${col}">${formatCell(cell, col)}</span>`;
                 }
                 html += `</span>`;
             }
@@ -1057,6 +1376,7 @@ const Tracker = (() => {
                 <div class="tracker-controls">
                     <button class="tracker-btn" id="tracker-play">${playIcon}</button>
                     <button class="tracker-btn" id="tracker-stop">■</button>
+                    <button class="tracker-btn" id="tracker-save" title="Save to library">💾</button>
                     <button class="tracker-btn ${loopMode ? 'active' : ''}" id="tracker-loop" title="Loop">⟳</button>
                 </div>
                 <span class="edit-indicator ${editMode ? 'active' : ''}">EDIT</span>
@@ -1066,6 +1386,7 @@ const Tracker = (() => {
             `;
             footer.querySelector('#tracker-play').onclick = () => { if (playing) pause(); else play(); };
             footer.querySelector('#tracker-stop').onclick = () => stop();
+            footer.querySelector('#tracker-save').onclick = () => promptSaveCustom();
             footer.querySelector('#tracker-loop').onclick = () => { loopMode = !loopMode; updateDisplay(); };
         }
     }
@@ -1183,17 +1504,29 @@ const Tracker = (() => {
             return;
         }
         
-        // Octave
-        if (key === '+' || key === '=') {
+        // Octave (Ctrl+plus/minus)
+        if ((key === '+' || key === '=') && e.ctrlKey) {
             e.preventDefault();
             currentOctave = Math.min(7, currentOctave + 1);
             updateDisplay();
             return;
         }
-        if (key === '-' || key === '_') {
+        if ((key === '-' || key === '_') && e.ctrlKey) {
             e.preventDefault();
             currentOctave = Math.max(0, currentOctave - 1);
             updateDisplay();
+            return;
+        }
+        
+        // Transpose current note (+/- semitone, Shift+plus/minus octave)
+        if ((key === '+' || key === '=') && !e.ctrlKey) {
+            e.preventDefault();
+            transposeCurrentNote(e.shiftKey ? 12 : 1);
+            return;
+        }
+        if ((key === '-' || key === '_') && !e.ctrlKey) {
+            e.preventDefault();
+            transposeCurrentNote(e.shiftKey ? -12 : -1);
             return;
         }
         
@@ -1267,13 +1600,60 @@ const Tracker = (() => {
     
     // Get library for external display (modal audio tab)
     function getLibrary() {
-        return Object.entries(library).map(([id, item]) => ({
+        const builtIn = Object.entries(library).map(([id, item]) => ({
             id,
             name: item.name,
             icon: item.icon,
             unlocked: unlockedLibrary.has(id),
+            hasPatterns: !!item.patterns,
+            custom: false,
             play: () => playLibraryItem(id)
         }));
+        
+        const custom = Object.entries(customLibrary).map(([id, item]) => ({
+            id,
+            name: item.name,
+            icon: item.icon,
+            unlocked: true,
+            hasPatterns: true,
+            custom: true,
+            play: () => playCustomSong(id)
+        }));
+        
+        return [...builtIn, ...custom];
+    }
+    
+    function playCustomSong(id) {
+        const item = customLibrary[id];
+        if (!item) return false;
+        
+        if (!audioCtx) {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        
+        const itemBpm = item.bpm || DEFAULT_BPM;
+        const itemSpeed = item.speed || DEFAULT_SPEED;
+        const msPerRow = (60000 / itemBpm) / (itemSpeed / 4);
+        
+        let rowIndex = 0;
+        for (const patId of item.sequence) {
+            const pat = item.patterns[patId];
+            if (!pat) continue;
+            
+            for (let r = 0; r < pat.length; r++) {
+                const row = pat.rows[r];
+                const time = audioCtx.currentTime + (rowIndex * msPerRow / 1000);
+                
+                for (const ch of CHANNELS) {
+                    const cell = row[ch];
+                    if (cell && cell.note && cell.note !== '---' && cell.note !== '===') {
+                        scheduleNote(ch, cell, time, item, null, rowIndex);
+                    }
+                }
+                rowIndex++;
+            }
+        }
+        return true;
     }
 
     return {
@@ -1283,8 +1663,12 @@ const Tracker = (() => {
         pause,
         stop,
         loadFromLibrary,
+        loadCustomSong,
         playLibraryItem,
+        playCustomSong,
         unlockLibraryItem,
+        saveToCustomLibrary,
+        deleteCustomSong,
         getLibrary,
         exportSong,
         importSong,

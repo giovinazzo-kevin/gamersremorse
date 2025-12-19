@@ -699,3 +699,12 @@ select.modal-input option {
 .audio-item.locked .audio-name {
     color: #808080;
 }
+
+.audio-item .audio-delete {
+    padding: 4px 8px;
+    color: #808080;
+}
+
+.audio-item .audio-delete:hover {
+    color: #ff6b6b;
+}

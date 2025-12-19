@@ -214,6 +214,31 @@
 .library-name {
     font-size: 11px;
     color: #aaa;
+    flex: 1;
+}
+
+.library-section-header {
+    font-size: 9px;
+    color: #54bebe;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    padding: 10px 10px 4px 10px;
+    border-bottom: 1px solid #222;
+}
+
+.library-delete {
+    color: #666;
+    font-size: 14px;
+    padding: 0 4px;
+    cursor: pointer;
+}
+
+.library-delete:hover {
+    color: #f66;
+}
+
+.library-item.custom {
+    background: #1a1a1a;
 }
 
 .tracker-main {

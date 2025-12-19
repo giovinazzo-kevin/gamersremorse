@@ -83,6 +83,14 @@ const ACHIEVEMENTS = {
         hidden: false,
         check: (state) => state.customTaglineSet
     },
+    opened_tracker: {
+        id: 'opened_tracker',
+        title: 'Chiptune Enjoyer',
+        description: 'Open the tracker',
+        icon: '🎹',
+        hidden: false,
+        check: (state) => state.openedTracker
+    },
     kill_eye: {
         id: 'kill_eye',
         title: 'Dumb Damage',
@@ -336,6 +344,10 @@ function setAchievementFlag(flag, value = true) {
         achievementState[flag] = value;
         checkAchievements();
     }
+}
+
+function getAchievementFlag(flag) {
+    return achievementState[flag] || false;
 }
 
 // === UI ===
