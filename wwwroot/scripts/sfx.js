@@ -1,35 +1,44 @@
-// SFX - public API for all sounds
-// ONE SOURCE OF TRUTH: Tracker library
+// SFX - public API for game sounds
+// Routes through Audio manager
 
 const sfx = {
-    play: (id) => Tracker.playLibraryItem(id),
-    unlock: (id) => Tracker.unlockLibraryItem(id),
-    isUnlocked: (id) => Tracker.getLibrary().find(s => s.id === id)?.unlocked ?? false,
-    getLibrary: () => Tracker.getLibrary(),
+    play: (id) => Audio.play(id, 'sfx'),
     
     // Named shortcuts for common sounds
-    secret: () => Tracker.playLibraryItem('zelda_secret'),
-    achievement: () => Tracker.playLibraryItem('achievement'),
-    death: () => Tracker.playLibraryItem('death'),
+    secret: () => Audio.play('zelda_secret', 'sfx'),
+    achievement: () => Audio.play('achievement', 'sfx'),
+    death: () => Audio.play('death', 'sfx'),
     preDeath: (callback) => {
-        Tracker.playLibraryItem('pre_death');
+        Audio.play('pre_death', 'sfx');
         if (callback) setTimeout(callback, 500);
     },
-    pow: () => Tracker.playLibraryItem('pow'),
-    tear: () => Tracker.playLibraryItem('tear'),
-    screenshot: () => Tracker.playLibraryItem('screenshot'),
-    shame: () => Tracker.playLibraryItem('shame'),
-    fame: () => Tracker.playLibraryItem('fame'),
-    error: () => Tracker.playLibraryItem('error'),
+    pow: () => Audio.play('pow', 'sfx'),
+    tear: () => Audio.play('tear', 'sfx'),
+    screenshot: () => Audio.play('screenshot', 'sfx'),
+    shame: () => Audio.play('shame', 'sfx'),
+    fame: () => Audio.play('fame', 'sfx'),
+    error: () => Audio.play('error', 'sfx'),
+    lowHp: () => Audio.play('low_hp', 'sfx'),
     quit: () => {
         const jingles = ['zelda_secret', 'achievement', 'fame'];
-        Tracker.playLibraryItem(jingles[Math.floor(Math.random() * jingles.length)]);
+        Audio.play(jingles[Math.floor(Math.random() * jingles.length)], 'sfx');
     },
 };
 
+// Music - for looping background tracks
+const music = {
+    play: (id, layer = 'default', opts) => Audio.playLoop(id, 'music', layer, opts),
+    stop: (layer) => Audio.stop('music', layer),
+    stopAll: () => Audio.stop('music'),
+    isPlaying: (layer = 'default') => Audio.isPlaying('music', layer),
+    
+    // Named shortcuts
+    danger: () => Audio.playLoop('low_hp', 'music', 'danger'),
+    stopDanger: () => Audio.stop('music', 'danger'),
+};
+
 // === GLOBAL ALIASES ===
-// For backward compatibility with code that calls these directly
-// All these just delegate to sfx
+// For backward compatibility
 
 function playZeldaSecretJingle() { sfx.secret(); }
 function playAchievementSound() { sfx.achievement(); }
@@ -39,6 +48,14 @@ function playPostDeathSound() { sfx.death(); }
 function playPowSound() { sfx.pow(); }
 function playScreenshotSound() { sfx.screenshot(); }
 function playRandomJingle() { sfx.quit(); }
-function playPickupSound() { sfx.pow(); } // TODO: add dedicated pickup sound
-function playItemPickupSound() { sfx.fame(); } // TODO: add dedicated item pickup sound
-function playPedestalSound() { sfx.secret(); } // TODO: add dedicated pedestal sound
+function playPickupSound() { sfx.pow(); }
+function playItemPickupSound() { sfx.fame(); }
+function playPedestalSound() { sfx.secret(); }
+
+// Register Tracker as an instrument
+// Use setTimeout to ensure all scripts have finished executing
+setTimeout(() => {
+    if (typeof Audio !== 'undefined' && typeof Tracker !== 'undefined') {
+        Audio.registerInstrument('tracker', Tracker);
+    }
+}, 0);

@@ -117,7 +117,7 @@ const Tracker = (() => {
         'achievement': {
             name: 'Achievement',
             icon: '🏆',
-            synth: (ctx) => {
+            synth: (ctx, dest) => {
                 const N = (note, octave) => {
                     const offsets = { 'C': 0, 'C#': 1, 'D': 2, 'D#': 3, 'E': 4, 'F': 5, 'F#': 6, 'G': 7, 'G#': 8, 'A': 9, 'A#': 10, 'B': 11 };
                     return 261.63 * Math.pow(2, (offsets[note] + (octave - 4) * 12) / 12);
@@ -133,7 +133,7 @@ const Tracker = (() => {
                 delay.delayTime.value = 0.08;
                 delayGain.gain.value = 0.5;
                 delay.connect(delayGain);
-                delayGain.connect(ctx.destination);
+                delayGain.connect(dest);
                 
                 const playNote = (freq, startTime, vol, i) => {
                     const osc = ctx.createOscillator();
@@ -141,7 +141,7 @@ const Tracker = (() => {
                     osc.type = 'triangle';
                     osc.frequency.value = freq;
                     osc.connect(gain);
-                    gain.connect(ctx.destination);
+                    gain.connect(dest);
                     gain.connect(delay);
                     gain.gain.setValueAtTime(vol, startTime);
                     gain.gain.exponentialRampToValueAtTime(0.01, startTime + noteLength * 2);
@@ -215,7 +215,7 @@ const Tracker = (() => {
         'pow': {
             name: 'Pow',
             icon: '💥',
-            synth: (ctx) => {
+            synth: (ctx, dest) => {
                 // NES-style POW - bitcrushed noise burst with filter sweep + square thump
                 const noise = ctx.createBufferSource();
                 const noiseBuffer = ctx.createBuffer(1, ctx.sampleRate * 0.15, ctx.sampleRate);
@@ -242,7 +242,7 @@ const Tracker = (() => {
                 
                 noise.connect(filter);
                 filter.connect(noiseGain);
-                noiseGain.connect(ctx.destination);
+                noiseGain.connect(dest);
                 noise.start();
                 
                 // Square thump 300→80 Hz
@@ -254,7 +254,7 @@ const Tracker = (() => {
                 thumpGain.gain.setValueAtTime(0.25, ctx.currentTime);
                 thumpGain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.1);
                 thump.connect(thumpGain);
-                thumpGain.connect(ctx.destination);
+                thumpGain.connect(dest);
                 thump.start();
                 thump.stop(ctx.currentTime + 0.15);
             }
@@ -262,7 +262,7 @@ const Tracker = (() => {
         'screenshot': {
             name: 'Screenshot',
             icon: '📸',
-            synth: (ctx) => {
+            synth: (ctx, dest) => {
                 // Click transient - short noise burst
                 const noise = ctx.createBufferSource();
                 const noiseBuffer = ctx.createBuffer(1, ctx.sampleRate * 0.02, ctx.sampleRate);
@@ -273,7 +273,7 @@ const Tracker = (() => {
                 noiseGain.gain.setValueAtTime(0.15, ctx.currentTime);
                 noiseGain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.015);
                 noise.connect(noiseGain);
-                noiseGain.connect(ctx.destination);
+                noiseGain.connect(dest);
                 noise.start();
                 
                 // 4 harmonic layers gliding up ~30% over 120ms
@@ -293,7 +293,7 @@ const Tracker = (() => {
                     gain.gain.setValueAtTime(layer.vol, ctx.currentTime);
                     gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
                     osc.connect(gain);
-                    gain.connect(ctx.destination);
+                    gain.connect(dest);
                     osc.start();
                     osc.stop(ctx.currentTime + 0.45);
                 });
@@ -427,37 +427,35 @@ const Tracker = (() => {
     }
     
     // Play a library item directly (for SFX) without loading into editor
-    function playLibraryItem(id) {
+    // ctx and dest are passed by Audio manager
+    function playLibraryItem(id, ctx = null, dest = null) {
         const item = library[id];
         if (!item) return false;
         
-        // If item has custom synth function, use that instead of pattern playback
-        if (item.synth) {
-            if (!audioCtx) {
-                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            }
-            item.synth(audioCtx);
-            return true;
-        }
+        // Use provided context or fallback to internal (for standalone tracker use)
+        const useCtx = ctx || audioCtx || (audioCtx = new (window.AudioContext || window.webkitAudioContext)());
+        const useDest = dest || useCtx.destination;
         
-        if (!audioCtx) {
-            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        // If item has custom synth function, use that
+        if (item.synth) {
+            item.synth(useCtx, useDest);
+            return true;
         }
         
         const itemBpm = item.bpm || DEFAULT_BPM;
         const itemSpeed = item.speed || DEFAULT_SPEED;
-        const msPerRow = (speed * 2500) / bpm;
+        const msPerRow = (itemSpeed * 2500) / itemBpm;
         
         // Setup effects based on library item
         let delayNode = null;
         let delayGain = null;
         if (item.delay) {
-            delayNode = audioCtx.createDelay();
-            delayGain = audioCtx.createGain();
+            delayNode = useCtx.createDelay();
+            delayGain = useCtx.createGain();
             delayNode.delayTime.value = item.delay.time || 0.15;
             delayGain.gain.value = item.delay.feedback || 0.3;
             delayNode.connect(delayGain);
-            delayGain.connect(audioCtx.destination);
+            delayGain.connect(useDest);
         }
         
         // Play through all patterns in sequence
@@ -468,12 +466,12 @@ const Tracker = (() => {
             
             for (let r = 0; r < pat.length; r++) {
                 const row = pat.rows[r];
-                const time = audioCtx.currentTime + (rowIndex * msPerRow / 1000);
+                const time = useCtx.currentTime + (rowIndex * msPerRow / 1000);
                 
                 for (const ch of CHANNELS) {
                     const cell = row[ch];
                     if (cell && cell.note && cell.note !== '---' && cell.note !== '===') {
-                        scheduleNote(ch, cell, time, item, delayNode, rowIndex);
+                        scheduleNote(ch, cell, time, item, delayNode, rowIndex, useCtx, useDest);
                     }
                 }
                 rowIndex++;
@@ -482,7 +480,7 @@ const Tracker = (() => {
         return true;
     }
     
-    function scheduleNote(channel, cell, time, libraryItem, delayNode, rowIndex) {
+    function scheduleNote(channel, cell, time, libraryItem, delayNode, rowIndex, ctx, dest) {
         const freq = noteToFreq(cell.note, cell.octave);
         if (!freq) return;
         
@@ -490,26 +488,26 @@ const Tracker = (() => {
         const volume = (cell.vol !== null ? cell.vol : 15) / 15 * 0.15;
         
         // Per-voice bitcrusher for proper 8-bit sound
-        const crusher = createBitcrusher(audioCtx);
+        const crusher = createBitcrusher(ctx);
         
         // Panning - alternate L/R based on row index
-        const panner = audioCtx.createStereoPanner();
+        const panner = ctx.createStereoPanner();
         if (libraryItem?.pan === 'alternate') {
             panner.pan.value = (rowIndex % 2 === 0) ? -0.6 : 0.6;
         }
         
         if (channel === 'noise' || inst.type === 'noise') {
-            const bufferSize = audioCtx.sampleRate * 0.5;
-            const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+            const bufferSize = ctx.sampleRate * 0.5;
+            const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
             const data = buffer.getChannelData(0);
             for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
-            const noise = audioCtx.createBufferSource();
-            const gain = audioCtx.createGain();
+            const noise = ctx.createBufferSource();
+            const gain = ctx.createGain();
             noise.buffer = buffer;
             noise.connect(crusher);
             crusher.connect(gain);
             gain.connect(panner);
-            panner.connect(audioCtx.destination);
+            panner.connect(dest);
             if (delayNode) panner.connect(delayNode);
             
             gain.gain.setValueAtTime(0, time);
@@ -521,8 +519,8 @@ const Tracker = (() => {
             return;
         }
         
-        const osc = audioCtx.createOscillator();
-        const gain = audioCtx.createGain();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
         // Map instrument type to Web Audio oscillator type
         if (inst.type === 'triangle' || channel === 'triangle') osc.type = 'triangle';
         else if (inst.type === 'sawtooth') osc.type = 'sawtooth';
@@ -532,7 +530,7 @@ const Tracker = (() => {
         osc.connect(crusher);
         crusher.connect(gain);
         gain.connect(panner);
-        panner.connect(audioCtx.destination);
+        panner.connect(dest);
         if (delayNode) panner.connect(delayNode);
         
         gain.gain.setValueAtTime(0, time);
@@ -832,7 +830,25 @@ const Tracker = (() => {
     // === INIT ===
     function init() {
         patterns[0] = createEmptyPattern();
-        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        // Don't create audioCtx here - do it lazily when needed
+        // This avoids issues with Audio not being loaded yet
+        
+        loadUnlockedLibrary();
+        loadCustomLibrary();
+        loadCustomInstruments();
+    }
+    
+    // Lazy init audio context when actually needed
+    function ensureAudioContext() {
+        if (audioCtx) return audioCtx;
+        
+        // Get context from Audio if available
+        if (typeof Audio !== 'undefined' && Audio.getContext) {
+            const context = Audio.getContext('sfx');
+            audioCtx = context.ctx;
+        } else {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
         
         // Master analyser for spectrogram
         masterAnalyser = audioCtx.createAnalyser();
@@ -844,9 +860,7 @@ const Tracker = (() => {
         instrumentAnalyser.fftSize = 2048;
         instrumentAnalyser.connect(masterAnalyser);
         
-        loadUnlockedLibrary();
-        loadCustomLibrary();
-        loadCustomInstruments();
+        return audioCtx;
     }
     
     function createEmptyPattern(length = DEFAULT_ROWS) {
@@ -1029,6 +1043,7 @@ const Tracker = (() => {
     }
     
     function playNote(channel, cell) {
+        ensureAudioContext();
         if (!audioCtx) return;
         const freq = noteToFreq(cell.note, cell.octave);
         if (!freq) return;
@@ -1079,6 +1094,7 @@ const Tracker = (() => {
     }
     
     function playNoteSustained(channel, cell) {
+        ensureAudioContext();
         if (!audioCtx) return;
         const freq = noteToFreq(cell.note, cell.octave);
         if (!freq) return;
@@ -1132,6 +1148,7 @@ const Tracker = (() => {
     // Start a held note (proper ADSR: A→D→hold at S)
     function startHeldNote(key, note, octave) {
         if (heldNotes.has(key)) return; // Already held
+        ensureAudioContext();
         if (!audioCtx) return;
         
         const channel = CHANNELS[currentChannel];
@@ -2529,9 +2546,7 @@ const Tracker = (() => {
         const item = customLibrary[id];
         if (!item) return false;
         
-        if (!audioCtx) {
-            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        }
+        ensureAudioContext();
         
         const itemBpm = item.bpm || DEFAULT_BPM;
         const itemSpeed = item.speed || DEFAULT_SPEED;
@@ -2572,6 +2587,7 @@ const Tracker = (() => {
         saveToCustomLibrary,
         deleteCustomSong,
         getLibrary,
+        getLibraryItem: (id) => library[id] || customLibrary[id] || null,
         exportSong,
         importSong,
         getAllInstruments,
