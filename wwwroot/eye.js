@@ -1554,8 +1554,11 @@ svg.addEventListener('click', () => {
         Eye.damage(1, 'fall', 'player');
 
         if (state.attentionThreshold < 2) {
-            state.blinkTarget = 1;
+            // Too annoyed - snap shut briefly then reset
+            state.blink = 1;
+            state.blinkTarget = 0; // Will open back up
             state.attentionThreshold = 100;
+            enableBlinking();
         } else if (state.attentionThreshold < 5) {
             setExpression('sad');
         } else if (state.attentionThreshold < 10) {
