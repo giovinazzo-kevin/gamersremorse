@@ -1185,7 +1185,6 @@ function killEye(animation = 'fall') {
     // Stare at player and play pre-death jingle
     setExpression('shocked');
     setPeeved(true, false, false, 0, 0, 10);
-    clearItems
     
     const animFn = deathAnimations[animation] || deathAnimations.explode;
     if (animation == 'fall') {
