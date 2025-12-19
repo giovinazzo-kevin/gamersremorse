@@ -2,26 +2,26 @@
 
 const ACHIEVEMENTS = {
     // === BASIC PROGRESSION ===
-    first_achievement: {
-        id: 'first_achievement',
-        title: 'Yo Dawg',
-        description: 'Get any achievement',
-        icon: '🥈',
-        hidden: true,
-        check: (state) => state.anyAchievement
-    },
     first_analysis: {
         id: 'first_analysis',
         title: 'I',
-        description: 'Analyze your first game',
+        description: 'Pull the lever and receive your pellet',
         icon: '🔬',
         hidden: false,
         check: (state) => state.analyzedGame
     },
+    first_achievement: {
+        id: 'first_achievement',
+        title: 'Yo Dawg',
+        description: 'Recurse meta-ironically',
+        icon: '🥈',
+        hidden: true,
+        check: (state) => state.anyAchievement
+    },
     screenshot: {
         id: 'screenshot',
         title: 'You Have To Install CS:S',
-        description: 'Take a screenshot',
+        description: 'Forget your textures at home',
         icon: '📸',
         hidden: false,
         check: (state) => state.triedScreenshot
@@ -54,7 +54,7 @@ const ACHIEVEMENTS = {
     customize_eye: {
         id: 'customize_eye',
         title: 'Noob Check',
-        description: 'Change the eye colors',
+        description: 'Show them that you\'re not like them',
         icon: '🎨',
         hidden: false,
         check: (state) => state.customizedEye
@@ -62,7 +62,7 @@ const ACHIEVEMENTS = {
     lores: {
         id: 'lores',
         title: 'Low Poly Aesthetics',
-        description: 'Decrease the LOD',
+        description: 'Decimate the poly count',
         icon: '🔍',
         hidden: false,
         check: (state) => state.barCount !== undefined && state.barCount < 15
@@ -70,7 +70,7 @@ const ACHIEVEMENTS = {
     hires: {
         id: 'hires',
         title: 'Super Ultra Resolution',
-        description: 'Turn the LOD up to 11',
+        description: 'Crank the LOD up to 11',
         icon: '🔎',
         hidden: false,
         check: (state) => state.barCount !== undefined && state.barCount > 50
@@ -78,15 +78,15 @@ const ACHIEVEMENTS = {
     custom_tagline: {
         id: 'custom_tagline',
         title: 'Mic Spammer',
-        description: 'Set a custom tagline',
+        description: 'Say what everyone\'s been thinking',
         icon: '💬',
         hidden: false,
         check: (state) => state.customTaglineSet
     },
     opened_tracker: {
         id: 'opened_tracker',
-        title: 'Chiptune Enjoyer',
-        description: 'Open the tracker',
+        title: 'Constraint Breeds Creativity',
+        description: 'Find out why they call it "scope creep"',
         icon: '🎹',
         hidden: false,
         check: (state) => state.openedTracker
@@ -94,17 +94,17 @@ const ACHIEVEMENTS = {
     bloody_tears: {
         id: 'bloody_tears',
         title: 'Bloody Tears',
-        description: 'Use a sawtooth instrument',
+        description: 'Cut yourself on the edge',
         icon: '🪚',
         hidden: true,
         check: (state) => state.playedSawtooth
     },
-    do_not_steal: {
-        id: 'do_not_steal',
-        title: 'Going By Ear',
+    custom_instrument: {
+        id: 'custom_instrument',
+        title: 'Paint By Plumbers',
         description: 'Create a custom instrument',
-        icon: '👂',
-        hidden: false,
+        icon: '👨‍🔧',
+        hidden: true,
         check: (state) => state.createdCustomInstrument
     },
     kill_eye: {
@@ -118,9 +118,9 @@ const ACHIEVEMENTS = {
     yasd: {
         id: 'yasd',
         title: 'YASD',
-        description: 'Kill A-Eye',
+        description: 'Misclick',
         icon: '💀',
-        hidden: false,
+        hidden: true,
         check: (state) => state.yasd
     },
     // === SECRET ACHIEVEMENTS ===

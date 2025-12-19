@@ -1452,7 +1452,7 @@ const Eye = {
         ScreenShake.shake(halfHearts * 4);
         
         if (state.health <= 0) {
-            this.kill(anim);
+            this.kill(anim, source);
         }
     },
     
@@ -1471,12 +1471,15 @@ const Eye = {
         }
     },
     
-    kill(anim = 'fall') {
+    kill(anim = 'fall', source = 'unknown') {
         // Stop danger music immediately
-        if (typeof music !== 'undefined') music.stopDanger();
+        music.stopDanger();
         
         killEye(anim);
-        setAchievementFlag('yasd');
+
+        if (source === 'player') {
+            setAchievementFlag('yasd');
+        }
         
         // Clear inventory on death
         Items.inventory = [];

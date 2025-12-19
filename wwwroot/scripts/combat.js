@@ -245,6 +245,7 @@ const Combat = {
                         ScreenShake.shake(t.damage * 4);
                         HitFlash.trigger(t.damage);
                         this.hitstop(1, e);
+                        sfx.pow();
 
                         const dx = t.end.x - t.start.x;
                         const dy = t.end.y - t.start.y;
