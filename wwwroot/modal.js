@@ -787,14 +787,14 @@ const commands = {
         description: 'Kill the eye',
         hidden: true,
         execute: () => {
-            Items.damage(1000, 'fall');
+            Items.damage(1000, 'fall', 'player');
         }
     },
     explode: {
         description: 'Explode the eye',
         hidden: true,
         execute: () => {
-            Items.damage(1000, 'explode');
+            Items.damage(1000, 'explode', 'player');
         }
     },
     impulse: {
@@ -925,8 +925,9 @@ const commands = {
                 return;
             }
             const amount = parseInt(args[0]) || 1;
-            Items.damage(amount);
-            consolePrint(`Took ${amount} damage. Health: ${Items.health}/${Items.maxHealth}`);
+            const src = args[1] || 'player';
+            Items.damage(amount, 'fall', src);
+            consolePrint(`Took ${amount} damage from ${src}. Health: ${Items.health}/${Items.maxHealth}`);
         }
     },
     heal: {

@@ -1382,9 +1382,7 @@ svg.addEventListener('click', () => {
         state.attentionThreshold *= state.patience;
         
         // Take damage from poking
-        if (typeof Items !== 'undefined') {
-            Items.damage(1);
-        }
+        Items.damage(1, 'fall', 'player');
 
         if (state.attentionThreshold < 2) {
             state.blinkTarget = 1;
