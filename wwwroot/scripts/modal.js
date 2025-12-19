@@ -1095,6 +1095,64 @@ const commands = {
             consolePrint(`Unlocked ${count} sound${count !== 1 ? 's' : ''}.`, 'success');
         }
     },
+    spawn: {
+        description: 'Spawn enemy from last analyzed game',
+        hidden: true,
+        execute: (args) => {
+            const appId = args[0] || window.lastAnalyzedApp?.appId;
+            const headerImage = window.lastAnalyzedApp?.headerImage;
+
+            if (!appId || !headerImage) {
+                consolePrint('No game to spawn. Analyze a game first or use: spawn <appId> <headerUrl>', 'error');
+                return;
+            }
+
+            Combat.spawnEnemy(appId, headerImage);
+            consolePrint(`Spawned ${appId}`, 'success');
+        }
+    },
+
+    spawn_test: {
+        description: 'Spawn test enemy (TF2)',
+        hidden: true,
+        execute: () => {
+            const appId = 440;
+            const headerImage = 'https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/440/header.jpg';
+            const res = Combat.spawnEnemy(appId, headerImage);
+            if (res != null) {
+                consolePrint('Spawned Enemy', 'success');
+            }
+            else {
+                consolePrint("There's a time and place for everything but not now!", 'error');
+            }
+        }
+    },
+
+    spawn_test2: {
+        description: 'Spawn test enemy (Dota 2)',
+        hidden: true,
+        execute: () => {
+            const appId = 570;
+            const headerImage = 'https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/570/header.jpg';
+            const res = Combat.spawnEnemy(appId, headerImage);
+            if (res != null) {
+                consolePrint('Spawned Enemy', 'success');
+            }
+            else {
+                consolePrint("There's a time and place for everything but not now!", 'error');
+            }
+        }
+    },
+
+    killall: {
+        description: 'Kill all enemies',
+        hidden: true,
+        execute: () => {
+            const count = Combat.enemies.length;
+            Combat.enemies = [];
+            consolePrint(`Killed ${count} enemies`, 'success');
+        }
+    },
 };
 
 function createConsole() {

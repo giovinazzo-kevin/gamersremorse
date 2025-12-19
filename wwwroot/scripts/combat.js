@@ -7,6 +7,7 @@
  * - Eye.js calls update(dt) and render() in the shame loop
  */
 
+
 const Combat = {
     canvas: null,
     ctx: null,
@@ -14,6 +15,9 @@ const Combat = {
     holding: false,
     lastFire: 0,
     splashes: [],
+    enemies: [],
+    enemyImages: {}, // cache loaded images
+
     config: {
         tearStyle: 'fancy',
         shadows: true,
@@ -23,7 +27,7 @@ const Combat = {
     init() {
         this.canvas = document.createElement('canvas');
         this.canvas.id = 'combat-canvas';
-        this.canvas.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:9999;';
+        this.canvas.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:999;';
         document.body.appendChild(this.canvas);
         this.ctx = this.canvas.getContext('2d');
         this.resize();
@@ -59,6 +63,40 @@ const Combat = {
         const offsetY = state.irisY * state.maxIrisOffsetY * rect.height;
 
         return { x: cx + offsetX, y: cy + offsetY };
+    },
+
+    spawnEnemy(appId, headerImage) {
+        if (!getAchievementFlag('tookDumbDamage')) return null;
+
+        // Spawn from bottom-right quadrant edges only
+        // Either right edge (bottom half) or bottom edge (right half)
+
+        const w = window.innerWidth;
+        const h = window.innerHeight;
+
+        let x, y;
+
+        if (Math.random() < 0.5) {
+            // Right edge, bottom half
+            x = w + 230;
+            y = h * 0.5 + Math.random() * h * 0.5;
+        } else {
+            // Bottom edge, right half
+            x = w * 0.5 + Math.random() * w * 0.5;
+            y = h + 107;
+        }
+
+        const enemy = Enemy(appId, headerImage, x, y);
+        this.enemies.push(enemy);
+
+        // Preload image
+        if (!this.enemyImages[appId]) {
+            const img = new Image();
+            img.src = headerImage;
+            this.enemyImages[appId] = img;
+        }
+
+        return enemy;
     },
 
     fire(targetX, targetY) {
@@ -129,6 +167,55 @@ const Combat = {
             s.elapsed += dt;
         }
         this.splashes = this.splashes.filter(s => s.elapsed < s.duration);
+
+        // Update enemies
+        for (const e of this.enemies) {
+            if (this.tutorialTriggered && !getAchievementFlag('combatUnlocked')) continue;
+
+            e.x += e.direction.x * e.speed * dt;
+            e.y += e.direction.y * e.speed * dt;
+
+            if (!getAchievementFlag('combatUnlocked')) {
+                const pupil = Combat.getPupilPosition();
+                const dist = Math.sqrt((e.x - pupil.x) ** 2 + (e.y - pupil.y) ** 2);
+
+                if (dist < 1200 && !this.tutorialTriggered) {
+                    this.tutorialTriggered = true;
+                    showObjectivePopup();
+                }
+            }
+
+            if (e.reachedEye) {
+                Eye.damage(2, 'fall', 'enemy');
+                e.health = 0; // remove after hit
+            }
+        }
+
+        this.enemies = this.enemies.filter(e => !e.dead);
+
+        // Check tear-enemy collisions
+        for (const t of this.tears) {
+            if (t.done) continue;
+            const pos = t.position;
+
+            for (const e of this.enemies) {
+                const hit = pos.x > e.hitbox.left &&
+                    pos.x < e.hitbox.right &&
+                    pos.y > e.hitbox.top &&
+                    pos.y < e.hitbox.bottom;
+
+                if (hit) {
+                    e.health -= t.damage;
+                    t.elapsed = t.duration; // kill the tear
+                    this.splash(pos, t.size, t.color); // splash on hit
+
+                    if (e.dead) {
+                        // TODO: drop loot, play sound, explosion
+                    }
+                    break;
+                }
+            }
+        }
     },
 
     render() {
@@ -237,6 +324,20 @@ const Combat = {
                 this.ctx.fill();
             }
         }
+
+        // Enemies
+        for (const e of this.enemies) {
+            const img = this.enemyImages[e.appId];
+            if (img && img.complete) {
+                this.ctx.drawImage(
+                    img,
+                    e.x - e.width / 2,
+                    e.y - e.height / 2,
+                    e.width,
+                    e.height
+                );
+            }
+        }
     },
 };
 
@@ -314,6 +415,48 @@ const Tear = (start, end) => {
         },
     };
 };
+
+
+const Enemy = (appId, headerImage, x, y) => ({
+    appId,
+    headerImage,
+    x,
+    y,
+    width: 230,  // half size
+    height: 107,
+    speed: 50,   // pixels per second
+    health: 10,
+
+    get target() {
+        return Combat.getPupilPosition();
+    },
+
+    get direction() {
+        const dx = this.target.x - this.x;
+        const dy = this.target.y - this.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        return { x: dx / dist, y: dy / dist };
+    },
+
+    get hitbox() {
+        return {
+            left: this.x - this.width / 2,
+            right: this.x + this.width / 2,
+            top: this.y - this.height / 2,
+            bottom: this.y + this.height / 2,
+        };
+    },
+
+    get dead() {
+        return this.health <= 0;
+    },
+
+    get reachedEye() {
+        const pupil = this.target;
+        const dist = Math.sqrt((this.x - pupil.x) ** 2 + (this.y - pupil.y) ** 2);
+        return dist < 50; // contact range
+    },
+});
 
 // Click handler - fire on non-interactive clicks
 document.addEventListener('mousedown', (e) => {

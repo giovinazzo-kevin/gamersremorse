@@ -91,14 +91,6 @@ const ACHIEVEMENTS = {
         hidden: false,
         check: (state) => state.openedTracker
     },
-    sausages: {
-        id: 'sausages',
-        title: 'Daddy Would You Like Some Sausages',
-        description: 'Discover your latent creative power',
-        icon: '🌭',
-        hidden: true,
-        check: (state) => state.polyphonyOverload
-    },
     bloody_tears: {
         id: 'bloody_tears',
         title: 'Bloody Tears',
@@ -132,6 +124,22 @@ const ACHIEVEMENTS = {
         check: (state) => state.yasd
     },
     // === SECRET ACHIEVEMENTS ===
+    gaming_journalist: {
+        id: 'gaming_journalist',
+        title: 'Gaming Journalist Disclaimer',
+        description: 'Press left click to shoot',
+        icon: '🎮',
+        hidden: true,
+        check: (state) => state.gamingJournalist,
+    },
+    sausages: {
+        id: 'sausages',
+        title: 'Daddy Would You Like Some Sausages',
+        description: 'Discover your latent creative power',
+        icon: '🌭',
+        hidden: true,
+        check: (state) => state.polyphonyOverload
+    },
     coomer: {
         id: 'coomer',
         title: 'Eye Play It For The Plot',

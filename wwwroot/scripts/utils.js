@@ -93,3 +93,27 @@ function updateColorLegend() {
         <strong style="color: var(--color-uncertain)">${uncName}</strong> = edited after a week (fence-sitters).
     `;
 }
+
+function showObjectivePopup() {
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.style.background = 'rgba(0, 0, 0, 0.8)';
+
+    const popup = document.createElement('div');
+    popup.className = 'objective-popup';
+    popup.innerHTML = `
+        <div class="objective-header">OBJECTIVE UPDATED</div>
+        <div class="objective-text">Don't die</div>
+        <button class="modal-btn objective-close">OK</button>
+    `;
+
+    popup.querySelector('.objective-close').onclick = () => {
+        overlay.remove();
+        setAchievementFlag('combatUnlocked', true);
+        setAchievementFlag('gamingJournalist');
+        checkAchievements();
+    };
+
+    overlay.appendChild(popup);
+    document.body.appendChild(overlay);
+}

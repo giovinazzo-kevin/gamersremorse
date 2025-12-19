@@ -708,3 +708,28 @@ select.modal-input option {
 .audio-item .audio-delete:hover {
     color: #ff6b6b;
 }
+
+.objective-popup {
+    background: #1a1a1a;
+    border: 2px solid #c4b550;
+    padding: 24px 48px;
+    text-align: center;
+    font-family: Verdana, sans-serif;
+}
+
+.objective-header {
+    color: #c4b550;
+    font-size: 14px;
+    letter-spacing: 2px;
+    margin-bottom: 16px;
+}
+
+.objective-text {
+    color: #fff;
+    font-size: 24px;
+    margin-bottom: 24px;
+}
+
+.objective-close {
+    min-width: 80px;
+}

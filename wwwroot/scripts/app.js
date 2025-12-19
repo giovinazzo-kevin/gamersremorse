@@ -150,6 +150,7 @@ async function analyze() {
     if (infoRes.ok) {
         currentGameInfo = await infoRes.json();
         document.getElementById('game-title').textContent = currentGameInfo.name;
+        window.lastAnalyzedApp = currentGameInfo;
     }
 
     const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
