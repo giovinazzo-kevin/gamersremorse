@@ -4,7 +4,7 @@ const ACHIEVEMENTS = {
     first_analysis: {
         id: 'first_analysis',
         title: 'I',
-        description: 'Pull the lever and receive your pellet',
+        description: 'Pull the lever',
         icon: '🔬',
         hidden: false,
         check: (state) => state.analyzedGame
