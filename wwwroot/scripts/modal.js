@@ -15,6 +15,7 @@ const UI = {
 // Theme system
 let darkMode = false;
 let consoleEnabled = false;
+let selectionDisabled = false;
 let keyBindings = {}; // key -> command string
 
 function setDarkMode(enabled, saveToStorage = true) {
@@ -253,7 +254,7 @@ function buildInterfaceTab(content, refs) {
     darkModeRow.appendChild(refs.darkModeCheckbox);
     darkModeRow.appendChild(document.createTextNode(' Dark mode'));
     leftCol.appendChild(darkModeRow);
-    
+
     // Console toggle
     const consoleRow = document.createElement('label');
     consoleRow.className = 'modal-checkbox-row';
@@ -265,6 +266,18 @@ function buildInterfaceTab(content, refs) {
     consoleRow.appendChild(refs.consoleCheckbox);
     consoleRow.appendChild(document.createTextNode(' Enable developer console (~)'));
     leftCol.appendChild(consoleRow);
+
+    // Page selection
+    const selectionRow = document.createElement('label');
+    selectionRow.className = 'modal-checkbox-row';
+    refs.selectionCheckbox = document.createElement('input');
+    refs.selectionCheckbox.type = 'checkbox';
+    refs.selectionCheckbox.className = 'modal-checkbox';
+    refs.selectionCheckbox.checked = selectionDisabled;
+    refs.selectionCheckbox.onchange = () => setSelectionEnabled(!refs.selectionCheckbox.checked, false);
+    selectionRow.appendChild(refs.selectionCheckbox);
+    selectionRow.appendChild(document.createTextNode(' Disable text selection on page'));
+    leftCol.appendChild(selectionRow);
     
     content.appendChild(leftCol);
 }
@@ -410,6 +423,7 @@ function buildGraphicsTab(content, refs) {
     dofRow.appendChild(refs.dofSlider);
     dofRow.appendChild(refs.dofValue);
     col.appendChild(dofRow);
+
     // Hitstop slider
     const hitstopRow = document.createElement('div');
     hitstopRow.className = 'modal-slider-row';
@@ -755,6 +769,7 @@ function openModal(title, options = {}) {
             trackingEnabled: refs.trackingCheckbox?.checked ?? true,
             darkMode: refs.darkModeCheckbox?.checked ?? darkMode,
             consoleEnabled: refs.consoleCheckbox?.checked ?? consoleEnabled,
+            selectionDisabled: refs.selectionCheckbox?.checked ?? selectionDisabled,
             upperColor: refs.upperColor?.value || '#54bebe',
             lowerColor: refs.lowerColor?.value || '#c80064',
             lashColor: refs.lashColor?.value || '#666666',
@@ -777,12 +792,14 @@ function openModal(title, options = {}) {
             if (refs.trackingCheckbox) { refs.trackingCheckbox.checked = settings.trackingEnabled !== false; refs.trackingCheckbox.onchange(); }
             if (refs.darkModeCheckbox) refs.darkModeCheckbox.checked = settings.darkMode || false;
             if (refs.consoleCheckbox) refs.consoleCheckbox.checked = settings.consoleEnabled || false;
+            if (refs.selectionCheckbox) refs.selectionCheckbox.checked = settings.selectionDisabled || !isSelectionEnabled();
             if (refs.upperColor) { refs.upperColor.value = settings.upperColor || '#54bebe'; refs.upperColor.oninput(); }
             if (refs.lowerColor) { refs.lowerColor.value = settings.lowerColor || '#c80064'; refs.lowerColor.oninput(); }
             if (refs.lashColor) { refs.lashColor.value = settings.lashColor || '#666666'; refs.lashColor.oninput(); }
             if (refs.barSlider && refs.barValue) { refs.barSlider.value = settings.barCount; refs.barValue.textContent = settings.barCount; refs.barSlider.oninput(); }
             setDarkMode(settings.darkMode || false, false);
             setConsoleEnabled(settings.consoleEnabled || false, false);
+            setSelectionEnabled(!(settings.selectionDisabled || false), false);
             loading = false;
         }
     };
@@ -803,6 +820,7 @@ function openModal(title, options = {}) {
         if (refs.barSlider && refs.barValue) { refs.barSlider.value = 20; refs.barValue.textContent = '20'; refs.barSlider.oninput(); }
         setDarkMode(false, false);
         setConsoleEnabled(false, false);
+        setSelectionEnabled(true);
     };
     bottomRow.appendChild(resetBtn);
     
@@ -1437,6 +1455,7 @@ function loadEyeSettings() {
         if (settings.trackingEnabled === false) setCursorTrackingEnabled(false);
         if (settings.darkMode) { darkMode = true; document.body.classList.add('dark-mode'); setAchievementFlag('darkModeEnabled'); }
         if (settings.consoleEnabled) consoleEnabled = true;
+        if (settings.selectionDisabled) selectionDisabled = true;
         if (settings.upperColor) document.documentElement.style.setProperty('--color-positive', settings.upperColor);
         if (settings.lowerColor) document.documentElement.style.setProperty('--color-negative', settings.lowerColor);
         if (settings.lashColor) document.documentElement.style.setProperty('--color-uncertain', settings.lashColor);

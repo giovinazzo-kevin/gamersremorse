@@ -117,3 +117,17 @@ function showObjectivePopup() {
     overlay.appendChild(popup);
     document.body.appendChild(overlay);
 }
+
+function setSelectionEnabled(enabled, saveToStorage = true) {
+    selectionDisabled = !enabled;
+    document.body.style.userSelect = enabled ? '' : 'none';
+    if (saveToStorage) {
+        const saved = localStorage.getItem('eyeSettings');
+        const settings = saved ? JSON.parse(saved) : {};
+        settings.selectionDisabled = !enabled;
+        localStorage.setItem('eyeSettings', JSON.stringify(settings));
+    }
+}
+function isSelectionEnabled() {
+    return document.body.style.userSelect !== 'none';
+}
