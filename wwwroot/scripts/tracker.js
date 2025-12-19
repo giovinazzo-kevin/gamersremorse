@@ -212,6 +212,19 @@ const Tracker = (() => {
             },
             sequence: [0]
         },
+        'splash': {
+            name: 'Splash',
+            icon: '💦',
+            bpm: 375,
+            speed: 6,
+            patterns: {
+                0: createPatternFromNotes([
+                    { row: 0, ch: 'pulse1', note: 'C-', octave: 6, inst: 3, vol: 15 },
+                    { row: 1, ch: 'pulse1', note: 'C-', octave: 5, inst: 3, vol: 15 },
+                ], 3)
+            },
+            sequence: [0]
+        },
         'pow': {
             name: 'Pow',
             icon: '💥',
