@@ -20,7 +20,7 @@ const Combat = {
 
     config: {
         tearStyle: 'fancy',
-        shadows: true,
+        shadows: 'high',  // 'off' | 'low' | 'medium' | 'high'
         splash: true,
     },
 
@@ -222,7 +222,7 @@ const Combat = {
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
         // Shadows (if enabled)
-        if (this.config.shadows) {
+        if (this.config.shadows !== 'off') {
             for (const t of this.tears) {
                 const pos = t.position;
                 const size = t.size;
@@ -231,8 +231,24 @@ const Combat = {
 
                 this.ctx.beginPath();
                 this.ctx.arc(pos.x + shadowOffset, pos.y + shadowOffset, size, 0, Math.PI * 2);
-                this.ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-                this.ctx.fill();
+
+                if (this.config.shadows === 'low') {
+                    this.ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+                    this.ctx.fill();
+                } else if (this.config.shadows === 'medium') {
+                    this.ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+                    this.ctx.fill();
+                } else if (this.config.shadows === 'high') {
+                    const gradient = this.ctx.createRadialGradient(
+                        pos.x + shadowOffset, pos.y + shadowOffset, 0,
+                        pos.x + shadowOffset, pos.y + shadowOffset, size
+                    );
+                    gradient.addColorStop(0, 'rgba(0, 0, 0, 0.4)');
+                    gradient.addColorStop(0.6, 'rgba(0, 0, 0, 0.2)');
+                    gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+                    this.ctx.fillStyle = gradient;
+                    this.ctx.fill();
+                }
             }
         }
 

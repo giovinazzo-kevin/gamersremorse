@@ -281,35 +281,32 @@ function buildGraphicsTab(content, refs) {
     col.className = 'modal-col-left';
     col.style.width = '100%';
 
-    // Shadows checkbox
-    const shadowRow = document.createElement('label');
+    // Shadow quality dropdown
+    const shadowRow = document.createElement('div');
     shadowRow.className = 'modal-checkbox-row';
-    refs.shadowsCheckbox = document.createElement('input');
-    refs.shadowsCheckbox.type = 'checkbox';
-    refs.shadowsCheckbox.className = 'modal-checkbox';
-    refs.shadowsCheckbox.checked = Combat.config.shadows;
-    refs.shadowsCheckbox.onchange = () => {
-        Combat.config.shadows = refs.shadowsCheckbox.checked;
-        Combat.saveConfig();
-    };
-    shadowRow.appendChild(refs.shadowsCheckbox);
-    shadowRow.appendChild(document.createTextNode(' Tear shadows'));
-    col.appendChild(shadowRow);
+    shadowRow.style.flexDirection = 'column';
+    shadowRow.style.alignItems = 'flex-start';
+    shadowRow.style.gap = '4px';
 
-    // Splash checkbox
-    const splashRow = document.createElement('label');
-    splashRow.className = 'modal-checkbox-row';
-    refs.splashCheckbox = document.createElement('input');
-    refs.splashCheckbox.type = 'checkbox';
-    refs.splashCheckbox.className = 'modal-checkbox';
-    refs.splashCheckbox.checked = Combat.config.splash;
-    refs.splashCheckbox.onchange = () => {
-        Combat.config.splash = refs.splashCheckbox.checked;
+    const shadowLabel = document.createElement('span');
+    shadowLabel.textContent = 'Shadows';
+    shadowRow.appendChild(shadowLabel);
+
+    refs.shadowQuality = document.createElement('select');
+    refs.shadowQuality.className = 'modal-input';
+    refs.shadowQuality.innerHTML = `
+    <option value="off">Disabled</option>
+    <option value="low">Low</option>
+    <option value="medium">Medium</option>
+    <option value="high">High</option>
+`;
+    refs.shadowQuality.value = Combat.config.shadows;
+    refs.shadowQuality.onchange = () => {
+        Combat.config.shadows = refs.shadowQuality.value;
         Combat.saveConfig();
     };
-    splashRow.appendChild(refs.splashCheckbox);
-    splashRow.appendChild(document.createTextNode(' Splash effects'));
-    col.appendChild(splashRow);
+    shadowRow.appendChild(refs.shadowQuality);
+    col.appendChild(shadowRow);
 
     // Tear Style dropdown
     const styleRow = document.createElement('div');
@@ -336,6 +333,22 @@ function buildGraphicsTab(content, refs) {
     };
     styleRow.appendChild(refs.tearStyle);
     col.appendChild(styleRow);
+
+    // Splash checkbox
+    const splashRow = document.createElement('label');
+    splashRow.className = 'modal-checkbox-row';
+    refs.splashCheckbox = document.createElement('input');
+    refs.splashCheckbox.type = 'checkbox';
+    refs.splashCheckbox.className = 'modal-checkbox';
+    refs.splashCheckbox.checked = Combat.config.splash;
+    refs.splashCheckbox.onchange = () => {
+        Combat.config.splash = refs.splashCheckbox.checked;
+        Combat.saveConfig();
+    };
+    splashRow.appendChild(refs.splashCheckbox);
+    splashRow.appendChild(document.createTextNode(' Splash effects'));
+    col.appendChild(splashRow);
+
 
     content.appendChild(col);
 }
@@ -723,7 +736,9 @@ function closeModal() {
 }
 
 function openSettings() {
-    openModal('Options', { width: 500, height: 400, tabs: ['Eye', 'Achievements', 'Audio', 'Graphics', 'Interface', '???'] });
+    const hasGraphics = getAchievementFlag('combatUnlocked');
+    const tabs = ['Eye', 'Achievements', 'Audio', hasGraphics ? 'Graphics' : '???', 'Interface', '???'];
+    openModal('Options', { width: 500, height: 400, tabs });
 }
 
 // === CONSOLE ===
