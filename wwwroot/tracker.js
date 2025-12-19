@@ -54,6 +54,9 @@ const Tracker = (() => {
     let playInterval = null;
     let sustainedNotes = [];
     let audioCtx = null;
+    let masterAnalyser = null;
+    let instrumentAnalyser = null;
+    let animationFrameId = null;
     
     function createBitcrusher(ctx) {
         // 8-bit quantization via waveshaper
@@ -657,6 +660,7 @@ const Tracker = (() => {
                     currentInstrument = parseInt(el.dataset.inst);
                     updateLibraryDisplay();
                     updateDisplay();
+                    updateEditorPanel();
                 };
             });
         }
@@ -679,6 +683,17 @@ const Tracker = (() => {
     function init() {
         patterns[0] = createEmptyPattern();
         audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        
+        // Master analyser for spectrogram
+        masterAnalyser = audioCtx.createAnalyser();
+        masterAnalyser.fftSize = 256;
+        masterAnalyser.connect(audioCtx.destination);
+        
+        // Instrument analyser for oscilloscope
+        instrumentAnalyser = audioCtx.createAnalyser();
+        instrumentAnalyser.fftSize = 2048;
+        instrumentAnalyser.connect(masterAnalyser);
+        
         loadUnlockedLibrary();
         loadCustomLibrary();
     }
@@ -750,6 +765,7 @@ const Tracker = (() => {
         currentPattern = 0;
         const msPerRow = (60000 / bpm) / (speed / 4);
         playInterval = setInterval(() => tick(), msPerRow);
+        startVisualizerLoop();
         updateDisplay();
     }
     
@@ -772,6 +788,12 @@ const Tracker = (() => {
         }
         currentRow = 0;
         currentPattern = 0;
+        // Delay visualizer stop to catch release tails
+        if (heldNotes.size === 0) {
+            setTimeout(() => {
+                if (!playing && heldNotes.size === 0) stopVisualizerLoop();
+            }, 500);
+        }
         updateDisplay();
     }
     
@@ -859,7 +881,7 @@ const Tracker = (() => {
             noise.buffer = buffer;
             noise.connect(crusher);
             crusher.connect(gain);
-            gain.connect(audioCtx.destination);
+            gain.connect(masterAnalyser); // Route through master analyser
             gain.gain.setValueAtTime(0, now);
             gain.gain.linearRampToValueAtTime(volume, now + inst.attack);
             gain.gain.linearRampToValueAtTime(volume * inst.sustain, now + inst.attack + inst.decay);
@@ -875,7 +897,7 @@ const Tracker = (() => {
         osc.frequency.value = freq;
         osc.connect(crusher);
         crusher.connect(gain);
-        gain.connect(audioCtx.destination);
+        gain.connect(masterAnalyser); // Route through master analyser
         gain.gain.setValueAtTime(0, now);
         gain.gain.linearRampToValueAtTime(volume, now + inst.attack);
         gain.gain.linearRampToValueAtTime(volume * inst.sustain, now + inst.attack + inst.decay);
@@ -906,7 +928,7 @@ const Tracker = (() => {
             noise.loop = true;
             noise.connect(crusher);
             crusher.connect(gain);
-            gain.connect(audioCtx.destination);
+            gain.connect(masterAnalyser); // Route through master analyser
             gain.gain.setValueAtTime(0, now);
             gain.gain.linearRampToValueAtTime(volume * inst.sustain, now + inst.attack);
             noise.start(now);
@@ -919,7 +941,7 @@ const Tracker = (() => {
         osc.frequency.value = freq;
         osc.connect(crusher);
         crusher.connect(gain);
-        gain.connect(audioCtx.destination);
+        gain.connect(masterAnalyser); // Route through master analyser
         gain.gain.setValueAtTime(0, now);
         gain.gain.linearRampToValueAtTime(volume * inst.sustain, now + inst.attack);
         osc.start(now);
@@ -957,7 +979,7 @@ const Tracker = (() => {
             noise.loop = true;
             noise.connect(crusher);
             crusher.connect(gain);
-            gain.connect(audioCtx.destination);
+            gain.connect(instrumentAnalyser); // Route through analyser
             
             // A→D→S (hold at sustain)
             gain.gain.setValueAtTime(0, now);
@@ -966,6 +988,7 @@ const Tracker = (() => {
             
             noise.start(now);
             heldNotes.set(key, { noise, gain, inst });
+            startVisualizerLoop();
             return;
         }
         
@@ -974,7 +997,7 @@ const Tracker = (() => {
         osc.frequency.value = freq;
         osc.connect(crusher);
         crusher.connect(gain);
-        gain.connect(audioCtx.destination);
+        gain.connect(instrumentAnalyser); // Route through analyser
         
         // A→D→S (hold at sustain)
         gain.gain.setValueAtTime(0, now);
@@ -983,6 +1006,7 @@ const Tracker = (() => {
         
         osc.start(now);
         heldNotes.set(key, { osc, gain, inst });
+        startVisualizerLoop();
     }
     
     // Release a held note (trigger R envelope)
@@ -1003,6 +1027,13 @@ const Tracker = (() => {
         if (held.noise) held.noise.stop(now + release + 0.05);
         
         heldNotes.delete(key);
+        
+        // Stop visualizer if no notes held and not playing
+        if (heldNotes.size === 0 && !playing) {
+            setTimeout(() => {
+                if (heldNotes.size === 0 && !playing) stopVisualizerLoop();
+            }, (release + 0.1) * 1000);
+        }
     }
     
     // Release all held notes
@@ -1302,6 +1333,59 @@ const Tracker = (() => {
                     </div>
                     <div class="tracker-pattern" id="tracker-pattern-grid"></div>
                 </div>
+                <div class="tracker-editor">
+                    <div class="editor-section">
+                        <div class="editor-label">OSCILLOSCOPE</div>
+                        <canvas id="tracker-oscilloscope" width="200" height="80"></canvas>
+                    </div>
+                    <div class="editor-section">
+                        <div class="editor-label">SPECTROGRAM</div>
+                        <canvas id="tracker-spectrogram" width="200" height="60"></canvas>
+                    </div>
+                    <div class="editor-section">
+                        <div class="editor-label">INSTRUMENT</div>
+                        <div class="editor-row">
+                            <span class="editor-field-label">Name</span>
+                            <input type="text" id="editor-inst-name" class="editor-input" />
+                        </div>
+                        <div class="editor-row">
+                            <span class="editor-field-label">Type</span>
+                            <select id="editor-inst-type" class="editor-select">
+                                <option value="pulse">Pulse</option>
+                                <option value="triangle">Triangle</option>
+                                <option value="noise">Noise</option>
+                            </select>
+                        </div>
+                        <div class="editor-row" id="editor-duty-row">
+                            <span class="editor-field-label">Duty</span>
+                            <input type="range" id="editor-inst-duty" min="0.125" max="0.5" step="0.125" class="editor-slider" />
+                            <span id="editor-duty-value" class="editor-value">50%</span>
+                        </div>
+                    </div>
+                    <div class="editor-section">
+                        <div class="editor-label">ENVELOPE</div>
+                        <div class="editor-row">
+                            <span class="editor-field-label">Attack</span>
+                            <input type="range" id="editor-inst-attack" min="0.001" max="1" step="0.001" class="editor-slider" />
+                            <span id="editor-attack-value" class="editor-value">0.01</span>
+                        </div>
+                        <div class="editor-row">
+                            <span class="editor-field-label">Decay</span>
+                            <input type="range" id="editor-inst-decay" min="0" max="1" step="0.01" class="editor-slider" />
+                            <span id="editor-decay-value" class="editor-value">0.1</span>
+                        </div>
+                        <div class="editor-row">
+                            <span class="editor-field-label">Sustain</span>
+                            <input type="range" id="editor-inst-sustain" min="0" max="1" step="0.01" class="editor-slider" />
+                            <span id="editor-sustain-value" class="editor-value">70%</span>
+                        </div>
+                        <div class="editor-row">
+                            <span class="editor-field-label">Release</span>
+                            <input type="range" id="editor-inst-release" min="0.01" max="2" step="0.01" class="editor-slider" />
+                            <span id="editor-release-value" class="editor-value">0.1</span>
+                        </div>
+                    </div>
+                </div>
             </div>
             <div class="tracker-footer">
                 <div class="tracker-controls">
@@ -1334,6 +1418,17 @@ const Tracker = (() => {
                 startRow: row, startCh: channel, startCol: column,
                 endRow: row, endCh: channel, endCol: column
             };
+            
+            // If clicking a cell with an instrument, select that instrument
+            const pattern = patterns[sequence[currentPattern]];
+            if (pattern) {
+                const cellData = pattern.rows[row]?.[CHANNELS[channel]];
+                if (cellData?.inst !== null && cellData?.inst !== undefined) {
+                    currentInstrument = cellData.inst;
+                    updateEditorPanel();
+                }
+            }
+            
             updateDisplay();
         });
         
@@ -1410,7 +1505,10 @@ const Tracker = (() => {
                         if (param === 'oct') currentOctave = Math.max(0, Math.min(7, val));
                         else if (param === 'bpm') bpm = Math.max(30, Math.min(300, val));
                         else if (param === 'pat') currentPattern = Math.max(0, Math.min(sequence.length - 1, val));
-                        else if (param === 'inst') currentInstrument = Math.max(0, Math.min(instruments.length - 1, val));
+                        else if (param === 'inst') {
+                            currentInstrument = Math.max(0, Math.min(instruments.length - 1, val));
+                            updateEditorPanel();
+                        }
                         updateDisplay();
                     }
                 }
@@ -1422,7 +1520,10 @@ const Tracker = (() => {
                 if (param === 'oct') currentOctave = Math.max(0, Math.min(7, currentOctave + delta));
                 else if (param === 'bpm') bpm = Math.max(30, Math.min(300, bpm + delta * 5));
                 else if (param === 'pat') currentPattern = Math.max(0, Math.min(sequence.length - 1, currentPattern + delta));
-                else if (param === 'inst') currentInstrument = Math.max(0, Math.min(instruments.length - 1, currentInstrument + delta));
+                else if (param === 'inst') {
+                    currentInstrument = Math.max(0, Math.min(instruments.length - 1, currentInstrument + delta));
+                    updateEditorPanel();
+                }
                 updateDisplay();
             });
         });
@@ -1451,6 +1552,8 @@ const Tracker = (() => {
         
         updateDisplay();
         updateLibraryDisplay();
+        setupEditorHandlers();
+        updateEditorPanel();
         return trackerElement;
     }
     
@@ -1535,6 +1638,311 @@ const Tracker = (() => {
             footer.querySelector('#tracker-stop').onclick = () => stop();
             footer.querySelector('#tracker-save').onclick = () => promptSaveCustom();
             footer.querySelector('#tracker-loop').onclick = () => { loopMode = !loopMode; updateDisplay(); };
+        }
+    }
+    
+    function updateEditorPanel() {
+        if (!trackerElement) return;
+        const inst = instruments[currentInstrument];
+        if (!inst) return;
+        
+        // Update input values
+        const nameEl = trackerElement.querySelector('#editor-inst-name');
+        const typeEl = trackerElement.querySelector('#editor-inst-type');
+        const dutyEl = trackerElement.querySelector('#editor-inst-duty');
+        const dutyRow = trackerElement.querySelector('#editor-duty-row');
+        const attackEl = trackerElement.querySelector('#editor-inst-attack');
+        const decayEl = trackerElement.querySelector('#editor-inst-decay');
+        const sustainEl = trackerElement.querySelector('#editor-inst-sustain');
+        const releaseEl = trackerElement.querySelector('#editor-inst-release');
+        
+        if (nameEl) nameEl.value = inst.name || '';
+        if (typeEl) typeEl.value = inst.type || 'pulse';
+        if (dutyEl) dutyEl.value = inst.duty || 0.5;
+        if (attackEl) attackEl.value = inst.attack || 0.01;
+        if (decayEl) decayEl.value = inst.decay || 0.1;
+        if (sustainEl) sustainEl.value = inst.sustain || 0.7;
+        if (releaseEl) releaseEl.value = inst.release || 0.1;
+        
+        // Show/hide duty row based on type
+        if (dutyRow) dutyRow.style.display = inst.type === 'pulse' ? 'flex' : 'none';
+        
+        // Update value labels
+        updateEditorValueLabels();
+        
+        // Draw static oscilloscope
+        drawStaticOscilloscope();
+        drawStaticSpectrogram();
+    }
+    
+    function updateEditorValueLabels() {
+        const inst = instruments[currentInstrument];
+        if (!inst) return;
+        
+        const dutyVal = trackerElement?.querySelector('#editor-duty-value');
+        const attackVal = trackerElement?.querySelector('#editor-attack-value');
+        const decayVal = trackerElement?.querySelector('#editor-decay-value');
+        const sustainVal = trackerElement?.querySelector('#editor-sustain-value');
+        const releaseVal = trackerElement?.querySelector('#editor-release-value');
+        
+        if (dutyVal) dutyVal.textContent = Math.round((inst.duty || 0.5) * 100) + '%';
+        if (attackVal) attackVal.textContent = (inst.attack || 0.01).toFixed(3);
+        if (decayVal) decayVal.textContent = (inst.decay || 0.1).toFixed(2);
+        if (sustainVal) sustainVal.textContent = Math.round((inst.sustain || 0.7) * 100) + '%';
+        if (releaseVal) releaseVal.textContent = (inst.release || 0.1).toFixed(2);
+    }
+    
+    function drawStaticOscilloscope() {
+        const canvas = trackerElement?.querySelector('#tracker-oscilloscope');
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        const inst = instruments[currentInstrument];
+        if (!inst) return;
+        
+        const w = canvas.width;
+        const h = canvas.height;
+        const midY = h / 2;
+        
+        // Clear
+        ctx.fillStyle = '#0a0a15';
+        ctx.fillRect(0, 0, w, h);
+        
+        // Draw center line
+        ctx.strokeStyle = '#222';
+        ctx.beginPath();
+        ctx.moveTo(0, midY);
+        ctx.lineTo(w, midY);
+        ctx.stroke();
+        
+        // Draw waveform
+        ctx.strokeStyle = '#54bebe';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        
+        const cycles = 3; // Show 3 cycles
+        const duty = inst.duty || 0.5;
+        
+        if (inst.type === 'noise') {
+            // Draw random noise pattern (seeded for consistency)
+            let seed = 12345;
+            const random = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; };
+            for (let x = 0; x < w; x++) {
+                const y = midY + (random() * 2 - 1) * (h * 0.35);
+                if (x === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            }
+        } else if (inst.type === 'triangle') {
+            // Draw triangle wave
+            for (let x = 0; x < w; x++) {
+                const phase = (x / w) * cycles;
+                const t = phase % 1;
+                let y;
+                if (t < 0.5) {
+                    y = midY - (t * 2) * (h * 0.35);
+                } else {
+                    y = midY - (2 - t * 2) * (h * 0.35);
+                }
+                if (x === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            }
+        } else {
+            // Draw pulse/square wave
+            for (let x = 0; x < w; x++) {
+                const phase = (x / w) * cycles;
+                const t = phase % 1;
+                const y = t < duty ? midY - h * 0.35 : midY + h * 0.35;
+                if (x === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            }
+        }
+        
+        ctx.stroke();
+    }
+    
+    function startVisualizerLoop() {
+        if (animationFrameId) return; // Already running
+        animationFrameId = requestAnimationFrame(visualizerLoop);
+    }
+    
+    function stopVisualizerLoop() {
+        if (animationFrameId) {
+            cancelAnimationFrame(animationFrameId);
+            animationFrameId = null;
+        }
+        // Redraw static
+        drawStaticOscilloscope();
+        drawStaticSpectrogram();
+    }
+    
+    function visualizerLoop() {
+        drawLiveOscilloscope();
+        drawLiveSpectrogram();
+        animationFrameId = requestAnimationFrame(visualizerLoop);
+    }
+    
+    function drawLiveOscilloscope() {
+        const canvas = trackerElement?.querySelector('#tracker-oscilloscope');
+        if (!canvas || !masterAnalyser) return;
+        const ctx = canvas.getContext('2d');
+        
+        const w = canvas.width;
+        const h = canvas.height;
+        const midY = h / 2;
+        
+        // Get waveform data from master (all audio)
+        const bufferLength = masterAnalyser.frequencyBinCount;
+        const dataArray = new Uint8Array(bufferLength);
+        masterAnalyser.getByteTimeDomainData(dataArray);
+        
+        // Clear
+        ctx.fillStyle = '#0a0a15';
+        ctx.fillRect(0, 0, w, h);
+        
+        // Draw center line
+        ctx.strokeStyle = '#222';
+        ctx.beginPath();
+        ctx.moveTo(0, midY);
+        ctx.lineTo(w, midY);
+        ctx.stroke();
+        
+        // Draw waveform
+        ctx.strokeStyle = '#54bebe';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        
+        const sliceWidth = w / bufferLength;
+        let x = 0;
+        
+        for (let i = 0; i < bufferLength; i++) {
+            const v = dataArray[i] / 128.0; // 0-2 range
+            const y = (v * h) / 2;
+            
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+            
+            x += sliceWidth;
+        }
+        
+        ctx.stroke();
+    }
+    
+    function drawStaticSpectrogram() {
+        const canvas = trackerElement?.querySelector('#tracker-spectrogram');
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        
+        const w = canvas.width;
+        const h = canvas.height;
+        
+        // Clear with dark background
+        ctx.fillStyle = '#0a0a15';
+        ctx.fillRect(0, 0, w, h);
+        
+        // Draw baseline
+        ctx.strokeStyle = '#222';
+        ctx.beginPath();
+        ctx.moveTo(0, h - 1);
+        ctx.lineTo(w, h - 1);
+        ctx.stroke();
+    }
+    
+    function drawLiveSpectrogram() {
+        const canvas = trackerElement?.querySelector('#tracker-spectrogram');
+        if (!canvas || !masterAnalyser) return;
+        const ctx = canvas.getContext('2d');
+        
+        const w = canvas.width;
+        const h = canvas.height;
+        
+        // Get frequency data
+        const bufferLength = masterAnalyser.frequencyBinCount;
+        const dataArray = new Uint8Array(bufferLength);
+        masterAnalyser.getByteFrequencyData(dataArray);
+        
+        // Clear
+        ctx.fillStyle = '#0a0a15';
+        ctx.fillRect(0, 0, w, h);
+        
+        // Draw bars
+        const barWidth = w / bufferLength;
+        let x = 0;
+        
+        for (let i = 0; i < bufferLength; i++) {
+            const barHeight = (dataArray[i] / 255) * h;
+            
+            // Color gradient from cyan to magenta based on frequency
+            const hue = 180 + (i / bufferLength) * 60; // 180 (cyan) to 240 (blue) to beyond
+            const lightness = 40 + (dataArray[i] / 255) * 30;
+            ctx.fillStyle = `hsl(${hue}, 80%, ${lightness}%)`;
+            
+            ctx.fillRect(x, h - barHeight, barWidth, barHeight);
+            x += barWidth;
+        }
+    }
+    
+    function setupEditorHandlers() {
+        // Name input
+        const nameEl = trackerElement?.querySelector('#editor-inst-name');
+        if (nameEl) {
+            nameEl.addEventListener('input', (e) => {
+                instruments[currentInstrument].name = e.target.value;
+                updateLibraryDisplay();
+            });
+        }
+        
+        // Type select
+        const typeEl = trackerElement?.querySelector('#editor-inst-type');
+        if (typeEl) {
+            typeEl.addEventListener('change', (e) => {
+                instruments[currentInstrument].type = e.target.value;
+                const dutyRow = trackerElement?.querySelector('#editor-duty-row');
+                if (dutyRow) dutyRow.style.display = e.target.value === 'pulse' ? 'flex' : 'none';
+                drawStaticOscilloscope();
+                updateLibraryDisplay();
+            });
+        }
+        
+        // Duty slider
+        const dutyEl = trackerElement?.querySelector('#editor-inst-duty');
+        if (dutyEl) {
+            dutyEl.addEventListener('input', (e) => {
+                instruments[currentInstrument].duty = parseFloat(e.target.value);
+                updateEditorValueLabels();
+                drawStaticOscilloscope();
+            });
+        }
+        
+        // ADSR sliders
+        const attackEl = trackerElement?.querySelector('#editor-inst-attack');
+        if (attackEl) {
+            attackEl.addEventListener('input', (e) => {
+                instruments[currentInstrument].attack = parseFloat(e.target.value);
+                updateEditorValueLabels();
+            });
+        }
+        
+        const decayEl = trackerElement?.querySelector('#editor-inst-decay');
+        if (decayEl) {
+            decayEl.addEventListener('input', (e) => {
+                instruments[currentInstrument].decay = parseFloat(e.target.value);
+                updateEditorValueLabels();
+            });
+        }
+        
+        const sustainEl = trackerElement?.querySelector('#editor-inst-sustain');
+        if (sustainEl) {
+            sustainEl.addEventListener('input', (e) => {
+                instruments[currentInstrument].sustain = parseFloat(e.target.value);
+                updateEditorValueLabels();
+            });
+        }
+        
+        const releaseEl = trackerElement?.querySelector('#editor-inst-release');
+        if (releaseEl) {
+            releaseEl.addEventListener('input', (e) => {
+                instruments[currentInstrument].release = parseFloat(e.target.value);
+                updateEditorValueLabels();
+            });
         }
     }
     
