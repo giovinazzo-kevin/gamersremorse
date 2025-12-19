@@ -3,161 +3,7 @@
 <head>
     <title>A-eye Debug Console</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <style>
-        :root {
-            --color-positive: #54bebe;
-            --color-negative: #c80064;
-            --color-uncertain: #666666;
-            --color-accent: #333333;
-        }
-
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
-
-        html, body {
-            height: 100vh;
-            background: #1a1a1a;
-            font-family: Verdana, Arial, sans-serif;
-            font-size: 11px;
-            color: #ccc;
-        }
-
-        .debug-layout {
-            display: grid;
-            grid-template-columns: 300px 1fr;
-            height: 100vh;
-        }
-
-        .controls {
-            background: #252525;
-            padding: 15px;
-            overflow-y: auto;
-            border-right: 2px solid #333;
-        }
-
-        .eye-container {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background: #000;
-        }
-
-        #eye {
-            width: 100%;
-            height: 100%;
-            max-width: 1200px;
-            max-height: 800px;
-        }
-
-        h1 {
-            color: var(--color-positive);
-            font-size: 14px;
-            margin-bottom: 15px;
-            padding-bottom: 10px;
-            border-bottom: 1px solid #444;
-        }
-
-        .section {
-            margin-bottom: 20px;
-        }
-
-        .section-header {
-            color: var(--color-negative);
-            font-size: 10px;
-            text-transform: uppercase;
-            margin-bottom: 10px;
-            letter-spacing: 1px;
-        }
-
-        .btn-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 5px;
-        }
-
-        button {
-            background: #333;
-            color: #ccc;
-            border: 1px solid #444;
-            padding: 8px 10px;
-            font-size: 10px;
-            cursor: pointer;
-            font-family: Verdana, Arial, sans-serif;
-            transition: all 0.1s;
-        }
-
-            button:hover {
-                background: #444;
-                border-color: var(--color-positive);
-            }
-
-            button.active {
-                background: var(--color-positive);
-                color: #000;
-            }
-
-        .slider-row {
-            margin-bottom: 10px;
-        }
-
-            .slider-row label {
-                display: block;
-                margin-bottom: 4px;
-                color: #888;
-            }
-
-            .slider-row input[type="range"] {
-                width: 100%;
-            }
-
-        .slider-value {
-            float: right;
-            color: var(--color-positive);
-            font-family: monospace;
-        }
-
-        .toggle-row {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            margin-bottom: 8px;
-        }
-
-            .toggle-row input[type="checkbox"  autocomplete="off"] {
-                accent-color: var(--color-positive);
-            }
-
-        .jingle-btn {
-            width: 100%;
-            background: #2a2a3a;
-            border-color: #4a4a6a;
-        }
-
-            .jingle-btn:hover {
-                background: #3a3a5a;
-            }
-
-        #tagline-display {
-            background: #000;
-            padding: 10px;
-            margin-top: 10px;
-            text-align: center;
-            font-size: 9px;
-            font-variant: small-caps;
-            min-height: 2em;
-        }
-
-            #tagline-display.positive {
-                color: var(--color-positive);
-            }
-
-            #tagline-display.negative {
-                color: var(--color-negative);
-            }
-    </style>
+    <link rel="stylesheet" href="styles/debug.css">
 </head>
 <body>
     <div class="debug-layout">
@@ -303,9 +149,9 @@
         </div>
     </div>
 
-    <script src="txt.js"></script>
-    <script src="sfx.js"></script>
-    <script src="eye.js"></script>
+    <script src="scripts/txt.js"></script>
+    <script src="scripts/sfx.js"></script>
+    <script src="scripts/eye.js"></script>
     <script>
         // Initialize
         window.svg = document.getElementById('eye');
