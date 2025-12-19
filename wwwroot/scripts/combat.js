@@ -241,6 +241,7 @@ const Combat = {
 
                         this.splash(pos, t.size, t.color);
                         ScreenShake.shake(t.damage * 4);
+                        HitFlash.trigger(t.damage);
                         this.hitstop(1, e);
 
                         const dx = t.end.x - t.start.x;
@@ -409,6 +410,24 @@ const Combat = {
         }
 
         this.ctx.filter = 'none';
+
+        // Hit flash - white overlay
+        if (HitFlash.getIntensity() > 0) {
+            this.ctx.fillStyle = `rgba(255, 255, 255, ${HitFlash.getIntensity() * 0.6})`;
+            this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        }
+
+        const hpOverlay = LowHPOverlay.getIntensity();
+        if (hpOverlay > 0) {
+            const gradient = this.ctx.createRadialGradient(
+                DepthOfField.eyeX, DepthOfField.eyeY, 0,
+                DepthOfField.eyeX, DepthOfField.eyeY, Math.max(this.canvas.width, this.canvas.height) * 0.7
+            );
+            gradient.addColorStop(0, 'transparent');
+            gradient.addColorStop(1, `rgba(255, 0, 0, ${hpOverlay})`);
+            this.ctx.fillStyle = gradient;
+            this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        }
     },
 };
 

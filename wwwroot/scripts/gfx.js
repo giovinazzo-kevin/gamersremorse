@@ -99,3 +99,57 @@ const DepthOfField = {
         this.update();
     }
 };
+
+const HitFlash = {
+    intensity: 0,
+    decay: 0.7,  // fast fade
+
+    trigger(amount = 1) {
+        this.intensity = Math.min(1, this.intensity + amount);
+    },
+
+    update(dt) {
+        if (this.intensity < 0.01) {
+            this.intensity = 0;
+            return;
+        }
+        this.intensity *= this.decay;
+    },
+
+    // Returns 0-1 for canvas overlay alpha
+    getIntensity() {
+        return this.intensity;
+    }
+}
+
+const LowHPOverlay = {
+    currentHP: 6,
+    maxHP: 6,
+    pulse: 0,  // 0 to 2π, loops
+
+    update(dt) {
+        // Pulse speed increases as HP drops
+        const hpRatio = this.currentHP / this.maxHP;
+        if (hpRatio > 0.5 || this.currentHP == 0) {
+            this.pulse = 0;
+            return;
+        }
+
+        // 0.5 = slow throb, 0.16 (1hp/6) = frantic
+        const speed = (1 - hpRatio * 2) * 8;  // 0-8 rads/sec
+        this.pulse += speed * dt;
+    },
+
+    setHP(current, max) {
+        this.currentHP = current;
+        this.maxHP = max;
+    },
+
+    // Returns 0-1 for red vignette alpha
+    getIntensity() {
+        if (this.currentHP / this.maxHP > 0.5 || this.currentHP == 0) return 0;
+        const base = 1 - (this.currentHP / this.maxHP * 2);  // 0-1
+        const pulse = (Math.sin(this.pulse) + 1) / 2;  // 0-1
+        return base * 0.3 + pulse * 0.2;  // subtle base + pulse
+    }
+}

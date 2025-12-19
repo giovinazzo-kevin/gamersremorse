@@ -1148,6 +1148,8 @@ function tick(timestamp) {
         Combat.render();
         ScreenShake.update(dt);
         DepthOfField.update(dt);
+        HitFlash.update(dt);
+        LowHPOverlay.update(dt);
         lastFrame = timestamp;
     }
     requestAnimationFrame(tick);
@@ -1413,7 +1415,10 @@ function showRespawnTimer(container, eyeEl) {
 const Eye = {
     // Health accessors
     get health() { return state.health; },
-    set health(v) { state.health = v; },
+    set health(v) {
+        state.health = v;
+        LowHPOverlay.setHP(this.health, this.maxHealth);
+    },
     get maxHealth() { return state.maxHealth; },
     set maxHealth(v) { state.maxHealth = v; },
     get maxContainers() { return state.maxContainers; },
@@ -1427,7 +1432,7 @@ const Eye = {
         if (source === 'player') {
             setAchievementFlag('tookDumbDamage');
         }
-        state.health = Math.max(0, state.health - halfHearts);
+        this.health = Math.max(0, this.health - halfHearts);
         this.renderHealthBar();
         this.save();
 
@@ -1537,6 +1542,7 @@ const Eye = {
             if (state.health <= 0) state.health = state.maxHealth;
         }
         this.renderHealthBar();
+        LowHPOverlay.setHP(this.health, this.maxHealth);
     },
 
     blink() {

@@ -1452,7 +1452,7 @@ function loadEyeSettings() {
         if (settings.trackingEnabled === false) setCursorTrackingEnabled(false);
         if (settings.darkMode) { darkMode = true; document.body.classList.add('dark-mode'); setAchievementFlag('darkModeEnabled'); }
         if (settings.consoleEnabled) consoleEnabled = true;
-        if (settings.selectionDisabled) selectionDisabled = true;
+        if (settings.selectionDisabled) setSelectionEnabled(false, false);
         if (settings.upperColor) document.documentElement.style.setProperty('--color-positive', settings.upperColor);
         if (settings.lowerColor) document.documentElement.style.setProperty('--color-negative', settings.lowerColor);
         if (settings.lashColor) document.documentElement.style.setProperty('--color-uncertain', settings.lashColor);
