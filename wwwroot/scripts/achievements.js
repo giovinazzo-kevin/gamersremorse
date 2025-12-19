@@ -84,7 +84,7 @@ const ACHIEVEMENTS = {
     opened_tracker: {
         id: 'opened_tracker',
         title: 'Constraint Breeds Creativity',
-        description: 'Unearth ancient technology',
+        description: 'Unearth powerful ancient technology',
         icon: '🎹',
         hidden: false,
         check: (state) => state.openedTracker
