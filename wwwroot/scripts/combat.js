@@ -320,6 +320,8 @@ document.addEventListener('mousedown', (e) => {
     if (e.button !== 0) return;
     if (e.target.closest('button, input, a, select, .modal, .options-modal, #eye')) return;
     if (!Eye.awake || Eye.dead) return;
+    // Gate: need to unlock combat first
+    if (!getAchievementFlag('combatUnlocked')) return;
 
     Combat.target = { x: e.clientX, y: e.clientY };
     Combat.startFiring();
