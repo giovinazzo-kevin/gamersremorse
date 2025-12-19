@@ -1131,6 +1131,8 @@ function tick(timestamp) {
         updateCursorTracking(dt);
         updateIrisPosition(dt);
         draw();
+        Combat.update(dt);
+        Combat.render();
         lastFrame = timestamp;
     }
     requestAnimationFrame(tick);
