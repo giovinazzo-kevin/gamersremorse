@@ -1102,14 +1102,14 @@ const commands = {
         description: 'Kill the eye',
         hidden: true,
         execute: () => {
-            Eye.damage(1000, 'fall', 'player');
+            Eye.damage(state.health, 'fall', 'player');
         }
     },
     explode: {
         description: 'Explode the eye',
         hidden: true,
         execute: () => {
-            Eye.damage(1000, 'explode', 'player');
+            Eye.damage(state.health, 'explode', 'player');
         }
     },
     impulse: {
