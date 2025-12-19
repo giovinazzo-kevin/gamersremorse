@@ -11,9 +11,9 @@ const ACHIEVEMENTS = {
     },
     first_achievement: {
         id: 'first_achievement',
-        title: 'Yo Dawg',
-        description: 'Recurse meta-ironically',
-        icon: '🥈',
+        title: 'Toasty!',
+        description: 'Observe an achievement toast',
+        icon: '🍞',
         hidden: true,
         check: (state) => state.anyAchievement
     },
