@@ -355,6 +355,19 @@ const Tracker = (() => {
             },
             sequence: [0]
         },
+        'low_hp': {
+            name: 'Low HP',
+            icon: '💔',
+            bpm: 100,
+            speed: 6,
+            patterns: {
+                0: createPatternFromNotes([
+                    { row: 0, ch: 'pulse1', note: 'F#', octave: 5, inst: 0, vol: 15 },
+                    { row: 1, ch: 'pulse1', note: 'B-', octave: 4, inst: 0, vol: 15 },
+                ], 4)
+            },
+            sequence: [0]
+        },
     };
     
     // Unlocked library items (by id)
