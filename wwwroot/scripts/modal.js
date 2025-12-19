@@ -738,7 +738,7 @@ function closeModal() {
 function openSettings() {
     const hasGraphics = getAchievementFlag('combatUnlocked');
     const tabs = ['Eye', 'Achievements', 'Audio', hasGraphics ? 'Graphics' : '???', 'Interface', '???'];
-    openModal('Options', { width: 500, height: 400, tabs });
+    openModal('Options', { width: 640, height: 480, tabs });
 }
 
 // === CONSOLE ===
