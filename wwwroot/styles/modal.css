@@ -284,9 +284,17 @@ select.modal-input option {
 
 .modal-slider-row {
     display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    margin-bottom: 12px;
+}
+
+.modal-slider-track {
+    display: flex;
     align-items: center;
     gap: 8px;
-    margin-bottom: 8px;
+    width: 100%;
 }
 
 .modal-slider {

@@ -66,6 +66,50 @@ function isConsoleEnabled() {
     return consoleEnabled;
 }
 
+// Helper to build slider with label above, snap step, and double-click reset
+function buildSlider(label, min, max, value, step, formatValue, onInput, defaultValue = null) {
+    const row = document.createElement('div');
+    row.className = 'modal-slider-row';
+
+    const labelEl = document.createElement('span');
+    labelEl.textContent = label;
+    row.appendChild(labelEl);
+
+    const track = document.createElement('div');
+    track.className = 'modal-slider-track';
+
+    const slider = document.createElement('input');
+    slider.type = 'range';
+    slider.className = 'modal-slider';
+    slider.min = min;
+    slider.max = max;
+    slider.step = step;
+    slider.value = value;
+
+    const valueEl = document.createElement('span');
+    valueEl.className = 'modal-slider-value';
+    valueEl.textContent = formatValue(value);
+
+    const def = defaultValue ?? value;
+
+    slider.oninput = () => {
+        valueEl.textContent = formatValue(slider.value);
+        onInput(slider.value);
+    };
+
+    slider.ondblclick = () => {
+        slider.value = def;
+        valueEl.textContent = formatValue(def);
+        onInput(def);
+    };
+
+    track.appendChild(slider);
+    track.appendChild(valueEl);
+    row.appendChild(track);
+
+    return { row, slider, valueEl };
+}
+
 // Tab content builders
 function buildEyeTab(content, refs) {
     const columns = document.createElement('div');
@@ -172,29 +216,15 @@ function buildEyeTab(content, refs) {
     
     leftCol.appendChild(document.createElement('br'));
     
-    // Bar count slider
-    const barRow = document.createElement('div');
-    barRow.className = 'modal-slider-row';
-    const barLabel = document.createElement('span');
-    barLabel.textContent = 'Bar count';
-    barRow.appendChild(barLabel);
-    refs.barSlider = document.createElement('input');
-    refs.barSlider.type = 'range';
-    refs.barSlider.className = 'modal-slider';
-    refs.barSlider.min = 5;
-    refs.barSlider.max = 50;
-    refs.barSlider.value = 20;
-    refs.barValue = document.createElement('span');
-    refs.barValue.className = 'modal-slider-value';
-    refs.barValue.textContent = '20';
-    refs.barSlider.oninput = () => {
-        refs.barValue.textContent = refs.barSlider.value;
-        const val = parseInt(refs.barSlider.value);
-        setBarDensity(val);
-    };
-    barRow.appendChild(refs.barSlider);
-    barRow.appendChild(refs.barValue);
-    leftCol.appendChild(barRow);
+    // Bar count slider (5-50)
+    const bar = buildSlider('Bar count', 5, 50, 20, 1,
+        v => v,
+        v => setBarDensity(parseInt(v)),
+        20
+    );
+    refs.barSlider = bar.slider;
+    refs.barValue = bar.valueEl;
+    leftCol.appendChild(bar.row);
     
     columns.appendChild(leftCol);
     
@@ -359,96 +389,73 @@ function buildGraphicsTab(content, refs) {
     splashRow.appendChild(document.createTextNode(' Splash effects'));
     col.appendChild(splashRow);
 
-    // Screen shake slider
-    const shakeRow = document.createElement('div');
-    shakeRow.className = 'modal-slider-row';
+    // Screen shake slider (0-1000%, squared curve)
+    const shake = buildSlider('Screen shake', 0, 1000, Math.sqrt(Combat.config.screenShake ?? 1) * 100, 1,
+        v => v + '%',
+        v => {
+            const raw = v / 100;
+            Combat.config.screenShake = raw * raw;
+            ScreenShake.multiplier = Combat.config.screenShake;
+            Combat.saveConfig();
+        },
+        100
+    );
+    refs.shakeSlider = shake.slider;
+    refs.shakeValue = shake.valueEl;
+    col.appendChild(shake.row);
 
-    const shakeLabel = document.createElement('span');
-    shakeLabel.textContent = 'Screen shake';
-    shakeRow.appendChild(shakeLabel);
+    // Depth of field slider (0-100%)
+    const dof = buildSlider('Depth of field', 0, 100, (Combat.config.depthOfField ?? 0) * 100, 1,
+        v => v + '%',
+        v => {
+            Combat.config.depthOfField = v / 100;
+            DepthOfField.setIntensity(v / 100);
+            Combat.saveConfig();
+        },
+        0
+    );
+    refs.dofSlider = dof.slider;
+    refs.dofValue = dof.valueEl;
+    col.appendChild(dof.row);
 
-    refs.shakeSlider = document.createElement('input');
-    refs.shakeSlider.type = 'range';
-    refs.shakeSlider.className = 'modal-slider';
-    refs.shakeSlider.min = 0;
-    refs.shakeSlider.max = 1000;
-    refs.shakeSlider.value = (Combat.config.screenShake ?? 1) * 100;
+    // Hitstop slider (0-200%)
+    const hitstop = buildSlider('Hitstop', 0, 200, (Combat.config.hitstop ?? 1) * 100, 1,
+        v => v + '%',
+        v => {
+            Combat.config.hitstop = v / 100;
+            Combat.saveConfig();
+        },
+        100
+    );
+    refs.hitstopSlider = hitstop.slider;
+    refs.hitstopValue = hitstop.valueEl;
+    col.appendChild(hitstop.row);
 
-    refs.shakeValue = document.createElement('span');
-    refs.shakeValue.className = 'modal-slider-value';
-    refs.shakeValue.textContent = refs.shakeSlider.value + '%';
+    // Hit flash slider (0-100%)
+    const hitFlash = buildSlider('Hit flash', 0, 100, (Combat.config.hitFlash ?? 0.5) * 100, 1,
+        v => v + '%',
+        v => {
+            Combat.config.hitFlash = v / 100;
+            Combat.saveConfig();
+        },
+        50
+    );
+    refs.hitFlashSlider = hitFlash.slider;
+    refs.hitFlashValue = hitFlash.valueEl;
+    col.appendChild(hitFlash.row);
 
-    refs.shakeSlider.oninput = () => {
-        refs.shakeValue.textContent = refs.shakeSlider.value + '%';
-        const raw = refs.shakeSlider.value / 100; // 0 to 10
-        Combat.config.screenShake = raw * raw; // 0 to 100 at max
-        ScreenShake.multiplier = Combat.config.screenShake;
-        Combat.saveConfig();
-    };
-
-    shakeRow.appendChild(refs.shakeSlider);
-    shakeRow.appendChild(refs.shakeValue);
-    col.appendChild(shakeRow);
-
-    // Depth of field slider
-    const dofRow = document.createElement('div');
-    dofRow.className = 'modal-slider-row';
-
-    const dofLabel = document.createElement('span');
-    dofLabel.textContent = 'Depth of field';
-    dofRow.appendChild(dofLabel);
-
-    refs.dofSlider = document.createElement('input');
-    refs.dofSlider.type = 'range';
-    refs.dofSlider.className = 'modal-slider';
-    refs.dofSlider.min = 0;
-    refs.dofSlider.max = 100;
-    refs.dofSlider.value = (Combat.config.depthOfField ?? 0) * 100;
-
-    refs.dofValue = document.createElement('span');
-    refs.dofValue.className = 'modal-slider-value';
-    refs.dofValue.textContent = refs.dofSlider.value + '%';
-
-    refs.dofSlider.oninput = () => {
-        refs.dofValue.textContent = refs.dofSlider.value + '%';
-        const val = refs.dofSlider.value / 100;
-        Combat.config.depthOfField = val;
-        DepthOfField.setIntensity(val);
-        Combat.saveConfig();
-    };
-
-    dofRow.appendChild(refs.dofSlider);
-    dofRow.appendChild(refs.dofValue);
-    col.appendChild(dofRow);
-
-    // Hitstop slider
-    const hitstopRow = document.createElement('div');
-    hitstopRow.className = 'modal-slider-row';
-
-    const hitstopLabel = document.createElement('span');
-    hitstopLabel.textContent = 'Hitstop';
-    hitstopRow.appendChild(hitstopLabel);
-
-    refs.hitstopSlider = document.createElement('input');
-    refs.hitstopSlider.type = 'range';
-    refs.hitstopSlider.className = 'modal-slider';
-    refs.hitstopSlider.min = 0;
-    refs.hitstopSlider.max = 200;
-    refs.hitstopSlider.value = (Combat.config.hitstop ?? 1) * 100;
-
-    refs.hitstopValue = document.createElement('span');
-    refs.hitstopValue.className = 'modal-slider-value';
-    refs.hitstopValue.textContent = refs.hitstopSlider.value + '%';
-
-    refs.hitstopSlider.oninput = () => {
-        refs.hitstopValue.textContent = refs.hitstopSlider.value + '%';
-        Combat.config.hitstop = refs.hitstopSlider.value / 100;
-        Combat.saveConfig();
-    };
-
-    hitstopRow.appendChild(refs.hitstopSlider);
-    hitstopRow.appendChild(refs.hitstopValue);
-    col.appendChild(hitstopRow);
+    // Low HP overlay slider (0-100%)
+    const lowHP = buildSlider('Low HP overlay', 0, 100, (Combat.config.lowHPOverlay ?? 1) * 100, 1,
+        v => v + '%',
+        v => {
+            Combat.config.lowHPOverlay = v / 100;
+            Combat.saveConfig();
+        },
+        100
+    );
+    refs.lowHPSlider = lowHP.slider;
+    refs.lowHPValue = lowHP.valueEl;
+    col.appendChild(lowHP.row);
 
     content.appendChild(col);
 }

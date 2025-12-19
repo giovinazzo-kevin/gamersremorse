@@ -27,6 +27,8 @@ const Combat = {
         depthOfField: 0,
         hitstop: 1,
         hitflash: true,
+        hitFlash: 0.5,
+        lowHPOverlay: 1,
     },
 
     init() {
@@ -412,12 +414,13 @@ const Combat = {
         this.ctx.filter = 'none';
 
         // Hit flash - white overlay
-        if (HitFlash.getIntensity() > 0) {
-            this.ctx.fillStyle = `rgba(255, 255, 255, ${HitFlash.getIntensity() * 0.6})`;
+        const flashIntensity = HitFlash.getIntensity() * this.config.hitFlash;
+        if (flashIntensity > 0) {
+            this.ctx.fillStyle = `rgba(255, 255, 255, ${flashIntensity * 0.6})`;
             this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
         }
 
-        const hpOverlay = LowHPOverlay.getIntensity();
+        const hpOverlay = LowHPOverlay.getIntensity() * this.config.lowHPOverlay;
         if (hpOverlay > 0) {
             const gradient = this.ctx.createRadialGradient(
                 DepthOfField.eyeX, DepthOfField.eyeY, 0,
