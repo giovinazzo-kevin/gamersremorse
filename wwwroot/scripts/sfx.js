@@ -13,6 +13,7 @@ const sfx = {
         if (callback) setTimeout(callback, 500);
     },
     pow: () => Audio.play('pow', 'sfx'),
+    splash: () => Audio.play('splash', 'sfx'),
     tear: () => Audio.play('tear', 'sfx'),
     screenshot: () => Audio.play('screenshot', 'sfx'),
     shame: () => Audio.play('shame', 'sfx'),

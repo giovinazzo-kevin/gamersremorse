@@ -144,7 +144,7 @@ const Combat = {
             elapsed: 0,
             duration: 0.2,
         });
-        sfx.pow();
+        sfx.splash();
     },
 
     update(dt) {
