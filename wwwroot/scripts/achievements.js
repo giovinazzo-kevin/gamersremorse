@@ -84,7 +84,7 @@ const ACHIEVEMENTS = {
     opened_tracker: {
         id: 'opened_tracker',
         title: 'Constraint Breeds Creativity',
-        description: 'Find out why they call it "scope creep"',
+        description: 'Unearth ancient technology',
         icon: '🎹',
         hidden: false,
         check: (state) => state.openedTracker
@@ -115,7 +115,7 @@ const ACHIEVEMENTS = {
     },
     yasd: {
         id: 'yasd',
-        title: 'YASD',
+        title: 'YASD',  
         description: 'Learn it the hard way',
         icon: '💀',
         hidden: true,
