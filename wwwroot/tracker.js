@@ -1629,7 +1629,7 @@ const Tracker = (() => {
                     const val = parseInt(input);
                     if (!isNaN(val)) {
                         if (param === 'oct') currentOctave = Math.max(0, Math.min(7, val));
-                        else if (param === 'bpm') bpm = Math.max(30, Math.min(300, val));
+                        else if (param === 'bpm') bpm = Math.max(30, Math.min(1000, val));
                         else if (param === 'pat') currentPattern = Math.max(0, Math.min(sequence.length - 1, val));
                         else if (param === 'inst') {
                             currentInstrument = Math.max(0, Math.min(getAllInstruments().length - 1, val));
@@ -1750,15 +1750,15 @@ const Tracker = (() => {
             const playIcon = playing ? '⏸' : '▶';
             footer.innerHTML = `
                 <div class="tracker-controls">
+                    <button class="tracker-btn" id="tracker-save" title="Save to library">💾</button>
                     <button class="tracker-btn" id="tracker-play">${playIcon}</button>
                     <button class="tracker-btn" id="tracker-stop">■</button>
-                    <button class="tracker-btn" id="tracker-save" title="Save to library">💾</button>
                     <button class="tracker-btn ${loopMode ? 'active' : ''}" id="tracker-loop" title="Loop">⟳</button>
                 </div>
-                <span class="edit-indicator ${editMode ? 'active' : ''}">EDIT</span>
                 <span>Oct: ${currentOctave} [+/-]</span>
                 <span>Inst: ${currentInstrument !== null ? currentInstrument.toString(16).toUpperCase().padStart(2, '0') : '--'}</span>
                 ${hasSustained ? '<span class="sustain-indicator">♫ SUSTAIN</span>' : ''}
+                <span class="edit-indicator ${editMode ? 'active' : ''}">EDIT</span>
             `;
             footer.querySelector('#tracker-play').onclick = () => { if (playing) pause(); else play(); };
             footer.querySelector('#tracker-stop').onclick = () => stop();
