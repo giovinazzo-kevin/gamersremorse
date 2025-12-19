@@ -1078,7 +1078,7 @@ function setSleepEnabled(enabled) {
 }
 
 function setBlinkingEnabled(enabled) {
-    state.allowBlinking = enabled;
+    state.blinkEnabled = enabled;
 }
 
 function setCursorTrackingEnabled(enabled) {
@@ -1098,7 +1098,7 @@ function isSleepEnabled() {
 }
 
 function isBlinkingEnabled() {
-    return state.canBlink;
+    return state.blinkEnabled !== false;
 }
 
 function snooze() {

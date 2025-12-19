@@ -81,10 +81,7 @@ function buildEyeTab(content, refs) {
     refs.blinkCheckbox.type = 'checkbox';
     refs.blinkCheckbox.className = 'modal-checkbox';
     refs.blinkCheckbox.checked = isBlinkingEnabled();
-    refs.blinkCheckbox.onchange = () => {
-        if (refs.blinkCheckbox.checked) setBlinkingEnabled(true);
-        else disallowBlinking();
-    };
+    refs.blinkCheckbox.onchange = () => setBlinkingEnabled(refs.blinkCheckbox.checked);
     blinkRow.appendChild(refs.blinkCheckbox);
     blinkRow.appendChild(document.createTextNode(' Enable blinking'));
     leftCol.appendChild(blinkRow);
