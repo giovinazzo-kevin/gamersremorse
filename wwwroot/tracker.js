@@ -46,7 +46,7 @@ const Tracker = (() => {
     let currentChannel = 0;
     let currentColumn = 0; // 0=note, 1=inst, 2=vol, 3=fx
     let currentOctave = 4;
-    let currentInstrument = 0;
+    let currentInstrument = null; // null = master mode, number = specific instrument
     
     let bpm = DEFAULT_BPM;
     let speed = DEFAULT_SPEED;
@@ -633,7 +633,7 @@ const Tracker = (() => {
             // Show instruments
             for (let i = 0; i < instruments.length; i++) {
                 const inst = instruments[i];
-                const isSelected = i === currentInstrument;
+                const isSelected = currentInstrument !== null && i === currentInstrument;
                 const icon = inst.type === 'noise' ? '🎲' : inst.type === 'triangle' ? '🔺' : '■';
                 html += `<div class="library-item ${isSelected ? 'selected' : ''}" data-inst="${i}">
                     <span class="library-icon">${icon}</span>
@@ -788,12 +788,7 @@ const Tracker = (() => {
         }
         currentRow = 0;
         currentPattern = 0;
-        // Delay visualizer stop to catch release tails
-        if (heldNotes.size === 0) {
-            setTimeout(() => {
-                if (!playing && heldNotes.size === 0) stopVisualizerLoop();
-            }, 500);
-        }
+        // Visualizer loop will auto-stop when audio fades
         updateDisplay();
     }
     
@@ -949,7 +944,7 @@ const Tracker = (() => {
     }
     
     function previewNote(note, octave) {
-        const cell = { note, octave, inst: currentInstrument, vol: 15 };
+        const cell = { note, octave, inst: currentInstrument ?? 0, vol: 15 };
         playNote(CHANNELS[currentChannel], cell);
     }
     
@@ -962,7 +957,7 @@ const Tracker = (() => {
         const freq = noteToFreq(note, octave);
         if (!freq) return;
         
-        const inst = instruments[currentInstrument] || instruments[0];
+        const inst = instruments[currentInstrument ?? 0] || instruments[0];
         const volume = 0.15; // Full volume
         const now = audioCtx.currentTime;
         
@@ -1027,13 +1022,7 @@ const Tracker = (() => {
         if (held.noise) held.noise.stop(now + release + 0.05);
         
         heldNotes.delete(key);
-        
-        // Stop visualizer if no notes held and not playing
-        if (heldNotes.size === 0 && !playing) {
-            setTimeout(() => {
-                if (heldNotes.size === 0 && !playing) stopVisualizerLoop();
-            }, (release + 0.1) * 1000);
-        }
+        // Visualizer loop will auto-stop when audio fades
     }
     
     // Release all held notes
@@ -1065,7 +1054,7 @@ const Tracker = (() => {
                     const ch = CHANNELS[c];
                     row[ch].note = note;
                     row[ch].octave = octave;
-                    row[ch].inst = currentInstrument;
+                    row[ch].inst = currentInstrument ?? 0;
                     if (row[ch].vol === null) row[ch].vol = 15;
                 }
             }
@@ -1079,7 +1068,7 @@ const Tracker = (() => {
         const ch = CHANNELS[currentChannel];
         row[ch].note = note;
         row[ch].octave = octave;
-        row[ch].inst = currentInstrument;
+        row[ch].inst = currentInstrument ?? 0;
         if (row[ch].vol === null) row[ch].vol = 15;
         previewNote(note, octave);
         currentRow = (currentRow + 1) % pattern.length;
@@ -1308,7 +1297,7 @@ const Tracker = (() => {
                     <span class="tracker-param" data-param="oct" title="Click to change, scroll to adjust">Oct: <span id="tracker-octave">${currentOctave}</span></span>
                     <span class="tracker-param" data-param="bpm" title="Click to change, scroll to adjust">BPM: <span id="tracker-bpm">${bpm}</span></span>
                     <span class="tracker-param" data-param="pat" title="Click to change, scroll to adjust">Pat: <span id="tracker-pattern">${currentPattern}</span></span>
-                    <span class="tracker-param" data-param="inst" title="Click to change, scroll to adjust">Inst: <span id="tracker-inst">${currentInstrument.toString(16).toUpperCase().padStart(2, '0')}</span></span>
+                    <span class="tracker-param" data-param="inst" title="Click to change, scroll to adjust">Inst: <span id="tracker-inst">${currentInstrument !== null ? currentInstrument.toString(16).toUpperCase().padStart(2, '0') : '--'}</span></span>
                 </div>
                 <button class="tracker-help-btn" id="tracker-help" title="Keyboard shortcuts">?</button>
                 <button class="tracker-help-btn" id="tracker-maximize" title="Maximize">⛶</button>
@@ -1395,7 +1384,7 @@ const Tracker = (() => {
                 </div>
                 <span class="edit-indicator ${editMode ? 'active' : ''}">EDIT</span>
                 <span>Oct: ${currentOctave} [+/-]</span>
-                <span>Inst: ${currentInstrument.toString(16).toUpperCase().padStart(2, '0')}</span>
+                <span>Inst: ${currentInstrument !== null ? currentInstrument.toString(16).toUpperCase().padStart(2, '0') : '--'}</span>
             </div>
         `;
         
@@ -1419,14 +1408,15 @@ const Tracker = (() => {
                 endRow: row, endCh: channel, endCol: column
             };
             
-            // If clicking a cell with an instrument, select that instrument
+            // Select instrument from clicked cell (null if cell has no instrument)
             const pattern = patterns[sequence[currentPattern]];
             if (pattern) {
                 const cellData = pattern.rows[row]?.[CHANNELS[channel]];
-                if (cellData?.inst !== null && cellData?.inst !== undefined) {
-                    currentInstrument = cellData.inst;
-                    updateEditorPanel();
-                }
+                currentInstrument = (cellData?.inst !== null && cellData?.inst !== undefined) 
+                    ? cellData.inst 
+                    : null;
+                updateEditorPanel();
+                updateLibraryDisplay();
             }
             
             updateDisplay();
@@ -1610,7 +1600,7 @@ const Tracker = (() => {
         if (octEl) octEl.textContent = currentOctave;
         if (bpmEl) bpmEl.textContent = bpm;
         if (patEl) patEl.textContent = currentPattern;
-        if (instEl) instEl.textContent = currentInstrument.toString(16).toUpperCase().padStart(2, '0');
+        if (instEl) instEl.textContent = currentInstrument !== null ? currentInstrument.toString(16).toUpperCase().padStart(2, '0') : '--';
         
         // Update channel headers
         trackerElement.querySelectorAll('.tracker-channel-header').forEach((el, i) => {
@@ -1631,7 +1621,7 @@ const Tracker = (() => {
                 </div>
                 <span class="edit-indicator ${editMode ? 'active' : ''}">EDIT</span>
                 <span>Oct: ${currentOctave} [+/-]</span>
-                <span>Inst: ${currentInstrument.toString(16).toUpperCase().padStart(2, '0')}</span>
+                <span>Inst: ${currentInstrument !== null ? currentInstrument.toString(16).toUpperCase().padStart(2, '0') : '--'}</span>
                 ${hasSustained ? '<span class="sustain-indicator">♫ SUSTAIN</span>' : ''}
             `;
             footer.querySelector('#tracker-play').onclick = () => { if (playing) pause(); else play(); };
@@ -1643,6 +1633,29 @@ const Tracker = (() => {
     
     function updateEditorPanel() {
         if (!trackerElement) return;
+        
+        const editorSection = trackerElement.querySelector('.tracker-editor');
+        
+        // Master mode - dim instrument controls
+        if (currentInstrument === null) {
+            if (editorSection) {
+                editorSection.querySelectorAll('.editor-section').forEach((section, i) => {
+                    // Keep oscilloscope and spectrogram visible, dim instrument/envelope
+                    if (i >= 2) section.style.opacity = '0.3';
+                });
+            }
+            drawStaticOscilloscope();
+            drawStaticSpectrogram();
+            return;
+        }
+        
+        // Restore opacity when instrument selected
+        if (editorSection) {
+            editorSection.querySelectorAll('.editor-section').forEach(section => {
+                section.style.opacity = '1';
+            });
+        }
+        
         const inst = instruments[currentInstrument];
         if (!inst) return;
         
@@ -1676,6 +1689,7 @@ const Tracker = (() => {
     }
     
     function updateEditorValueLabels() {
+        if (currentInstrument === null) return;
         const inst = instruments[currentInstrument];
         if (!inst) return;
         
@@ -1696,8 +1710,6 @@ const Tracker = (() => {
         const canvas = trackerElement?.querySelector('#tracker-oscilloscope');
         if (!canvas) return;
         const ctx = canvas.getContext('2d');
-        const inst = instruments[currentInstrument];
-        if (!inst) return;
         
         const w = canvas.width;
         const h = canvas.height;
@@ -1706,6 +1718,24 @@ const Tracker = (() => {
         // Clear
         ctx.fillStyle = '#0a0a15';
         ctx.fillRect(0, 0, w, h);
+        
+        // Master mode - show flat line with label
+        if (currentInstrument === null) {
+            ctx.strokeStyle = '#333';
+            ctx.beginPath();
+            ctx.moveTo(0, midY);
+            ctx.lineTo(w, midY);
+            ctx.stroke();
+            
+            ctx.fillStyle = '#555';
+            ctx.font = '12px monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText('MASTER', w / 2, midY - 10);
+            return;
+        }
+        
+        const inst = instruments[currentInstrument];
+        if (!inst) return;
         
         // Draw center line
         ctx.strokeStyle = '#222';
@@ -1777,6 +1807,20 @@ const Tracker = (() => {
     function visualizerLoop() {
         drawLiveOscilloscope();
         drawLiveSpectrogram();
+        
+        // Check if audio has faded (no playback, no held notes)
+        if (!playing && heldNotes.size === 0) {
+            const dataArray = new Uint8Array(masterAnalyser.frequencyBinCount);
+            masterAnalyser.getByteFrequencyData(dataArray);
+            const sum = dataArray.reduce((a, b) => a + b, 0);
+            
+            // If essentially silent, stop the loop
+            if (sum < 50) {
+                stopVisualizerLoop();
+                return;
+            }
+        }
+        
         animationFrameId = requestAnimationFrame(visualizerLoop);
     }
     
@@ -1785,14 +1829,19 @@ const Tracker = (() => {
         if (!canvas || !masterAnalyser) return;
         const ctx = canvas.getContext('2d');
         
+        // Use instrument analyser when instrument selected and playing held notes, else master
+        const analyser = (currentInstrument !== null && heldNotes.size > 0) 
+            ? instrumentAnalyser 
+            : masterAnalyser;
+        
         const w = canvas.width;
         const h = canvas.height;
         const midY = h / 2;
         
-        // Get waveform data from master (all audio)
-        const bufferLength = masterAnalyser.frequencyBinCount;
+        // Get waveform data
+        const bufferLength = analyser.frequencyBinCount;
         const dataArray = new Uint8Array(bufferLength);
-        masterAnalyser.getByteTimeDomainData(dataArray);
+        analyser.getByteTimeDomainData(dataArray);
         
         // Clear
         ctx.fillStyle = '#0a0a15';
@@ -1851,13 +1900,18 @@ const Tracker = (() => {
         if (!canvas || !masterAnalyser) return;
         const ctx = canvas.getContext('2d');
         
+        // Use instrument analyser when instrument selected and playing held notes, else master
+        const analyser = (currentInstrument !== null && heldNotes.size > 0) 
+            ? instrumentAnalyser 
+            : masterAnalyser;
+        
         const w = canvas.width;
         const h = canvas.height;
         
         // Get frequency data
-        const bufferLength = masterAnalyser.frequencyBinCount;
+        const bufferLength = analyser.frequencyBinCount;
         const dataArray = new Uint8Array(bufferLength);
-        masterAnalyser.getByteFrequencyData(dataArray);
+        analyser.getByteFrequencyData(dataArray);
         
         // Clear
         ctx.fillStyle = '#0a0a15';
@@ -1885,7 +1939,7 @@ const Tracker = (() => {
         const nameEl = trackerElement?.querySelector('#editor-inst-name');
         if (nameEl) {
             nameEl.addEventListener('input', (e) => {
-                instruments[currentInstrument].name = e.target.value;
+                if (currentInstrument !== null) instruments[currentInstrument].name = e.target.value;
                 updateLibraryDisplay();
             });
         }
@@ -1894,6 +1948,7 @@ const Tracker = (() => {
         const typeEl = trackerElement?.querySelector('#editor-inst-type');
         if (typeEl) {
             typeEl.addEventListener('change', (e) => {
+                if (currentInstrument === null) return;
                 instruments[currentInstrument].type = e.target.value;
                 const dutyRow = trackerElement?.querySelector('#editor-duty-row');
                 if (dutyRow) dutyRow.style.display = e.target.value === 'pulse' ? 'flex' : 'none';
@@ -1906,6 +1961,7 @@ const Tracker = (() => {
         const dutyEl = trackerElement?.querySelector('#editor-inst-duty');
         if (dutyEl) {
             dutyEl.addEventListener('input', (e) => {
+                if (currentInstrument === null) return;
                 instruments[currentInstrument].duty = parseFloat(e.target.value);
                 updateEditorValueLabels();
                 drawStaticOscilloscope();
@@ -1916,6 +1972,7 @@ const Tracker = (() => {
         const attackEl = trackerElement?.querySelector('#editor-inst-attack');
         if (attackEl) {
             attackEl.addEventListener('input', (e) => {
+                if (currentInstrument === null) return;
                 instruments[currentInstrument].attack = parseFloat(e.target.value);
                 updateEditorValueLabels();
             });
@@ -1924,6 +1981,7 @@ const Tracker = (() => {
         const decayEl = trackerElement?.querySelector('#editor-inst-decay');
         if (decayEl) {
             decayEl.addEventListener('input', (e) => {
+                if (currentInstrument === null) return;
                 instruments[currentInstrument].decay = parseFloat(e.target.value);
                 updateEditorValueLabels();
             });
@@ -1932,6 +1990,7 @@ const Tracker = (() => {
         const sustainEl = trackerElement?.querySelector('#editor-inst-sustain');
         if (sustainEl) {
             sustainEl.addEventListener('input', (e) => {
+                if (currentInstrument === null) return;
                 instruments[currentInstrument].sustain = parseFloat(e.target.value);
                 updateEditorValueLabels();
             });
@@ -1940,6 +1999,7 @@ const Tracker = (() => {
         const releaseEl = trackerElement?.querySelector('#editor-inst-release');
         if (releaseEl) {
             releaseEl.addEventListener('input', (e) => {
+                if (currentInstrument === null) return;
                 instruments[currentInstrument].release = parseFloat(e.target.value);
                 updateEditorValueLabels();
             });
