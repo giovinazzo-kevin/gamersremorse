@@ -19,7 +19,7 @@ const ACHIEVEMENTS = {
     },
     screenshot: {
         id: 'screenshot',
-        title: 'You Have To Install CS:S',
+        title: 'Install CS:S',
         description: 'Forget your textures at home',
         icon: '📸',
         hidden: false,
