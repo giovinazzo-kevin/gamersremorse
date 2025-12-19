@@ -19,7 +19,7 @@ const ACHIEVEMENTS = {
     },
     screenshot: {
         id: 'screenshot',
-        title: 'Install CS:S',
+        title: 'Cascading Style: Sheets',
         description: 'Forget your textures at home',
         icon: '📸',
         hidden: false,
