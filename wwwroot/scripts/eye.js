@@ -9,12 +9,12 @@
  */
 
 window.svg = document.getElementById('eye');
-const frameInterval = 1000 / 60;
 let t = 0;
 let lastFrame = 0;
 let numBlinks = 0;
 
 const state = {
+    frameInterval: 1000 / 60,
     // Health (source of truth)
     health: 12,          // current health (in half-hearts)
     maxHealth: 12,       // max health
@@ -1120,7 +1120,7 @@ function tick(timestamp) {
         snooze();
     }
 
-    if (dt >= frameInterval / 1000) {
+    if (dt >= state.frameInterval / 1000) {
         updateImpulses(dt);
         updateExpression(dt);
         updateBlink(dt);
@@ -1531,6 +1531,7 @@ const Eye = {
             state.health = data.health ?? 12;
             state.maxHealth = data.maxHealth ?? 12;
             state.deathCount = data.deathCount ?? 0;
+            state.frameInterval = data.frameInterval ?? 1000 / 60;
             
             // Don't start dead
             if (state.health <= 0) state.health = state.maxHealth;

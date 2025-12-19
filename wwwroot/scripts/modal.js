@@ -410,6 +410,34 @@ function buildGraphicsTab(content, refs) {
     dofRow.appendChild(refs.dofSlider);
     dofRow.appendChild(refs.dofValue);
     col.appendChild(dofRow);
+    // Hitstop slider
+    const hitstopRow = document.createElement('div');
+    hitstopRow.className = 'modal-slider-row';
+
+    const hitstopLabel = document.createElement('span');
+    hitstopLabel.textContent = 'Hitstop';
+    hitstopRow.appendChild(hitstopLabel);
+
+    refs.hitstopSlider = document.createElement('input');
+    refs.hitstopSlider.type = 'range';
+    refs.hitstopSlider.className = 'modal-slider';
+    refs.hitstopSlider.min = 0;
+    refs.hitstopSlider.max = 200;
+    refs.hitstopSlider.value = (Combat.config.hitstop ?? 1) * 100;
+
+    refs.hitstopValue = document.createElement('span');
+    refs.hitstopValue.className = 'modal-slider-value';
+    refs.hitstopValue.textContent = refs.hitstopSlider.value + '%';
+
+    refs.hitstopSlider.oninput = () => {
+        refs.hitstopValue.textContent = refs.hitstopSlider.value + '%';
+        Combat.config.hitstop = refs.hitstopSlider.value / 100;
+        Combat.saveConfig();
+    };
+
+    hitstopRow.appendChild(refs.hitstopSlider);
+    hitstopRow.appendChild(refs.hitstopValue);
+    col.appendChild(hitstopRow);
 
     content.appendChild(col);
 }

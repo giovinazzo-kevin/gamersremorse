@@ -7,7 +7,6 @@
  * - Eye.js calls update(dt) and render() in the shame loop
  */
 
-
 const Combat = {
     canvas: null,
     ctx: null,
@@ -16,14 +15,18 @@ const Combat = {
     lastFire: 0,
     splashes: [],
     enemies: [],
-    enemyImages: {}, // cache loaded images
+    enemyImages: {},
+    hitstopFrames: 0,
+    flashingEnemies: new Set(),
 
     config: {
         tearStyle: 'fancy',
-        shadows: 'high',  // 'off' | 'low' | 'medium' | 'high'
+        shadows: 'high',
         splash: true,
-        screenShake: 1,  // 0 to 1
+        screenShake: 1,
         depthOfField: 0,
+        hitstop: 1,
+        hitflash: true,
     },
 
     init() {
@@ -63,7 +66,6 @@ const Combat = {
         const cx = rect.left + rect.width / 2;
         const cy = rect.top + rect.height / 2;
 
-        // Offset by iris position (state.irisX/Y are -1 to 1)
         const offsetX = state.irisX * state.maxIrisOffsetX * rect.width;
         const offsetY = state.irisY * state.maxIrisOffsetY * rect.height;
 
@@ -73,20 +75,14 @@ const Combat = {
     spawnEnemy(appId, headerImage) {
         if (!getAchievementFlag('tookDumbDamage')) return null;
 
-        // Spawn from bottom-right quadrant edges only
-        // Either right edge (bottom half) or bottom edge (right half)
-
         const w = window.innerWidth;
         const h = window.innerHeight;
 
         let x, y;
-
         if (Math.random() < 0.5) {
-            // Right edge, bottom half
             x = w + 230;
             y = h * 0.5 + Math.random() * h * 0.5;
         } else {
-            // Bottom edge, right half
             x = w * 0.5 + Math.random() * w * 0.5;
             y = h + 107;
         }
@@ -94,7 +90,6 @@ const Combat = {
         const enemy = Enemy(appId, headerImage, x, y);
         this.enemies.push(enemy);
 
-        // Preload image
         if (!this.enemyImages[appId]) {
             const img = new Image();
             img.src = headerImage;
@@ -112,8 +107,16 @@ const Combat = {
         state.lastShot = Date.now();
     },
 
+    hitstop(frames, enemy = null) {
+        const scaled = frames * this.config.hitstop;
+        this.hitstopFrames = Math.max(this.hitstopFrames, scaled);
+        if (enemy && this.config.hitflash) {
+            this.flashingEnemies.add(enemy);
+        }
+    },
+
     get fireRate() {
-        const base = 1; // shots per second
+        const base = 1;
         return base * (this.frameEffects.tearRate || 1);
     },
 
@@ -144,12 +147,21 @@ const Combat = {
 
     update(dt) {
         this.frameEffects = Items.getMergedEffects();
+
         if (this.holding) {
             state.attention = 1;
         }
 
-        // Fire while holding
-        if (this.holding && this.target) {
+        const frozen = this.hitstopFrames > 0;
+
+        if (frozen) {
+            this.hitstopFrames -= dt * 1000 / state.frameInterval;
+            if (this.hitstopFrames <= 0) {
+                this.flashingEnemies.clear();
+            }
+        }
+
+        if (!frozen && this.holding && this.target) {
             const now = Date.now();
             if (now - this.lastFire >= this.fireInterval) {
                 this.fire(this.target.x, this.target.y);
@@ -157,82 +169,107 @@ const Combat = {
             }
         }
 
-        // Update tears
-        for (const t of this.tears) {
-            t.elapsed += dt;
-            if (t.done && !t.splashed) {
-                t.splashed = true;
-                this.splash(t.end, t.size, t.color);
-            }
-        }
-        this.tears = this.tears.filter(t => !t.done);
-
-        // Update splashes
-        for (const s of this.splashes) {
-            s.elapsed += dt;
-        }
-        this.splashes = this.splashes.filter(s => s.elapsed < s.duration);
-
-        // Update enemies
-        for (const e of this.enemies) {
-            if (this.tutorialTriggered && !getAchievementFlag('combatUnlocked')) continue;
-
-            e.x += e.direction.x * e.speed * dt;
-            e.y += e.direction.y * e.speed * dt;
-
-            if (!getAchievementFlag('combatUnlocked')) {
-                const pupil = this.getPupilPosition();
-                const dist = Math.sqrt((pos.x - pupil.x) ** 2 + (pos.y - pupil.y) ** 2);
-
-                if (dist < 1200 && !this.tutorialTriggered) {
-                    this.tutorialTriggered = true;
-                    showObjectivePopup();
+        if (!frozen) {
+            for (const t of this.tears) {
+                t.elapsed += dt;
+                if (t.done && !t.splashed) {
+                    t.splashed = true;
+                    this.splash(t.end, t.size, t.color);
                 }
             }
+            this.tears = this.tears.filter(t => !t.done);
+        }
 
-            if (e.reachedEye) {
-                Eye.damage(2, 'fall', 'enemy');
-                e.health = 0; // remove after hit
+        if (!frozen) {
+            for (const s of this.splashes) {
+                s.elapsed += dt;
+            }
+            this.splashes = this.splashes.filter(s => s.elapsed < s.duration);
+        }
+
+        for (const e of this.enemies) {
+            if (e.knockbackVX || e.knockbackVY) {
+                e.x += e.knockbackVX * dt;
+                e.y += e.knockbackVY * dt;
+                e.knockbackVX *= 0.85;
+                e.knockbackVY *= 0.85;
+                if (Math.abs(e.knockbackVX) < 1) e.knockbackVX = 0;
+                if (Math.abs(e.knockbackVY) < 1) e.knockbackVY = 0;
+            }
+
+            if (!frozen) {
+                if (this.tutorialTriggered && !getAchievementFlag('combatUnlocked')) continue;
+
+                e.x += e.direction.x * e.speed * dt;
+                e.y += e.direction.y * e.speed * dt;
+
+                if (!getAchievementFlag('combatUnlocked')) {
+                    const pupil = this.getPupilPosition();
+                    const dist = Math.sqrt((e.x - pupil.x) ** 2 + (e.y - pupil.y) ** 2);
+
+                    if (dist < 1200 && !this.tutorialTriggered) {
+                        this.tutorialTriggered = true;
+                        showObjectivePopup();
+                    }
+                }
+
+                if (e.reachedEye) {
+                    Eye.damage(2, 'fall', 'enemy');
+                    e.health = 0;
+                }
             }
         }
 
-        this.enemies = this.enemies.filter(e => !e.dead);
+        if (!frozen) {
+            this.enemies = this.enemies.filter(e => !e.dead);
+        }
 
-        // Check tear-enemy collisions
-        for (const t of this.tears) {
-            if (t.done) continue;
-            const pos = t.position;
+        if (!frozen) {
+            for (const t of this.tears) {
+                if (t.done) continue;
+                const pos = t.position;
 
-            for (const e of this.enemies) {
-                const hit = pos.x > e.hitbox.left &&
-                    pos.x < e.hitbox.right &&
-                    pos.y > e.hitbox.top &&
-                    pos.y < e.hitbox.bottom;
+                for (const e of this.enemies) {
+                    const hit = pos.x > e.hitbox.left &&
+                        pos.x < e.hitbox.right &&
+                        pos.y > e.hitbox.top &&
+                        pos.y < e.hitbox.bottom;
 
-                if (hit) {
-                    e.health -= t.damage;
-                    t.elapsed = t.duration; // kill the tear
-                    this.splash(pos, t.size, t.color); // splash on hit
+                    if (hit) {
+                        e.health -= t.damage;
+                        t.elapsed = t.duration;
 
-                    if (e.dead) {
-                        // TODO: drop loot, play sound, explosion
+                        this.splash(pos, t.size, t.color);
+                        ScreenShake.shake(t.damage * 4);
+                        this.hitstop(1, e);
+
+                        const dx = t.end.x - t.start.x;
+                        const dy = t.end.y - t.start.y;
+                        const dist = Math.sqrt(dx * dx + dy * dy);
+                        const dirX = dx / dist;
+                        const dirY = dy / dist;
+
+                        e.x += dirX * 10;
+                        e.y += dirY * 10;
+
+                        e.knockbackVX = dirX * 150;
+                        e.knockbackVY = dirY * 150;
+
+                        if (e.dead) {
+                            ScreenShake.shake(t.damage * 40);
+                            this.hitstop(4);
+                        }
+                        break;
                     }
-                    break;
                 }
             }
         }
     },
 
-
     render() {
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
-        const pupil = this.getPupilPosition();
-        const maxDist = Math.max(window.innerWidth, window.innerHeight) * 0.5;
-        const dofIntensity = typeof DepthOfField !== 'undefined' ? DepthOfField.intensity : 0;
-
-
-        // Shadows (if enabled)
+        // Shadows
         if (this.config.shadows !== 'off') {
             for (const t of this.tears) {
                 const pos = t.position;
@@ -248,11 +285,9 @@ const Combat = {
 
                 if (this.config.shadows === 'low') {
                     this.ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-                    this.ctx.fill();
                 } else if (this.config.shadows === 'medium') {
                     this.ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-                    this.ctx.fill();
-                } else if (this.config.shadows === 'high') {
+                } else {
                     const gradient = this.ctx.createRadialGradient(
                         pos.x + shadowOffset, pos.y + shadowOffset, 0,
                         pos.x + shadowOffset, pos.y + shadowOffset, size
@@ -261,8 +296,8 @@ const Combat = {
                     gradient.addColorStop(0.6, 'rgba(0, 0, 0, 0.2)');
                     gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
                     this.ctx.fillStyle = gradient;
-                    this.ctx.fill();
                 }
+                this.ctx.fill();
             }
         }
 
@@ -277,10 +312,7 @@ const Combat = {
             this.ctx.filter = blur > 0.5 ? `blur(${blur}px)` : 'none';
 
             if (this.config.tearStyle === 'fancy') {
-                const gradient = this.ctx.createRadialGradient(
-                    pos.x, pos.y, 0,
-                    pos.x, pos.y, size
-                );
+                const gradient = this.ctx.createRadialGradient(pos.x, pos.y, 0, pos.x, pos.y, size);
                 gradient.addColorStop(0, t.color + '00');
                 gradient.addColorStop(0.6, t.color + '88');
                 gradient.addColorStop(1, t.color + 'cc');
@@ -290,20 +322,17 @@ const Combat = {
                 this.ctx.fillStyle = gradient;
                 this.ctx.fill();
 
-                const highlightX = pos.x - size * 0.3;
-                const highlightY = pos.y - size * 0.3;
-                const highlightSize = size * 0.25;
+                const hlX = pos.x - size * 0.3;
+                const hlY = pos.y - size * 0.3;
+                const hlSize = size * 0.25;
 
-                const highlightGradient = this.ctx.createRadialGradient(
-                    highlightX, highlightY, 0,
-                    highlightX, highlightY, highlightSize
-                );
-                highlightGradient.addColorStop(0, 'rgba(255, 255, 255, 0.8)');
-                highlightGradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+                const hlGradient = this.ctx.createRadialGradient(hlX, hlY, 0, hlX, hlY, hlSize);
+                hlGradient.addColorStop(0, 'rgba(255, 255, 255, 0.8)');
+                hlGradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
 
                 this.ctx.beginPath();
-                this.ctx.arc(highlightX, highlightY, highlightSize, 0, Math.PI * 2);
-                this.ctx.fillStyle = highlightGradient;
+                this.ctx.arc(hlX, hlY, hlSize, 0, Math.PI * 2);
+                this.ctx.fillStyle = hlGradient;
                 this.ctx.fill();
 
                 this.ctx.beginPath();
@@ -334,7 +363,7 @@ const Combat = {
 
         this.ctx.filter = 'none';
 
-        // Splashes (if enabled)
+        // Splashes
         if (this.config.splash) {
             for (const s of this.splashes) {
                 const progress = s.elapsed / s.duration;
@@ -344,10 +373,7 @@ const Combat = {
                 const blur = DepthOfField.getBlur(s.x, s.y);
                 this.ctx.filter = blur > 0.5 ? `blur(${blur}px)` : 'none';
 
-                const gradient = this.ctx.createRadialGradient(
-                    s.x, s.y, 0,
-                    s.x, s.y, radius
-                );
+                const gradient = this.ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, radius);
                 gradient.addColorStop(0, s.color + '00');
                 gradient.addColorStop(0.6, s.color + Math.floor(alpha * 100).toString(16).padStart(2, '0'));
                 gradient.addColorStop(1, s.color + Math.floor(alpha * 200).toString(16).padStart(2, '0'));
@@ -364,18 +390,22 @@ const Combat = {
         // Enemies
         for (const e of this.enemies) {
             const img = this.enemyImages[e.appId];
-            if (img && img.complete) {
-                const blur = DepthOfField.getBlur(e.x, e.y);
-                this.ctx.filter = blur > 0.5 ? `blur(${blur}px)` : 'none';
+            if (!img || !img.complete) continue;
 
-                this.ctx.drawImage(
-                    img,
-                    e.x - e.width / 2,
-                    e.y - e.height / 2,
-                    e.width,
-                    e.height
-                );
-            }
+            // Flash white if in hitstop
+            let filter = '';
+            const blur = DepthOfField.getBlur(e.x, e.y);
+            if (blur > 0.5) filter += `blur(${blur}px) `;
+            if (this.flashingEnemies.has(e)) filter += 'brightness(3) ';
+            this.ctx.filter = filter || 'none';
+
+            this.ctx.drawImage(
+                img,
+                e.x - e.width / 2,
+                e.y - e.height / 2,
+                e.width,
+                e.height
+            );
         }
 
         this.ctx.filter = 'none';
@@ -393,59 +423,30 @@ const Tear = (start, end) => {
         distance,
         elapsed: 0,
 
-        get effects() {
-            return Combat.frameEffects;
-        },
+        get effects() { return Combat.frameEffects; },
+        get speed() { return 400 * (this.effects.tearRate || 1); },
+        get duration() { return this.distance / this.speed; },
+        get progress() { return Math.min(1, this.elapsed / this.duration); },
+        get done() { return this.progress >= 1; },
 
-        get speed() {
-            const base = 400; // pixels per second
-            return base * (this.effects.tearRate || 1);
-        },
-
-        get duration() {
-            return this.distance / this.speed;
-        },
-
-        get progress() {
-            return Math.min(1, this.elapsed / this.duration);
-        },
-
-        get done() {
-            return this.progress >= 1;
-        },
         get color() {
             if (this.effects.demonic) return '#ff4444';
             if (this.effects.bloody) return '#aa0000';
             return '#88ccff';
         },
 
-        get arcHeight() {
-            return this.distance * 0.2;
-        },
-
         get position() {
             const t = this.progress;
-            const x = this.start.x + (this.end.x - this.start.x) * t;
-            const y = this.start.y + (this.end.y - this.start.y) * t;
-            return { x, y };
+            return {
+                x: this.start.x + (this.end.x - this.start.x) * t,
+                y: this.start.y + (this.end.y - this.start.y) * t,
+            };
         },
 
         get size() {
             const base = this.effects.giant ? 16 : 8;
-            const arc = Math.sin(this.progress * Math.PI); // 0 -> 1 -> 0
-            return base * (1 + arc * 0.5); // grows 50% at midpoint
-        },
-
-        get piercing() {
-            return this.effects.piercing || false;
-        },
-
-        get homing() {
-            return this.effects.homing || false;
-        },
-
-        get bouncing() {
-            return this.effects.bouncing || false;
+            const arc = Math.sin(this.progress * Math.PI);
+            return base * (1 + arc * 0.5);
         },
 
         get damage() {
@@ -454,23 +455,25 @@ const Tear = (start, end) => {
             if (this.effects.demonic) d *= 1.5;
             return d;
         },
+
+        get piercing() { return this.effects.piercing || false; },
+        get homing() { return this.effects.homing || false; },
+        get bouncing() { return this.effects.bouncing || false; },
     };
 };
-
 
 const Enemy = (appId, headerImage, x, y) => ({
     appId,
     headerImage,
     x,
     y,
-    width: 230,  // half size
+    width: 230,
     height: 107,
-    speed: 50,   // pixels per second
-    health: 10,
-
-    get target() {
-        return Combat.getPupilPosition();
-    },
+    speed: 50,
+    health: 2,
+    knockbackX: 0,
+    knockbackY: 0,
+    get target() { return Combat.getPupilPosition(); },
 
     get direction() {
         const dx = this.target.x - this.x;
@@ -488,23 +491,19 @@ const Enemy = (appId, headerImage, x, y) => ({
         };
     },
 
-    get dead() {
-        return this.health <= 0;
-    },
+    get dead() { return this.health <= 0; },
 
     get reachedEye() {
         const pupil = this.target;
         const dist = Math.sqrt((this.x - pupil.x) ** 2 + (this.y - pupil.y) ** 2);
-        return dist < 50; // contact range
+        return dist < 50;
     },
 });
 
-// Click handler - fire on non-interactive clicks
 document.addEventListener('mousedown', (e) => {
     if (e.button !== 0) return;
     if (e.target.closest('button, input, a, select, .modal, .options-modal, #eye')) return;
     if (!Eye.awake || Eye.dead) return;
-    // Gate: need to unlock combat first
     if (!getAchievementFlag('combatUnlocked')) return;
 
     Combat.target = { x: e.clientX, y: e.clientY };
