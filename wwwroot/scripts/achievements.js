@@ -1,7 +1,6 @@
 /* Achievements System - Steam-style unlocks */
 
 const ACHIEVEMENTS = {
-    // === BASIC PROGRESSION ===
     first_analysis: {
         id: 'first_analysis',
         title: 'I',
@@ -42,7 +41,6 @@ const ACHIEVEMENTS = {
         hidden: false,
         check: (state) => state.paidRespects
     },
-    // === CUSTOMIZATION ===
     dark_mode: {
         id: 'dark_mode',
         title: 'Big Apple, 3AM',
@@ -123,11 +121,11 @@ const ACHIEVEMENTS = {
         hidden: true,
         check: (state) => state.yasd
     },
-    // === SECRET ACHIEVEMENTS ===
+    // TODO: Stoatal Misplay
     gaming_journalist: {
         id: 'gaming_journalist',
         title: 'Gaming Journalist Disclaimer',
-        description: 'Press left click to shoot',
+        description: 'Figure it out, you\'re on your own now',
         icon: '🎮',
         hidden: true,
         check: (state) => state.gamingJournalist,
@@ -145,7 +143,7 @@ const ACHIEVEMENTS = {
         icon: '💥',
         title: 'POW!',
         description: 'Become an earthbender',
-        hidden: true,
+        hidden: false,
         check: (state) => state.maxScreenShake
     },
     coomer: {
@@ -159,7 +157,7 @@ const ACHIEVEMENTS = {
     sv_cheats: {
         id: 'sv_cheats',
         title: 'Developer Mode',
-        description: 'Enable sv_cheats',
+        description: 'Know what you\'re doing',
         icon: '🔧',
         hidden: true,
         check: (state) => state.svCheatsEnabled
@@ -208,7 +206,7 @@ const ACHIEVEMENTS = {
     // === META ===
     check_early: {
         id: 'check_early',
-        title: 'Checking Early',
+        title: 'Early Access',
         description: 'View achievements with none unlocked',
         icon: '👀',
         hidden: true,
@@ -216,8 +214,8 @@ const ACHIEVEMENTS = {
     },
     completionist: {
         id: 'completionist',
-        title: 'Completionist',
-        description: 'Unlock all non-secret achievements',
+        title: 'Platinum God',
+        description: 'Unlock all achievements',
         icon: '🏆',
         hidden: false,
         check: (state) => {
@@ -227,7 +225,7 @@ const ACHIEVEMENTS = {
     },
     true_completionist: {
         id: 'true_completionist',
-        title: 'True Completionist',
+        title: 'Dead God',
         description: 'Unlock ALL achievements',
         icon: '👑',
         hidden: true,
