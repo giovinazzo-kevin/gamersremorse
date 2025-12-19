@@ -86,10 +86,10 @@ const ACHIEVEMENTS = {
     kill_eye: {
         id: 'kill_eye',
         title: 'Dumb Damage',
-        description: 'Damage the eye',
+        description: 'Why would you do that',
         icon: '💢',
         hidden: false,
-        check: (state) => state.tookDamage
+        check: (state) => state.tookDumbDamage
     },
     yasd: {
         id: 'yasd',

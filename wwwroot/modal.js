@@ -896,6 +896,14 @@ const commands = {
             }
         }
     },
+    tracker: {
+        description: 'Open the music tracker',
+        hidden: true,
+        execute: () => {
+            openTracker();
+            consolePrint('Tracker opened. Press Escape to close.', 'success');
+        }
+    },
     clear_items: {
         description: 'Clear all item effects',
         hidden: true,
@@ -1051,6 +1059,57 @@ function executeCommand(cmd) {
     const command = commands[commandName];
     if (command) command.execute(args);
     else consolePrint('Unknown command: ' + commandName);
+}
+
+// === TRACKER ===
+let trackerVisible = false;
+let trackerModal = null;
+
+function openTracker() {
+    if (trackerModal) {
+        trackerModal.style.display = 'block';
+        trackerVisible = true;
+        return;
+    }
+    
+    // Create modal overlay
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.id = 'tracker-overlay';
+    overlay.onclick = (e) => { if (e.target === overlay) closeTracker(); };
+    
+    // Create tracker container
+    const container = document.createElement('div');
+    container.className = 'tracker tracker-modal';
+    
+    // Init tracker UI
+    if (typeof Tracker !== 'undefined') {
+        Tracker.createUI(container);
+    } else {
+        container.innerHTML += '<p style="padding:20px;color:#888;">Tracker not loaded. Include tracker.js</p>';
+    }
+    
+    overlay.appendChild(container);
+    document.body.appendChild(overlay);
+    trackerModal = overlay;
+    trackerVisible = true;
+    
+    // Focus tracker for keyboard input
+    const trackerEl = container.querySelector('.tracker-pattern')?.parentElement;
+    if (trackerEl) trackerEl.focus();
+}
+
+function closeTracker() {
+    if (trackerModal) {
+        trackerModal.style.display = 'none';
+        trackerVisible = false;
+        if (typeof Tracker !== 'undefined') Tracker.stop();
+    }
+}
+
+function toggleTracker() {
+    if (trackerVisible) closeTracker();
+    else openTracker();
 }
 
 // Keyboard listener for console toggle and bindings

@@ -1,0 +1,288 @@
+/* Tracker CSS - FamiTracker aesthetic */
+
+.tracker {
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    background: #1a1a2e;
+    color: #a0a0b0;
+    border: 2px solid #333;
+    border-radius: 4px;
+    overflow: hidden;
+    user-select: none;
+    font-size: 12px;
+}
+
+.tracker:focus {
+    outline: 2px solid #54bebe;
+    outline-offset: -2px;
+}
+
+.tracker-header {
+    background: linear-gradient(to bottom, #2a2a4a, #1a1a2e);
+    padding: 8px 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #333;
+}
+
+.tracker-title {
+    font-weight: bold;
+    color: #54bebe;
+    font-size: 14px;
+    letter-spacing: 2px;
+    flex-shrink: 0;
+}
+
+.tracker-status {
+    color: #888;
+    font-size: 11px;
+    flex: 1;
+    text-align: center;
+}
+
+.tracker-status span {
+    color: #54bebe;
+    margin: 0 4px;
+}
+
+.tracker-controls {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
+.tracker-close {
+    background: none;
+    border: none;
+    color: #666;
+    font-size: 20px;
+    cursor: pointer;
+    padding: 0 8px;
+    flex-shrink: 0;
+}
+
+.tracker-close:hover {
+    color: #fff;
+}
+
+.tracker-btn {
+    background: #333;
+    border: 1px solid #555;
+    color: #fff;
+    padding: 4px 12px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 12px;
+}
+
+.tracker-btn:hover {
+    background: #444;
+    border-color: #666;
+}
+
+.tracker-btn:active {
+    background: #222;
+}
+
+.tracker-channel-headers {
+    display: flex;
+    background: #222;
+    border-bottom: 1px solid #444;
+}
+
+.tracker-rownum-header {
+    width: 28px;
+    flex-shrink: 0;
+}
+
+.tracker-channel-header {
+    flex: 1;
+    padding: 6px 8px;
+    text-align: center;
+    font-weight: bold;
+    color: #666;
+    border-left: 1px solid #333;
+    cursor: pointer;
+    transition: background 0.1s;
+}
+
+.tracker-channel-header:hover {
+    background: #2a2a3a;
+}
+
+.tracker-channel-header.active {
+    color: #54bebe;
+    background: #1a2a3a;
+}
+
+.tracker-pattern {
+    height: 400px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    background: #0d0d1a;
+}
+
+.tracker-row {
+    display: flex;
+    align-items: center;
+    border-bottom: 1px solid #1a1a2a;
+}
+
+.tracker-row:hover {
+    background: #151525;
+}
+
+.tracker-row.current {
+    background: #1a2a3a;
+}
+
+/* Edit mode - red highlight */
+.tracker-row.current.edit {
+    background: #3a1a1a;
+}
+
+.tracker-rownum {
+    width: 28px;
+    padding: 2px 4px;
+    text-align: right;
+    color: #444;
+    background: #111;
+    border-right: 1px solid #222;
+    flex-shrink: 0;
+}
+
+.tracker-rownum.highlight {
+    color: #54bebe;
+    background: #1a1a2a;
+}
+
+.tracker-rownum.beat {
+    color: #666;
+}
+
+.tracker-channel-cells {
+    display: flex;
+    flex: 1;
+    border-left: 1px solid #333;
+}
+
+.tracker-cell {
+    padding: 2px 3px;
+    white-space: pre;
+    cursor: pointer;
+}
+
+.tracker-cell:hover {
+    background: #1a2535;
+}
+
+.tracker-cell.current {
+    background: #2a4a6a;
+    color: #fff;
+}
+
+.tracker-row.edit .tracker-cell.current {
+    background: #6a2a2a;
+}
+
+.tracker-cell.selected {
+    background: #2a3a5a;
+}
+
+/* Column widths */
+.tracker-cell.col-note {
+    min-width: 36px;
+    color: #8cf;
+}
+
+.tracker-cell.col-inst {
+    min-width: 24px;
+    color: #f8a;
+}
+
+.tracker-cell.col-vol {
+    min-width: 12px;
+    color: #8f8;
+}
+
+.tracker-cell.col-fx {
+    min-width: 36px;
+    color: #fa8;
+}
+
+.tracker-footer {
+    background: #1a1a2e;
+    padding: 6px 12px;
+    border-top: 1px solid #333;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    color: #666;
+    font-size: 10px;
+}
+
+.edit-indicator {
+    padding: 2px 8px;
+    background: #333;
+    border-radius: 3px;
+    color: #666;
+}
+
+.edit-indicator.active {
+    background: #8a2a2a;
+    color: #fff;
+}
+
+.sustain-indicator {
+    color: #54bebe;
+    animation: pulse 0.5s ease-in-out infinite alternate;
+}
+
+@keyframes pulse {
+    from { opacity: 0.6; }
+    to { opacity: 1; }
+}
+
+/* Scrollbar */
+.tracker-pattern::-webkit-scrollbar {
+    width: 8px;
+}
+
+.tracker-pattern::-webkit-scrollbar-track {
+    background: #111;
+}
+
+.tracker-pattern::-webkit-scrollbar-thumb {
+    background: #333;
+    border-radius: 4px;
+}
+
+.tracker-pattern::-webkit-scrollbar-thumb:hover {
+    background: #444;
+}
+
+/* Modal version */
+.tracker-modal {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 10000;
+    width: 700px;
+    max-width: 95vw;
+    box-shadow: 0 10px 50px rgba(0,0,0,0.5);
+}
+
+.tracker-modal .tracker-pattern {
+    height: 500px;
+}
+
+/* Dark mode adjustments */
+body.dark-mode .tracker {
+    border-color: #444;
+}
+
+body.dark-mode .tracker-header {
+    background: linear-gradient(to bottom, #333, #222);
+}

@@ -11,6 +11,8 @@ const taglines = {
         "MOSTLY POSITIVE",
         "VERY POSITIVE",
         "OVERWHELMINGLY POSITIVE",
+        "PLEASE ENABLE YOUR ADBLOCKER",
+        "SPIRITUAL SUCCESSOR OF GEOCITIES",
     ],
     negative: [
         "EYE AM THE ONLY METRIC THAT MATTERS",
@@ -39,6 +41,9 @@ const taglines = {
         "EYE CANT BELIEVE YOU'VE DONE THIS",
         "DON'T MAKE LEMONADE",
         "MAKE LIFE TAKE THE LEMONS BACK",
+        "MEGABYTES OF JAVASCRIPT",
+        "HAVE A COOKIE POPUP",
+        "ANOTHER ASSET FLIP",
     ],
     neutral: [
         "EYE SEE SPY",
@@ -64,6 +69,7 @@ const taglines = {
         "ALLOWS ME TO DRAW 2 REVIEWS FROM MY STEAM DECK",
         "EVERYONE THINKS EYE'M JUST A BLOODY ONE-I'D MONSTER",
         "EYE HAVE THE POWER OF KINO AND SLOP BY MY SIDE",
+
     ],
 };
 

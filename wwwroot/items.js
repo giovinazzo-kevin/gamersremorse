@@ -598,12 +598,11 @@ const Items = {
     },
     
     // Health manipulation
-    damage(halfHearts = 1, anim = 'fall') {
-        // Achievement for taking damage
-        if (typeof setAchievementFlag === 'function') {
-            setAchievementFlag('tookDamage');
+    damage(halfHearts = 1, anim = 'fall', source = 'player') {
+        // Achievements for taking damage
+        if (source == player) {
+            setAchievementFlag('tookDumbDamage');
         }
-        
         this.health = Math.max(0, this.health - halfHearts);
         this.renderHealthBar();
         this.saveInventory();
@@ -637,10 +636,14 @@ const Items = {
         if (typeof setAchievementFlag === 'function') {
             setAchievementFlag('yasd');
         }
+
+        // Lose inventory
+        this.inventory = [];
+        this.saveInventory();
         
         // Reset health after respawn
         setTimeout(() => {
-            this.health = this.maxHealth;
+            this.health = this.maxHealth = 12;
             this.renderHealthBar();
             this.saveInventory();
         }, 11000);
