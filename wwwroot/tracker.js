@@ -1421,7 +1421,7 @@ const Tracker = (() => {
         
         trackerElement.innerHTML += `
             <div class="tracker-header">
-                <div class="tracker-title">TRACKER</div>
+                <div class="tracker-title">EYE TRACKER</div>
                 <div class="tracker-status">
                     <span class="tracker-param" data-param="oct" title="Click to change, scroll to adjust">Oct: <span id="tracker-octave">${currentOctave}</span></span>
                     <span class="tracker-param" data-param="bpm" title="Click to change, scroll to adjust">BPM: <span id="tracker-bpm">${bpm}</span></span>
