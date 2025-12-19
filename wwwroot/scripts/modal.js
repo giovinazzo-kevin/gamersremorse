@@ -557,45 +557,39 @@ function buildAchievementItem(ach) {
 }
 
 function buildAudioTab(content) {
-    const container = document.createElement('div');
-    container.className = 'settings-grid';
-    container.style.padding = '20px';
-    
-    const title = document.createElement('h3');
-    title.textContent = 'Volume';
-    title.style.marginBottom = '20px';
-    title.style.color = '#54bebe';
-    container.appendChild(title);
+    const col = document.createElement('div');
+    col.className = 'modal-col-left';
+    col.style.width = '100%';
     
     // Master volume
     const master = buildSlider('Master', 0, 100, 100, 1,
         v => v + '%',
         v => { Audio.setVolume('sfx', v / 100); Audio.setVolume('music', v / 100); }
     );
-    container.appendChild(master.row);
+    col.appendChild(master.row);
     
     // SFX volume
     const sfxVol = buildSlider('Sound Effects', 0, 100, 100, 1,
         v => v + '%',
         v => Audio.setVolume('sfx', v / 100)
     );
-    container.appendChild(sfxVol.row);
+    col.appendChild(sfxVol.row);
     
     // Music volume
     const musicVol = buildSlider('Music', 0, 100, 100, 1,
         v => v + '%',
         v => Audio.setVolume('music', v / 100)
     );
-    container.appendChild(musicVol.row);
+    col.appendChild(musicVol.row);
     
     // Danger loop volume (low HP beeping)
     const dangerVol = buildSlider('Low HP Warning', 0, 100, 100, 1,
         v => v + '%',
         v => Audio.setLayerVolume('music', 'danger', v / 100)
     );
-    container.appendChild(dangerVol.row);
+    col.appendChild(dangerVol.row);
     
-    content.appendChild(container);
+    content.appendChild(col);
 }
 
 function buildSoundsTab(content) {
