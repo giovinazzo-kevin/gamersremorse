@@ -719,7 +719,7 @@ function openModal(title, options = {}) {
 
     const w = options.width || 500;
     const h = options.height || 400;
-    const tabs = options.tabs || ['Eye', 'Audio', 'Sounds', 'Interface', '???', '???'];
+    const tabs = options.tabs;
 
     const overlay = document.createElement('div');
     overlay.className = 'modal-overlay';
@@ -885,7 +885,7 @@ function closeModal() {
 
 function openSettings() {
     const hasGraphics = getAchievementFlag('combatUnlocked');
-    const tabs = ['Eye', 'Achievements', 'Audio', 'Sounds', hasGraphics ? 'Graphics' : '???', 'Interface', '???'];
+    const tabs = ['Eye', 'Interface', hasGraphics ? 'Graphics' : '???', 'Audio', 'Sounds', 'Achievements', '???'];
     openModal('Options', { width: 640, height: 480, tabs });
 }
 
