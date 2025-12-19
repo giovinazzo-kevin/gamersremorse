@@ -600,7 +600,7 @@ const Items = {
     // Health manipulation
     damage(halfHearts = 1, anim = 'fall', source = 'player') {
         // Achievements for taking damage
-        if (source == player) {
+        if (source == 'player') {
             setAchievementFlag('tookDumbDamage');
         }
         this.health = Math.max(0, this.health - halfHearts);
