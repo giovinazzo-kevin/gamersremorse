@@ -417,7 +417,7 @@ function buildAudioTab(content) {
     }
     
     // CUSTOM section (user-created) - show if has custom sounds OR achievement unlocked
-    const trackerUnlocked = typeof getAchievementFlag === 'function' && getAchievementFlag('openedTracker');
+    const trackerUnlocked = getAchievementFlag('openedTracker');
     if (custom.length > 0 || trackerUnlocked) {
         const sectionHeader = document.createElement('div');
         sectionHeader.className = 'achievements-section-header';
@@ -1214,15 +1214,15 @@ function loadEyeSettings() {
         if (settings.lowerColor) document.documentElement.style.setProperty('--color-negative', settings.lowerColor);
         if (settings.lashColor) document.documentElement.style.setProperty('--color-uncertain', settings.lashColor);
         updateColorLegend();
-        if (settings.barCount && typeof setBarDensity === 'function') setBarDensity(settings.barCount);
+        if (settings.barCount) setBarDensity(settings.barCount);
     }
     
     // Also load console settings
     const consoleSaved = localStorage.getItem('consoleSettings');
     if (consoleSaved) {
         const settings = JSON.parse(consoleSaved);
-        if (settings.tagline && typeof setCustomTagline === 'function') setCustomTagline(settings.tagline);
-        if (settings.svCheats && typeof setSvCheats === 'function') setSvCheats(true);
+        if (settings.tagline) setCustomTagline(settings.tagline);
+        if (settings.svCheats) setSvCheats(true);
         if (settings.bindings) keyBindings = settings.bindings;
     }
 }

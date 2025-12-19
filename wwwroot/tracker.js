@@ -756,6 +756,10 @@ const Tracker = (() => {
         updateLibraryDisplay();
         currentInstrument = getAllInstruments().length - 1;
         updateEditorPanel();
+        
+        // Achievement: Do Not Steal
+        setAchievementFlag('createdCustomInstrument', true);
+        
         return currentInstrument;
     }
     
@@ -1117,6 +1121,16 @@ const Tracker = (() => {
         osc.start(now);
         heldNotes.set(key, { osc, gain, inst });
         startVisualizerLoop();
+        
+        // Achievement: polyphony overload (7+ simultaneous notes)
+        if (heldNotes.size >= 7) {
+            setAchievementFlag('polyphonyOverload', true);
+        }
+        
+        // Achievement: Bloody Tears (sawtooth)
+        if (inst.type === 'sawtooth') {
+            setAchievementFlag('playedSawtooth', true);
+        }
     }
     
     // Release a held note (trigger R envelope)
@@ -1586,7 +1600,7 @@ const Tracker = (() => {
         
         const closeBtn = trackerElement.querySelector('#tracker-close');
         if (closeBtn) {
-            closeBtn.onclick = () => { if (typeof closeTracker === 'function') closeTracker(); };
+            closeBtn.onclick = () => { closeTracker(); };
         }
         
         // Help button
@@ -2241,7 +2255,7 @@ const Tracker = (() => {
         if (key === 'Escape') {
             e.preventDefault();
             quickStop();
-            if (typeof closeTracker === 'function') closeTracker();
+            closeTracker();
             return;
         }
         

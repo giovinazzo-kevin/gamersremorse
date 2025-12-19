@@ -91,6 +91,30 @@ const ACHIEVEMENTS = {
         hidden: false,
         check: (state) => state.openedTracker
     },
+    sausages: {
+        id: 'sausages',
+        title: 'Daddy Would You Like Some Sausages',
+        description: 'Discover your latent creative power',
+        icon: '🌭',
+        hidden: true,
+        check: (state) => state.polyphonyOverload
+    },
+    bloody_tears: {
+        id: 'bloody_tears',
+        title: 'Bloody Tears',
+        description: 'Use a sawtooth instrument',
+        icon: '🪚',
+        hidden: true,
+        check: (state) => state.playedSawtooth
+    },
+    do_not_steal: {
+        id: 'do_not_steal',
+        title: 'Going By Ear',
+        description: 'Create a custom instrument',
+        icon: '👂',
+        hidden: false,
+        check: (state) => state.createdCustomInstrument
+    },
     kill_eye: {
         id: 'kill_eye',
         title: 'Dumb Damage',
