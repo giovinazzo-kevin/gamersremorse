@@ -387,7 +387,8 @@ function buildAudioTab(content) {
     `;
     container.appendChild(header);
     
-    const sounds = typeof getUnlockedSounds === 'function' ? getUnlockedSounds() : [];
+    // ONE SOURCE OF TRUTH: Tracker library
+    const sounds = typeof Tracker !== 'undefined' ? Tracker.getLibrary() : [];
     
     for (const sound of sounds) {
         const item = document.createElement('div');
@@ -787,14 +788,14 @@ const commands = {
         description: 'Kill the eye',
         hidden: true,
         execute: () => {
-            Items.damage(1000, 'fall', 'player');
+            Eye.damage(1000, 'fall', 'player');
         }
     },
     explode: {
         description: 'Explode the eye',
         hidden: true,
         execute: () => {
-            Items.damage(1000, 'explode', 'player');
+            Eye.damage(1000, 'explode', 'player');
         }
     },
     impulse: {
@@ -926,8 +927,8 @@ const commands = {
             }
             const amount = parseInt(args[0]) || 1;
             const src = args[1] || 'player';
-            Items.damage(amount, 'fall', src);
-            consolePrint(`Took ${amount} damage from ${src}. Health: ${Items.health}/${Items.maxHealth}`);
+            Eye.damage(amount, 'fall', src);
+            consolePrint(`Took ${amount} damage from ${src}. Health: ${Eye.health}/${Eye.maxHealth}`);
         }
     },
     heal: {
@@ -939,8 +940,8 @@ const commands = {
                 return;
             }
             const amount = parseInt(args[0]) || 2;
-            Items.heal(amount);
-            consolePrint(`Healed ${amount}. Health: ${Items.health}/${Items.maxHealth}`);
+            Eye.heal(amount);
+            consolePrint(`Healed ${amount}. Health: ${Eye.health}/${Eye.maxHealth}`);
         }
     },
     health: {
@@ -951,11 +952,11 @@ const commands = {
                 return;
             }
             if (args.length > 0) {
-                Items.health = Math.min(Items.maxHealth, Math.max(0, parseInt(args[0]) || 0));
-                Items.renderHealthBar();
-                Items.saveInventory();
+                Eye.health = Math.min(Eye.maxHealth, Math.max(0, parseInt(args[0]) || 0));
+                Eye.renderHealthBar();
+                Eye.save();
             }
-            consolePrint(`Health: ${Items.health}/${Items.maxHealth} (${Items.maxHealth/2} containers)`);
+            consolePrint(`Health: ${Eye.health}/${Eye.maxHealth} (${Eye.maxHealth/2} containers)`);
         }
     },
     add_heart: {
@@ -966,8 +967,8 @@ const commands = {
                 consolePrint('Items system not loaded.', 'error');
                 return;
             }
-            Items.addContainer();
-            consolePrint(`Added heart container. Max health: ${Items.maxHealth/2} hearts`);
+            Eye.addContainer();
+            consolePrint(`Added heart container. Max health: ${Eye.maxHealth/2} hearts`);
         }
     },
 };

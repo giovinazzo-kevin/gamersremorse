@@ -55,6 +55,22 @@ const Tracker = (() => {
     let sustainedNotes = [];
     let audioCtx = null;
     
+    function createBitcrusher(ctx) {
+        // 8-bit quantization via waveshaper
+        const crusher = ctx.createWaveShaper();
+        const bits = 8;
+        const levels = Math.pow(2, bits);
+        const samples = 44100;
+        const curve = new Float32Array(samples);
+        for (let i = 0; i < samples; i++) {
+            const x = (i * 2 / samples) - 1;
+            curve[i] = Math.round(x * levels) / levels;
+        }
+        crusher.curve = curve;
+        crusher.oversample = 'none';
+        return crusher;
+    }
+    
     let editMode = false; // Start NOT in edit mode (FamiTracker style)
     let followMode = true;
     let loopMode = false; // Off by default - stop at end
@@ -97,14 +113,14 @@ const Tracker = (() => {
             delay: { time: 0.08, feedback: 0.5 },
             patterns: {
                 0: createPatternFromNotes([
-                    // Melody
+                    // Melody - triangle for body
                     { row: 0, ch: 'pulse1', note: 'A#', octave: 4, inst: 3, vol: 15 },
                     { row: 1, ch: 'pulse1', note: 'A-', octave: 5, inst: 3, vol: 14 },
                     { row: 2, ch: 'pulse1', note: 'C-', octave: 6, inst: 3, vol: 13 },
-                    // Harmony
-                    { row: 0, ch: 'triangle', note: 'C-', octave: 4, inst: 3, vol: 12 },
-                    { row: 1, ch: 'triangle', note: 'C-', octave: 5, inst: 3, vol: 11 },
-                    { row: 2, ch: 'triangle', note: 'C-', octave: 7, inst: 3, vol: 10 },
+                    // Harmony - quieter
+                    { row: 0, ch: 'triangle', note: 'C-', octave: 4, inst: 3, vol: 10 },
+                    { row: 1, ch: 'triangle', note: 'C-', octave: 5, inst: 3, vol: 9 },
+                    { row: 2, ch: 'triangle', note: 'C-', octave: 7, inst: 3, vol: 8 },
                 ], 4)
             },
             sequence: [0]
@@ -112,31 +128,32 @@ const Tracker = (() => {
         'death': {
             name: 'Death',
             icon: '💀',
-            bpm: 333,
+            bpm: 280,
             speed: 6,
             patterns: {
+                // SMB death ~1.74s. At 280bpm speed 6: ~143ms per row
                 0: createPatternFromNotes([
-                    // Right hand: B F F F E D C _ E E C
+                    // Right hand: B F F F E D C E E C
                     { row: 0, ch: 'pulse1', note: 'B-', octave: 4, inst: 0, vol: 15 },
                     { row: 1, ch: 'pulse1', note: 'F-', octave: 5, inst: 0, vol: 15 },
+                    { row: 3, ch: 'pulse1', note: 'F-', octave: 5, inst: 0, vol: 14 },
                     { row: 4, ch: 'pulse1', note: 'F-', octave: 5, inst: 0, vol: 14 },
-                    { row: 5, ch: 'pulse1', note: 'F-', octave: 5, inst: 0, vol: 14 },
-                    { row: 6, ch: 'pulse1', note: 'E-', octave: 5, inst: 0, vol: 13 },
-                    { row: 8, ch: 'pulse1', note: 'D-', octave: 5, inst: 0, vol: 13 },
-                    { row: 9, ch: 'pulse1', note: 'C-', octave: 5, inst: 0, vol: 12 },
-                    { row: 11, ch: 'pulse1', note: 'E-', octave: 5, inst: 0, vol: 12 },
-                    { row: 13, ch: 'pulse1', note: 'E-', octave: 5, inst: 0, vol: 11 },
-                    { row: 14, ch: 'pulse1', note: 'C-', octave: 5, inst: 0, vol: 11 },
-                    // Left hand: G G G A B C _ G C
+                    { row: 5, ch: 'pulse1', note: 'E-', octave: 5, inst: 0, vol: 13 },
+                    { row: 6, ch: 'pulse1', note: 'D-', octave: 5, inst: 0, vol: 13 },
+                    { row: 8, ch: 'pulse1', note: 'C-', octave: 5, inst: 0, vol: 12 },
+                    { row: 10, ch: 'pulse1', note: 'E-', octave: 5, inst: 0, vol: 12 },
+                    { row: 11, ch: 'pulse1', note: 'E-', octave: 5, inst: 0, vol: 11 },
+                    { row: 12, ch: 'pulse1', note: 'C-', octave: 5, inst: 0, vol: 11 },
+                    // Left hand: G G G A B C G C
                     { row: 0, ch: 'triangle', note: 'G-', octave: 3, inst: 3, vol: 12 },
                     { row: 1, ch: 'triangle', note: 'G-', octave: 3, inst: 3, vol: 12 },
-                    { row: 4, ch: 'triangle', note: 'G-', octave: 3, inst: 3, vol: 11 },
-                    { row: 5, ch: 'triangle', note: 'A-', octave: 3, inst: 3, vol: 11 },
-                    { row: 6, ch: 'triangle', note: 'B-', octave: 3, inst: 3, vol: 11 },
-                    { row: 8, ch: 'triangle', note: 'C-', octave: 4, inst: 3, vol: 11 },
-                    { row: 11, ch: 'triangle', note: 'G-', octave: 3, inst: 3, vol: 10 },
-                    { row: 14, ch: 'triangle', note: 'C-', octave: 4, inst: 3, vol: 10 },
-                ], 18)
+                    { row: 3, ch: 'triangle', note: 'G-', octave: 3, inst: 3, vol: 11 },
+                    { row: 4, ch: 'triangle', note: 'A-', octave: 3, inst: 3, vol: 11 },
+                    { row: 5, ch: 'triangle', note: 'B-', octave: 3, inst: 3, vol: 11 },
+                    { row: 6, ch: 'triangle', note: 'C-', octave: 4, inst: 3, vol: 11 },
+                    { row: 10, ch: 'triangle', note: 'G-', octave: 3, inst: 3, vol: 10 },
+                    { row: 12, ch: 'triangle', note: 'C-', octave: 4, inst: 3, vol: 10 },
+                ], 14)
             },
             sequence: [0]
         },
@@ -157,11 +174,13 @@ const Tracker = (() => {
         'pow': {
             name: 'Pow',
             icon: '💥',
-            bpm: 240,
+            bpm: 400,
             speed: 6,
             patterns: {
                 0: createPatternFromNotes([
-                    { row: 0, ch: 'noise', note: 'C-', octave: 4, inst: 5, vol: 15 },
+                    // Noise burst + low thump
+                    { row: 0, ch: 'noise', note: 'C-', octave: 4, inst: 7, vol: 15 },
+                    { row: 0, ch: 'pulse1', note: 'C-', octave: 3, inst: 0, vol: 12 },
                 ], 2)
             },
             sequence: [0]
@@ -169,16 +188,73 @@ const Tracker = (() => {
         'screenshot': {
             name: 'Screenshot',
             icon: '📸',
-            bpm: 300,
+            bpm: 500,
             speed: 6,
             patterns: {
                 0: createPatternFromNotes([
-                    // Click + rising sweep
-                    { row: 0, ch: 'noise', note: 'C-', octave: 4, inst: 5, vol: 10 },
-                    { row: 0, ch: 'pulse1', note: 'G-', octave: 6, inst: 2, vol: 12 },
-                    { row: 1, ch: 'pulse1', note: 'A-', octave: 6, inst: 2, vol: 11 },
+                    // Click
+                    { row: 0, ch: 'noise', note: 'C-', octave: 4, inst: 8, vol: 12 },
+                    // Rising sweep
+                    { row: 0, ch: 'pulse1', note: 'E-', octave: 6, inst: 2, vol: 12 },
+                    { row: 1, ch: 'pulse1', note: 'G-', octave: 6, inst: 2, vol: 11 },
                     { row: 2, ch: 'pulse1', note: 'B-', octave: 6, inst: 2, vol: 10 },
                 ], 4)
+            },
+            sequence: [0]
+        },
+        'shame': {
+            name: 'Shame',
+            icon: '😔',
+            bpm: 200,
+            speed: 6,
+            patterns: {
+                // Locrian scale - cursed, unstable
+                0: createPatternFromNotes([
+                    { row: 0, ch: 'pulse1', note: 'E-', octave: 3, inst: 1, vol: 12 },
+                    { row: 2, ch: 'pulse1', note: 'F-', octave: 3, inst: 1, vol: 11 },
+                    { row: 4, ch: 'pulse1', note: 'G-', octave: 3, inst: 1, vol: 10 },
+                    { row: 6, ch: 'pulse1', note: 'A#', octave: 3, inst: 1, vol: 9 },
+                    { row: 8, ch: 'pulse1', note: 'C-', octave: 3, inst: 1, vol: 8 },
+                ], 12)
+            },
+            sequence: [0]
+        },
+        'fame': {
+            name: 'Fame',
+            icon: '⭐',
+            bpm: 350,
+            speed: 6,
+            delay: { time: 0.1, feedback: 0.4 },
+            patterns: {
+                // Major pentatonic - bright and happy
+                0: createPatternFromNotes([
+                    { row: 0, ch: 'pulse1', note: 'A-', octave: 4, inst: 3, vol: 15 },
+                    { row: 1, ch: 'pulse1', note: 'B-', octave: 4, inst: 3, vol: 14 },
+                    { row: 2, ch: 'pulse1', note: 'C#', octave: 5, inst: 3, vol: 14 },
+                    { row: 3, ch: 'pulse1', note: 'E-', octave: 5, inst: 3, vol: 13 },
+                    { row: 4, ch: 'pulse1', note: 'A-', octave: 5, inst: 3, vol: 15 },
+                    // Harmony
+                    { row: 0, ch: 'triangle', note: 'A-', octave: 3, inst: 3, vol: 10 },
+                    { row: 2, ch: 'triangle', note: 'E-', octave: 3, inst: 3, vol: 10 },
+                    { row: 4, ch: 'triangle', note: 'A-', octave: 3, inst: 3, vol: 10 },
+                ], 6)
+            },
+            sequence: [0]
+        },
+        'error': {
+            name: 'Error',
+            icon: '⚠️',
+            bpm: 250,
+            speed: 6,
+            patterns: {
+                // Whole tone - dreamy, unsettling
+                0: createPatternFromNotes([
+                    { row: 0, ch: 'pulse1', note: 'G-', octave: 3, inst: 1, vol: 12 },
+                    { row: 2, ch: 'pulse1', note: 'A-', octave: 3, inst: 1, vol: 11 },
+                    { row: 4, ch: 'pulse1', note: 'B-', octave: 3, inst: 1, vol: 10 },
+                    { row: 6, ch: 'pulse1', note: 'C#', octave: 4, inst: 1, vol: 9 },
+                    { row: 8, ch: 'pulse1', note: 'D#', octave: 4, inst: 1, vol: 8 },
+                ], 12)
             },
             sequence: [0]
         },
@@ -241,7 +317,9 @@ const Tracker = (() => {
     function playLibraryItem(id) {
         const item = library[id];
         if (!item) return false;
-        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (!audioCtx) {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
         
         const itemBpm = item.bpm || DEFAULT_BPM;
         const itemSpeed = item.speed || DEFAULT_SPEED;
@@ -288,6 +366,9 @@ const Tracker = (() => {
         const inst = instruments[cell.inst || 0] || instruments[0];
         const volume = (cell.vol !== null ? cell.vol : 15) / 15 * 0.15;
         
+        // Per-voice bitcrusher for proper 8-bit sound
+        const crusher = createBitcrusher(audioCtx);
+        
         // Panning - alternate L/R based on row index
         const panner = audioCtx.createStereoPanner();
         if (libraryItem?.pan === 'alternate') {
@@ -302,7 +383,8 @@ const Tracker = (() => {
             const noise = audioCtx.createBufferSource();
             const gain = audioCtx.createGain();
             noise.buffer = buffer;
-            noise.connect(gain);
+            noise.connect(crusher);
+            crusher.connect(gain);
             gain.connect(panner);
             panner.connect(audioCtx.destination);
             if (delayNode) panner.connect(delayNode);
@@ -320,7 +402,8 @@ const Tracker = (() => {
         const gain = audioCtx.createGain();
         osc.type = (channel === 'triangle' || inst.type === 'triangle') ? 'triangle' : 'square';
         osc.frequency.value = freq;
-        osc.connect(gain);
+        osc.connect(crusher);
+        crusher.connect(gain);
         gain.connect(panner);
         panner.connect(audioCtx.destination);
         if (delayNode) panner.connect(delayNode);
@@ -385,6 +468,8 @@ const Tracker = (() => {
         { name: 'Long Noise', type: 'noise', attack: 0.01, decay: 0.3, sustain: 0.3, release: 0.2 },
         { name: 'Short Noise', type: 'noise', attack: 0.001, decay: 0.05, sustain: 0, release: 0.05 },
         { name: 'Zelda Lead', type: 'triangle', attack: 0.001, decay: 0.4, sustain: 0.9, release: 0.5 },
+        { name: 'Pow Hit', type: 'noise', attack: 0.001, decay: 0.08, sustain: 0.2, release: 0.04 },
+        { name: 'Click', type: 'noise', attack: 0.001, decay: 0.015, sustain: 0, release: 0.01 },
     ];
     
     // === INIT ===
@@ -557,6 +642,9 @@ const Tracker = (() => {
         const volume = (cell.vol !== null ? cell.vol : 15) / 15 * 0.15;
         const now = audioCtx.currentTime;
         
+        // Per-voice bitcrusher
+        const crusher = createBitcrusher(audioCtx);
+        
         if (channel === 'noise' || inst.type === 'noise') {
             const bufferSize = audioCtx.sampleRate * 0.5;
             const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
@@ -565,7 +653,8 @@ const Tracker = (() => {
             const noise = audioCtx.createBufferSource();
             const gain = audioCtx.createGain();
             noise.buffer = buffer;
-            noise.connect(gain);
+            noise.connect(crusher);
+            crusher.connect(gain);
             gain.connect(audioCtx.destination);
             gain.gain.setValueAtTime(0, now);
             gain.gain.linearRampToValueAtTime(volume, now + inst.attack);
@@ -580,7 +669,8 @@ const Tracker = (() => {
         const gain = audioCtx.createGain();
         osc.type = (channel === 'triangle' || inst.type === 'triangle') ? 'triangle' : 'square';
         osc.frequency.value = freq;
-        osc.connect(gain);
+        osc.connect(crusher);
+        crusher.connect(gain);
         gain.connect(audioCtx.destination);
         gain.gain.setValueAtTime(0, now);
         gain.gain.linearRampToValueAtTime(volume, now + inst.attack);
@@ -599,6 +689,9 @@ const Tracker = (() => {
         const now = audioCtx.currentTime;
         const gain = audioCtx.createGain();
         
+        // Per-voice bitcrusher
+        const crusher = createBitcrusher(audioCtx);
+        
         if (channel === 'noise' || inst.type === 'noise') {
             const bufferSize = audioCtx.sampleRate * 2;
             const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
@@ -607,7 +700,8 @@ const Tracker = (() => {
             const noise = audioCtx.createBufferSource();
             noise.buffer = buffer;
             noise.loop = true;
-            noise.connect(gain);
+            noise.connect(crusher);
+            crusher.connect(gain);
             gain.connect(audioCtx.destination);
             gain.gain.setValueAtTime(0, now);
             gain.gain.linearRampToValueAtTime(volume * inst.sustain, now + inst.attack);
@@ -619,7 +713,8 @@ const Tracker = (() => {
         const osc = audioCtx.createOscillator();
         osc.type = (channel === 'triangle' || inst.type === 'triangle') ? 'triangle' : 'square';
         osc.frequency.value = freq;
-        osc.connect(gain);
+        osc.connect(crusher);
+        crusher.connect(gain);
         gain.connect(audioCtx.destination);
         gain.gain.setValueAtTime(0, now);
         gain.gain.linearRampToValueAtTime(volume * inst.sustain, now + inst.attack);
@@ -1170,6 +1265,17 @@ const Tracker = (() => {
     // === API ===
     init();
     
+    // Get library for external display (modal audio tab)
+    function getLibrary() {
+        return Object.entries(library).map(([id, item]) => ({
+            id,
+            name: item.name,
+            icon: item.icon,
+            unlocked: unlockedLibrary.has(id),
+            play: () => playLibraryItem(id)
+        }));
+    }
+
     return {
         selectCell,
         createUI,
@@ -1179,6 +1285,7 @@ const Tracker = (() => {
         loadFromLibrary,
         playLibraryItem,
         unlockLibraryItem,
+        getLibrary,
         exportSong,
         importSong,
         get playing() { return playing; },

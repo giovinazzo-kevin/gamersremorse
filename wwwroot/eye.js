@@ -5,6 +5,11 @@ let lastFrame = 0;
 let numBlinks = 0;
 
 const state = {
+    // Health (source of truth)
+    health: 12,          // current health (in half-hearts)
+    maxHealth: 12,       // max health
+    maxContainers: 24,   // max possible (12 full hearts)
+    
     // Iris
     irisX: 0,
     irisY: 0,
@@ -1372,6 +1377,140 @@ function showRespawnTimer(container, eyeEl) {
     }, 1000);
 }
 
+// === EYE API ===
+// Single source of truth for eye entity state
+const Eye = {
+    // Health accessors
+    get health() { return state.health; },
+    set health(v) { state.health = v; },
+    get maxHealth() { return state.maxHealth; },
+    set maxHealth(v) { state.maxHealth = v; },
+    get maxContainers() { return state.maxContainers; },
+    
+    // Status accessors
+    get dead() { return state.dead; },
+    get awake() { return state.awake; },
+    
+    // Health manipulation
+    damage(halfHearts = 1, anim = 'fall', source = 'unknown') {
+        if (source === 'player') {
+            setAchievementFlag('tookDumbDamage');
+        }
+        state.health = Math.max(0, state.health - halfHearts);
+        this.renderHealthBar();
+        this.save();
+        
+        if (state.health <= 0) {
+            this.kill(anim);
+        }
+    },
+    
+    heal(halfHearts = 1) {
+        state.health = Math.min(state.maxHealth, state.health + halfHearts);
+        this.renderHealthBar();
+        this.save();
+    },
+    
+    addContainer() {
+        if (state.maxHealth < state.maxContainers) {
+            state.maxHealth += 2;
+            this.renderHealthBar();
+            this.save();
+        }
+    },
+    
+    kill(anim = 'fall') {
+        killEye(anim);
+        setAchievementFlag('yasd');
+        
+        // Reset health after respawn
+        setTimeout(() => {
+            state.health = state.maxHealth = 12;
+            this.renderHealthBar();
+            this.save();
+        }, 11000);
+    },
+    
+    // Health bar rendering
+    renderHealthBar() {
+        const bar = document.getElementById('health-bar');
+        if (!bar) return;
+        
+        // Hidden until tookDamage achievement unlocked
+        const hasUnlocked = typeof achievementState !== 'undefined' && achievementState.unlocked?.kill_eye;
+        if (!hasUnlocked) {
+            bar.innerHTML = '';
+            return;
+        }
+        
+        bar.innerHTML = '';
+        
+        const containers = Math.ceil(state.maxHealth / 2);
+        const fullHearts = Math.floor(state.health / 2);
+        const hasHalf = state.health % 2 === 1;
+        
+        const row1 = document.createElement('div');
+        row1.className = 'health-row';
+        const row2 = document.createElement('div');
+        row2.className = 'health-row';
+        
+        for (let i = 0; i < containers; i++) {
+            const heart = document.createElement('span');
+            heart.className = 'heart';
+            
+            if (i < fullHearts) {
+                heart.classList.add('full');
+                heart.textContent = '❤️';
+            } else if (i === fullHearts && hasHalf) {
+                heart.classList.add('half');
+                heart.textContent = '❤️';
+            } else {
+                heart.classList.add('empty');
+                heart.textContent = '❤️';
+            }
+            
+            if (i < 6) row1.appendChild(heart);
+            else row2.appendChild(heart);
+        }
+        
+        bar.appendChild(row1);
+        if (containers > 6) bar.appendChild(row2);
+    },
+    
+    // Persistence
+    save() {
+        localStorage.setItem('eyeState', JSON.stringify({
+            health: state.health,
+            maxHealth: state.maxHealth,
+            deathCount: state.deathCount
+        }));
+    },
+    
+    load() {
+        const saved = localStorage.getItem('eyeState');
+        if (saved) {
+            const data = JSON.parse(saved);
+            state.health = data.health ?? 12;
+            state.maxHealth = data.maxHealth ?? 12;
+            state.deathCount = data.deathCount ?? 0;
+            
+            // Don't start dead
+            if (state.health <= 0) state.health = state.maxHealth;
+        }
+        this.renderHealthBar();
+    }
+};
+
+// Expose globally
+window.Eye = Eye;
+
+// Load state on init
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => Eye.load());
+} else {
+    Eye.load();
+}
+
 document.addEventListener('mousemove', onMouseMove);
 svg.addEventListener('click', () => {
     if (state.awake && !state.dead) {
@@ -1381,7 +1520,7 @@ svg.addEventListener('click', () => {
         state.attentionThreshold *= state.patience;
         
         // Take damage from poking
-        Items.damage(1, 'fall', 'player');
+        Eye.damage(1, 'fall', 'player');
 
         if (state.attentionThreshold < 2) {
             state.blinkTarget = 1;
