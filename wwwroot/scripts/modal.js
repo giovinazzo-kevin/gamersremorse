@@ -558,6 +558,48 @@ function buildAchievementItem(ach) {
 
 function buildAudioTab(content) {
     const container = document.createElement('div');
+    container.className = 'settings-grid';
+    container.style.padding = '20px';
+    
+    const title = document.createElement('h3');
+    title.textContent = 'Volume';
+    title.style.marginBottom = '20px';
+    title.style.color = '#54bebe';
+    container.appendChild(title);
+    
+    // Master volume
+    const master = buildSlider('Master', 0, 100, 100, 1,
+        v => v + '%',
+        v => { Audio.setVolume('sfx', v / 100); Audio.setVolume('music', v / 100); }
+    );
+    container.appendChild(master.row);
+    
+    // SFX volume
+    const sfxVol = buildSlider('Sound Effects', 0, 100, 100, 1,
+        v => v + '%',
+        v => Audio.setVolume('sfx', v / 100)
+    );
+    container.appendChild(sfxVol.row);
+    
+    // Music volume
+    const musicVol = buildSlider('Music', 0, 100, 100, 1,
+        v => v + '%',
+        v => Audio.setVolume('music', v / 100)
+    );
+    container.appendChild(musicVol.row);
+    
+    // Danger loop volume (low HP beeping)
+    const dangerVol = buildSlider('Low HP Warning', 0, 100, 100, 1,
+        v => v + '%',
+        v => Audio.setLayerVolume('music', 'danger', v / 100)
+    );
+    container.appendChild(dangerVol.row);
+    
+    content.appendChild(container);
+}
+
+function buildSoundsTab(content) {
+    const container = document.createElement('div');
     container.className = 'audio-container';
     
     const header = document.createElement('div');
@@ -663,7 +705,7 @@ function buildAudioItem(sound, showDelete = false) {
                     const content = item.closest('.modal-content');
                     if (content) {
                         content.innerHTML = '';
-                        buildAudioTab(content);
+                        buildSoundsTab(content);
                     }
                 }
             };
@@ -683,7 +725,7 @@ function openModal(title, options = {}) {
 
     const w = options.width || 500;
     const h = options.height || 400;
-    const tabs = options.tabs || ['Eye', 'Audio', 'Interface', '???', '???'];
+    const tabs = options.tabs || ['Eye', 'Audio', 'Sounds', 'Interface', '???', '???'];
 
     const overlay = document.createElement('div');
     overlay.className = 'modal-overlay';
@@ -727,8 +769,9 @@ function openModal(title, options = {}) {
         else if (tabName === 'Interface') buildInterfaceTab(content, refs);
         else if (tabName === 'Achievements') buildAchievementsTab(content);
         else if (tabName === 'Graphics') buildGraphicsTab(content, refs);
-        else if (tabName === 'Audio') {
-            buildAudioTab(content);
+        else if (tabName === 'Audio') buildAudioTab(content);
+        else if (tabName === 'Sounds') {
+            buildSoundsTab(content);
         } else if (tabName === '???') buildLockedTab(content);
     };
 
@@ -848,7 +891,7 @@ function closeModal() {
 
 function openSettings() {
     const hasGraphics = getAchievementFlag('combatUnlocked');
-    const tabs = ['Eye', 'Achievements', 'Audio', hasGraphics ? 'Graphics' : '???', 'Interface', '???'];
+    const tabs = ['Eye', 'Achievements', 'Audio', 'Sounds', hasGraphics ? 'Graphics' : '???', 'Interface', '???'];
     openModal('Options', { width: 640, height: 480, tabs });
 }
 

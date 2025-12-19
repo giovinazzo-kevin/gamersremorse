@@ -1412,6 +1412,19 @@ function showRespawnTimer(container, eyeEl) {
 
 // === EYE API ===
 // Single source of truth for eye entity state
+// Low HP music trigger
+function checkDangerMusic() {
+    if (typeof music === 'undefined') return;
+    const ratio = state.health / state.maxHealth;
+    const isLow = ratio <= LOW_HP_THRESHOLD && ratio > 0;
+    
+    if (isLow && !music.isPlaying('danger')) {
+        music.danger();
+    } else if (!isLow && music.isPlaying('danger')) {
+        music.stopDanger();
+    }
+}
+
 const Eye = {
     // Health accessors
     get health() { return state.health; },
@@ -1435,6 +1448,7 @@ const Eye = {
         this.health = Math.max(0, this.health - halfHearts);
         this.renderHealthBar();
         this.save();
+        checkDangerMusic();
 
         ScreenShake.shake(halfHearts * 4);
         
@@ -1447,6 +1461,7 @@ const Eye = {
         state.health = Math.min(state.maxHealth, state.health + halfHearts);
         this.renderHealthBar();
         this.save();
+        checkDangerMusic();
     },
     
     addContainer() {
@@ -1458,6 +1473,9 @@ const Eye = {
     },
     
     kill(anim = 'fall') {
+        // Stop danger music immediately
+        if (typeof music !== 'undefined') music.stopDanger();
+        
         killEye(anim);
         setAchievementFlag('yasd');
         
@@ -1543,6 +1561,7 @@ const Eye = {
         }
         this.renderHealthBar();
         LowHPOverlay.setHP(this.health, this.maxHealth);
+        checkDangerMusic();
     },
 
     blink() {
