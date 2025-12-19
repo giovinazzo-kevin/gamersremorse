@@ -1,7 +1,25 @@
 /* Items System - Declarative item definitions
- * Items describe WHAT they are, not what they DO.
- * Systems interpret them.
+ *
+ * PHILOSOPHY:
+ * - Items describe WHAT they are, not what they DO
+ * - Systems interpret data; items have no callbacks or side effects
+ * - All magic numbers live in ItemConfig, not scattered in code
+ * - Eye is source of truth for health; we delegate, not duplicate
+ * - No defensive typeof checks - load order is guaranteed
+ * - Comments explain WHY, not WHAT
  */
+
+const ItemConfig = {
+    rarityWeights: { common: 10, uncommon: 5, rare: 2, legendary: 0.5 },
+    baseDropChance: 0.15,
+    bonusDropTags: ['PREDATORY', 'HEALTHY'],
+    bonusDropChance: 0.1,
+    legendaryBonusTags: ['LEGENDARY', 'GODHEAD'],
+    legendaryBonusChance: 0.2,
+    defaultItemSound: 'fame',
+    defaultConsumableSound: 'pow',
+    defaultPedestalSound: 'zelda_secret',
+};
 
 const Items = {
     // === ITEM CATALOG ===
@@ -16,7 +34,8 @@ const Items = {
             description: 'A healthy game. They do exist.',
             tags: ['HEALTHY', 'HONEST'],
             rarity: 'rare',
-            effects: { tint: '#ffcccc', pulseRate: 0.5 }
+            effects: { tint: '#ffcccc', pulseRate: 0.5 },
+            sound: 'fame'
         },
         lazarus_rags: {
             id: 'lazarus_rags',
@@ -26,7 +45,8 @@ const Items = {
             description: 'Back from the dead. Rebuilt. Reborn.',
             tags: ['PHOENIX', '180', 'REDEMPTION'],
             rarity: 'uncommon',
-            effects: { tint: '#ffe4b5', resurrection: true }
+            effects: { tint: '#ffe4b5', resurrection: true },
+            sound: 'achievement'
         },
         
         // === BAD ITEMS ===
@@ -38,7 +58,8 @@ const Items = {
             description: "You'll need all of them.",
             tags: ['PREDATORY', 'REFUND_TRAP'],
             rarity: 'uncommon',
-            effects: { lives: 9, tint: '#666666' }
+            effects: { lives: 9, tint: '#666666' },
+            sound: 'shame'
         },
         moms_knife: {
             id: 'moms_knife',
@@ -48,7 +69,8 @@ const Items = {
             description: 'It hurts but you keep coming back.',
             tags: ['STOCKHOLM', 'EXTRACTIVE'],
             rarity: 'uncommon',
-            effects: { tint: '#cc4444', pain: true }
+            effects: { tint: '#cc4444', pain: true },
+            sound: 'shame'
         },
         blood_bag: {
             id: 'blood_bag',
@@ -58,7 +80,8 @@ const Items = {
             description: "They're draining you dry.",
             tags: ['EXTRACTIVE', 'ADDICTIVE'],
             rarity: 'common',
-            effects: { tint: '#8b0000', draining: true }
+            effects: { tint: '#8b0000', draining: true },
+            sound: 'shame'
         },
         
         // === NEUTRAL/WEIRD ITEMS ===
@@ -70,7 +93,8 @@ const Items = {
             description: 'The servers are silent now.',
             tags: ['DEAD', 'PRESS_F', 'ZOMBIE'],
             rarity: 'common',
-            effects: { ghostly: true, tint: '#e0e0ff', opacity: 0.7 }
+            effects: { ghostly: true, tint: '#e0e0ff', opacity: 0.7 },
+            sound: 'error'
         },
         caffeine_pill: {
             id: 'caffeine_pill',
@@ -80,7 +104,8 @@ const Items = {
             description: 'Pupil dilation is a feature.',
             tags: ['ADDICTIVE'],
             rarity: 'common',
-            effects: { dilation: 1.5, jitter: true }
+            effects: { dilation: 1.5, jitter: true },
+            sound: 'pow'
         },
         the_poop: {
             id: 'the_poop',
@@ -90,7 +115,8 @@ const Items = {
             description: 'Well, someone had to buy it.',
             tags: ['FLOP', 'CURSED'],
             rarity: 'common',
-            effects: { stinky: true, tint: '#8b4513' }
+            effects: { stinky: true, tint: '#8b4513' },
+            sound: 'shame'
         },
         
         // === SPICY ITEMS ===
@@ -102,7 +128,8 @@ const Items = {
             description: 'You know exactly what kind of game this is.',
             tags: ['HORNY'],
             rarity: 'uncommon',
-            effects: { flustered: true, tint: '#ffb6c1', sweat: true }
+            effects: { flustered: true, tint: '#ffb6c1', sweat: true },
+            sound: 'achievement'
         },
         the_virus: {
             id: 'the_virus',
@@ -112,7 +139,8 @@ const Items = {
             description: 'Spread the love.',
             tags: ['HORNY', 'PLAGUE'],
             rarity: 'rare',
-            effects: { infected: true, tint: '#90EE90' }
+            effects: { infected: true, tint: '#90EE90' },
+            sound: 'error'
         },
         
         // === ULTRA RARE ===
@@ -125,7 +153,8 @@ const Items = {
             tags: ['HEALTHY', 'HONEST'],
             rarity: 'legendary',
             condition: { positiveRatio: { gt: 0.95 }, medianRatio: { lt: 0.8 } },
-            effects: { halo: true, tint: '#fffacd', divine: true }
+            effects: { halo: true, tint: '#fffacd', divine: true },
+            sound: 'zelda_secret'
         },
         brimstone: {
             id: 'brimstone',
@@ -136,7 +165,8 @@ const Items = {
             tags: ['PREDATORY', 'ENSHITTIFIED'],
             rarity: 'legendary',
             condition: { negativeRatio: { gt: 0.7 } },
-            effects: { demonic: true, tint: '#ff0000', laserCharge: true }
+            effects: { demonic: true, tint: '#ff0000', laserCharge: true },
+            sound: 'zelda_secret'
         },
         
         // === MEME ITEMS ===
@@ -149,7 +179,8 @@ const Items = {
             tags: ['HEALTHY'],
             rarity: 'common',
             stackable: true,
-            grants: { maxHealth: 2, heal: 2 }
+            grants: { maxHealth: 2, heal: 2 },
+            sound: 'pow'
         },
         lunch: {
             id: 'lunch',
@@ -160,7 +191,8 @@ const Items = {
             tags: ['HEALTHY'],
             rarity: 'common',
             stackable: true,
-            grants: { maxHealth: 2, heal: 2 }
+            grants: { maxHealth: 2, heal: 2 },
+            sound: 'pow'
         },
         dinner: {
             id: 'dinner',
@@ -171,7 +203,8 @@ const Items = {
             tags: ['HEALTHY'],
             rarity: 'common',
             stackable: true,
-            grants: { maxHealth: 2, heal: 2 }
+            grants: { maxHealth: 2, heal: 2 },
+            sound: 'pow'
         },
         onion: {
             id: 'onion',
@@ -181,7 +214,8 @@ const Items = {
             description: "It's enough to make a grown eye cry.",
             tags: ['DEAD', 'ENSHITTIFIED', 'RETCONNED'],
             rarity: 'common',
-            effects: { tearsUp: true, tearRate: 2.0 }
+            effects: { tearsUp: true, tearRate: 2.0 },
+            sound: 'shame'
         },
         number_one: {
             id: 'number_one',
@@ -191,7 +225,8 @@ const Items = {
             description: 'Fast and small. Like the reviews.',
             tags: ['LOW_DATA'],
             rarity: 'common',
-            effects: { blinkRate: 2.0, pupilSize: 0.5 }
+            effects: { blinkRate: 2.0, pupilSize: 0.5 },
+            sound: 'pow'
         },
         polyphemus: {
             id: 'polyphemus',
@@ -202,7 +237,8 @@ const Items = {
             tags: ['STOCKHOLM'],
             rarity: 'rare',
             condition: { stockholmIndex: { gt: 2.0 } },
-            effects: { giant: true, pupilSize: 2.0 }
+            effects: { giant: true, pupilSize: 2.0 },
+            sound: 'fame'
         }
     },
     
@@ -214,7 +250,8 @@ const Items = {
             name: 'Red Heart',
             icon: '❤️',
             requires: { damaged: true },  // can only pick up if health < max
-            grants: { heal: 2 }
+            grants: { heal: 2 },
+            sound: 'pow'
         },
         half_heart: {
             id: 'half_heart',
@@ -222,34 +259,39 @@ const Items = {
             icon: '❤️',
             iconClass: 'heart half',
             requires: { damaged: true },
-            grants: { heal: 1 }
+            grants: { heal: 1 },
+            sound: 'pow'
         },
         soul_heart: {
             id: 'soul_heart',
             name: 'Soul Heart',
             icon: '💙',
-            grants: { soulHealth: 2 }  // TODO: implement soul hearts
+            grants: { soulHealth: 2 },  // TODO: implement soul hearts
+            sound: 'achievement'
         },
         penny: {
             id: 'penny',
             name: 'Penny',
             icon: '🪙',
             iconClass: 'coin penny',
-            grants: { coins: 1 }
+            grants: { coins: 1 },
+            sound: 'pow'
         },
         nickel: {
             id: 'nickel',
             name: 'Nickel',
             icon: '🪙',
             iconClass: 'coin nickel',
-            grants: { coins: 5 }
+            grants: { coins: 5 },
+            sound: 'pow'
         },
         dime: {
             id: 'dime',
             name: 'Dime',
             icon: '🪙',
             iconClass: 'coin dime',
-            grants: { coins: 10 }
+            grants: { coins: 10 },
+            sound: 'achievement'
         }
     },
     
@@ -370,11 +412,11 @@ const Items = {
     // === PUBLIC API ===
     
     // Health delegation to Eye
-    get health() { return typeof Eye !== 'undefined' ? Eye.health : 12; },
-    set health(v) { if (typeof Eye !== 'undefined') Eye.health = v; },
-    get maxHealth() { return typeof Eye !== 'undefined' ? Eye.maxHealth : 12; },
-    set maxHealth(v) { if (typeof Eye !== 'undefined') Eye.maxHealth = v; },
-    get maxContainers() { return typeof Eye !== 'undefined' ? Eye.maxContainers : 24; },
+    get health() { return Eye.health; },
+    set health(v) { Eye.health = v; },
+    get maxHealth() { return Eye.maxHealth; },
+    set maxHealth(v) { Eye.maxHealth = v; },
+    get maxContainers() { return Eye.maxContainers; },
     
     // Get items matching tags
     getMatchingItems(tags, metrics) {
@@ -387,7 +429,7 @@ const Items = {
             // Check declarative condition
             if (!this.checkCondition(item.condition, metrics)) continue;
             
-            const rarityWeight = { common: 10, uncommon: 5, rare: 2, legendary: 0.5 }[item.rarity] || 1;
+            const rarityWeight = ItemConfig.rarityWeights[item.rarity] || 1;
             const weight = overlap.length * rarityWeight;
             
             for (let i = 0; i < weight; i++) {
@@ -400,9 +442,9 @@ const Items = {
     
     // Roll for item drop
     rollForDrop(tags, metrics) {
-        let chance = 0.15;
-        if (tags.includes('PREDATORY') || tags.includes('HEALTHY')) chance += 0.1;
-        if (tags.includes('LEGENDARY') || tags.includes('GODHEAD')) chance += 0.2;
+        let chance = ItemConfig.baseDropChance;
+        if (ItemConfig.bonusDropTags.some(t => tags.includes(t))) chance += ItemConfig.bonusDropChance;
+        if (ItemConfig.legendaryBonusTags.some(t => tags.includes(t))) chance += ItemConfig.legendaryBonusChance;
         
         if (Math.random() > chance) return null;
         
@@ -462,7 +504,8 @@ const Items = {
         // Apply grants
         this.applyGrants(consumable.grants);
         
-        if (typeof playPickupSound === 'function') playPickupSound();
+        // Play sound from item data or default
+        sfx.play(consumable.sound || ItemConfig.defaultConsumableSound);
     },
     
     // Drop multiple consumables
@@ -502,7 +545,7 @@ const Items = {
         if (container) {
             container.appendChild(pedestal);
             setTimeout(() => pedestal.classList.add('visible'), 100);
-            if (typeof playPedestalSound === 'function') playPedestalSound();
+            sfx.play(ItemConfig.defaultPedestalSound);
         }
     },
     
@@ -533,14 +576,13 @@ const Items = {
         }
         
         // Achievements
-        if (typeof setAchievementFlag === 'function') {
-            setAchievementFlag('pickedUpItem');
-            if (item.rarity === 'legendary') {
-                setAchievementFlag('legendaryItem');
-            }
+        setAchievementFlag('pickedUpItem');
+        if (item.rarity === 'legendary') {
+            setAchievementFlag('legendaryItem');
         }
         
-        if (typeof playItemPickupSound === 'function') playItemPickupSound();
+        // Play sound from item data or default
+        sfx.play(item.sound || ItemConfig.defaultItemSound);
         
         this.saveInventory();
         this.pedestalVisible = false;
@@ -567,34 +609,14 @@ const Items = {
     
     // Apply merged effects to eye
     applyEffects() {
-        const effects = this.getMergedEffects();
-        if (typeof applyItemEffects === 'function') {
-            applyItemEffects(effects);
-        }
+        applyItemEffects(this.getMergedEffects());
     },
     
     // Health delegation
-    renderHealthBar() {
-        if (typeof Eye !== 'undefined') Eye.renderHealthBar();
-    },
-    
-    damage(halfHearts = 1, anim = 'fall', source = 'player') {
-        if (typeof Eye !== 'undefined') {
-            Eye.damage(halfHearts, anim, source);
-            if (Eye.health <= 0) {
-                this.inventory = [];
-                this.saveInventory();
-            }
-        }
-    },
-    
-    heal(halfHearts = 1) {
-        if (typeof Eye !== 'undefined') Eye.heal(halfHearts);
-    },
-    
-    addContainer() {
-        if (typeof Eye !== 'undefined') Eye.addContainer();
-    },
+    renderHealthBar() { Eye.renderHealthBar(); },
+    damage(halfHearts = 1, anim = 'fall', source = 'player') { Eye.damage(halfHearts, anim, source); },
+    heal(halfHearts = 1) { Eye.heal(halfHearts); },
+    addContainer() { Eye.addContainer(); },
     
     // Render item bar
     renderItemBar() {

@@ -212,23 +212,20 @@ async function analyze() {
             
             const tags = currentMetrics.verdict?.tags?.map(t => t.id) || [];
             
-            // Roll for item drop (only if multiple snapshots)
-            if (typeof Items !== 'undefined' && snapshotCount > 1) {
+            // Roll for item drop based on analysis tags
+            if (snapshotCount > 1) {
                 const item = Items.rollForDrop(tags, currentMetrics);
                 if (item) {
-                    // Delay pedestal spawn for dramatic effect
                     setTimeout(() => Items.showPedestal(item), 1500);
                 }
             }
             
-            // Drop consumables (0-4, skewed toward 0 for low snapshot counts)
-            if (typeof Items !== 'undefined') {
-                const maxDrops = snapshotCount > 1 ? 4 : 1;
-                const dropChance = Math.min(1, snapshotCount / 10); // more snapshots = more drops
-                setTimeout(() => {
-                    Items.dropConsumables(tags, document.getElementById('metrics-detail'), maxDrops, dropChance);
-                }, 2000);
-            }
+            // Drop consumables - more snapshots = more chances
+            const maxDrops = snapshotCount > 1 ? 4 : 1;
+            const dropChance = Math.min(1, snapshotCount / 10);
+            setTimeout(() => {
+                Items.dropConsumables(tags, document.getElementById('metrics-detail'), maxDrops, dropChance);
+            }, 2000);
         }
     };
 }
@@ -927,7 +924,7 @@ function drawTimeline() {
     timelineCtx.fillRect(selX + selW - 4, 0, 8, chartH + tagStripH);
 
     // year labels
-    timelineCtx.fillStyle = typeof isDarkMode === 'function' && isDarkMode() ? '#888' : '#666';
+    timelineCtx.fillStyle = isDarkMode() ? '#888' : '#666';
     timelineCtx.font = '10px Verdana';
     timelineCtx.textAlign = 'center';
 
@@ -1377,7 +1374,7 @@ function updateEditHeatmap(snapshot) {
     if (months.length < 2) {
         // Not enough data
         heatmapCtx.clearRect(0, 0, heatmapCanvas.width, heatmapCanvas.height);
-        heatmapCtx.fillStyle = typeof isDarkMode === 'function' && isDarkMode() ? '#666' : '#999';
+        heatmapCtx.fillStyle = isDarkMode() ? '#666' : '#999';
         heatmapCtx.font = '12px Verdana';
         heatmapCtx.textAlign = 'center';
         heatmapCtx.fillText('Not enough edit data', heatmapCanvas.width / 2, heatmapCanvas.height / 2);
@@ -1457,7 +1454,7 @@ function updateEditHeatmap(snapshot) {
     heatmapCtx.setLineDash([]);
     
     // X axis labels (posted month) - show every Nth
-    heatmapCtx.fillStyle = typeof isDarkMode === 'function' && isDarkMode() ? '#888' : '#666';
+    heatmapCtx.fillStyle = isDarkMode() ? '#888' : '#666';
     heatmapCtx.font = '9px Verdana';
     heatmapCtx.textAlign = 'center';
     const labelStep = Math.ceil(n / 10);
@@ -1474,7 +1471,7 @@ function updateEditHeatmap(snapshot) {
     }
     
     // Axis titles
-    heatmapCtx.fillStyle = typeof isDarkMode === 'function' && isDarkMode() ? '#aaa' : '#333';
+    heatmapCtx.fillStyle = isDarkMode() ? '#aaa' : '#333';
     heatmapCtx.font = '10px Verdana';
     heatmapCtx.textAlign = 'center';
     heatmapCtx.fillText('Posted', padding.left + chartW / 2, h - 5);

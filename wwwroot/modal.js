@@ -21,23 +21,20 @@ function setDarkMode(enabled, saveToStorage = true) {
     darkMode = enabled;
     document.body.classList.toggle('dark-mode', enabled);
     
-    if (enabled && typeof setAchievementFlag === 'function') {
-        setAchievementFlag('darkModeEnabled');
-    }
+    if (enabled) setAchievementFlag('darkModeEnabled');
     
-    if (typeof Chart !== 'undefined') {
-        const textColor = enabled ? '#ccc' : '#666';
-        const gridColor = enabled ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)';
-        
-        Chart.defaults.color = textColor;
-        Chart.defaults.borderColor = gridColor;
-        Chart.defaults.scale.grid.color = gridColor;
-        Chart.defaults.scale.ticks.color = textColor;
-        
-        if (typeof chart !== 'undefined' && chart) chart.update();
-        if (typeof velocityChart !== 'undefined' && velocityChart) velocityChart.update();
-        if (typeof languageChart !== 'undefined' && languageChart) languageChart.update();
-    }
+    // Update Chart.js theme
+    const textColor = enabled ? '#ccc' : '#666';
+    const gridColor = enabled ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)';
+    
+    Chart.defaults.color = textColor;
+    Chart.defaults.borderColor = gridColor;
+    Chart.defaults.scale.grid.color = gridColor;
+    Chart.defaults.scale.ticks.color = textColor;
+    
+    if (chart) chart.update();
+    if (velocityChart) velocityChart.update();
+    if (languageChart) languageChart.update();
     
      drawTimeline();
     
@@ -82,7 +79,7 @@ function buildEyeTab(content, refs) {
     refs.blinkCheckbox = document.createElement('input');
     refs.blinkCheckbox.type = 'checkbox';
     refs.blinkCheckbox.className = 'modal-checkbox';
-    refs.blinkCheckbox.checked = typeof isBlinkingEnabled === 'function' ? isBlinkingEnabled() : true;
+    refs.blinkCheckbox.checked = isBlinkingEnabled();
     refs.blinkCheckbox.onchange = () => {
         if (refs.blinkCheckbox.checked) enableBlinking();
         else disableBlinking();
@@ -97,7 +94,7 @@ function buildEyeTab(content, refs) {
     refs.sleepCheckbox = document.createElement('input');
     refs.sleepCheckbox.type = 'checkbox';
     refs.sleepCheckbox.className = 'modal-checkbox';
-    refs.sleepCheckbox.checked = typeof isSleepEnabled === 'function' ? isSleepEnabled() : true;
+    refs.sleepCheckbox.checked = isSleepEnabled();
     refs.sleepCheckbox.onchange = () => {
          setSleepEnabled(refs.sleepCheckbox.checked);
     };
@@ -111,7 +108,7 @@ function buildEyeTab(content, refs) {
     refs.trackingCheckbox = document.createElement('input');
     refs.trackingCheckbox.type = 'checkbox';
     refs.trackingCheckbox.className = 'modal-checkbox';
-    refs.trackingCheckbox.checked = typeof isCursorTrackingEnabled === 'function' ? isCursorTrackingEnabled() : true;
+    refs.trackingCheckbox.checked = isCursorTrackingEnabled();
     refs.trackingCheckbox.onchange = () => {
          setCursorTrackingEnabled(refs.trackingCheckbox.checked);
     };
@@ -285,7 +282,7 @@ function buildAchievementsTab(content) {
     const container = document.createElement('div');
     container.className = 'achievements-container';
 
-    const stats = typeof getAchievementStats === 'function' ? getAchievementStats() : { unlocked: 0, visible: 0 };
+    const stats = getAchievementStats();
     const header = document.createElement('div');
     header.className = 'achievements-header';
     header.innerHTML = `
@@ -294,7 +291,7 @@ function buildAchievementsTab(content) {
     `;
     container.appendChild(header);
 
-    const list = typeof getAchievementList === 'function' ? getAchievementList() : [];
+    const list = getAchievementList();
 
     // Split into categories
     const unlocked = list.filter(a => a.unlocked);
@@ -388,7 +385,7 @@ function buildAudioTab(content) {
     container.appendChild(header);
     
     // ONE SOURCE OF TRUTH: Tracker library
-    const sounds = typeof Tracker !== 'undefined' ? Tracker.getLibrary() : [];
+    const sounds = Tracker.getLibrary();
     
     for (const sound of sounds) {
         const item = document.createElement('div');
@@ -615,7 +612,7 @@ const commands = {
         description: 'Get/set tagline ("clear" to reset)',
         execute: (args) => {
             if (args.length === 0) {
-                const current = typeof getCustomTagline === 'function' ? getCustomTagline() : null;
+                const current = getCustomTagline();
                 if (current !== null) {
                     consolePrint('tagline = "' + current + '" (custom)');
                 } else {
@@ -643,12 +640,12 @@ const commands = {
     eye_expression: {
         description: 'Set expression',
         execute: (args) => {
-            if (args[0] && typeof setExpression === 'function') {
+            if (args[0]) {
                 setExpression(args[0]);
                 consolePrint('Expression set to: ' + args[0]);
             } else {
                 consolePrint('Usage: eye_expression <name>');
-                consolePrint('Available: ' + (typeof expressions !== 'undefined' ? Object.keys(expressions).join(', ') : 'unknown'));
+                consolePrint('Available: ' + Object.keys(expressions).join(', '));
             }
         }
     },
@@ -671,8 +668,8 @@ const commands = {
         description: 'Save console settings',
         execute: () => {
             const settings = {
-                tagline: typeof getCustomTagline === 'function' ? getCustomTagline() : null,
-                svCheats: typeof isSvCheats === 'function' ? isSvCheats() : false,
+                tagline: getCustomTagline(),
+                svCheats: isSvCheats(),
                 bindings: keyBindings,
             };
             localStorage.setItem('consoleSettings', JSON.stringify(settings));
@@ -685,8 +682,8 @@ const commands = {
             const saved = localStorage.getItem('consoleSettings');
             if (saved) {
                 const settings = JSON.parse(saved);
-                if (settings.tagline && typeof setCustomTagline === 'function') setCustomTagline(settings.tagline);
-                if (settings.svCheats && typeof setSvCheats === 'function') setSvCheats(true);
+                if (settings.tagline) setCustomTagline(settings.tagline);
+                if (settings.svCheats) setSvCheats(true);
                 if (settings.bindings) keyBindings = settings.bindings;
                 consolePrint('Console settings loaded.', 'success');
             } else consolePrint('No saved console settings found.');
@@ -762,7 +759,7 @@ const commands = {
                  setSvCheats(false);
                 consolePrint('sv_cheats disabled.');
             } else {
-                consolePrint('sv_cheats = ' + (typeof isSvCheats === 'function' && isSvCheats() ? '1' : '0'));
+                consolePrint('sv_cheats = ' + (isSvCheats() ? '1' : '0'));
             }
         }
     },
@@ -803,7 +800,7 @@ const commands = {
         hidden: true,
         execute: (args) => {
             if (args[0] === '101') {
-                if (typeof isSvCheats === 'function' && !isSvCheats()) {
+                if (!isSvCheats()) {
                     consolePrint('sv_cheats must be enabled to use this command.', 'error');
                     return;
                 }
@@ -819,11 +816,7 @@ const commands = {
         execute: (args) => {
             if (args.length === 0) {
                 consolePrint('Usage: give <item_id>');
-                consolePrint('Items: ' + (typeof Items !== 'undefined' ? Object.keys(Items.catalog).join(', ') : 'none'));
-                return;
-            }
-            if (typeof Items === 'undefined') {
-                consolePrint('Items system not loaded.', 'error');
+                consolePrint('Items: ' + Object.keys(Items.catalog).join(', '));
                 return;
             }
             const itemId = args[0].toLowerCase();
@@ -841,10 +834,6 @@ const commands = {
         description: 'Spawn item pedestal',
         hidden: true,
         execute: (args) => {
-            if (typeof Items === 'undefined') {
-                consolePrint('Items system not loaded.', 'error');
-                return;
-            }
             const itemId = args[0]?.toLowerCase();
             const item = itemId ? Items.catalog[itemId] : Object.values(Items.catalog)[Math.floor(Math.random() * Object.keys(Items.catalog).length)];
             if (!item) {
@@ -859,10 +848,6 @@ const commands = {
         description: 'Spawn consumable pickup',
         hidden: true,
         execute: (args) => {
-            if (typeof Items === 'undefined') {
-                consolePrint('Items system not loaded.', 'error');
-                return;
-            }
             const consumableId = args[0]?.toLowerCase();
             if (!consumableId) {
                 consolePrint('Usage: drop <consumable_id>');
@@ -882,10 +867,6 @@ const commands = {
     items: {
         description: 'List inventory',
         execute: () => {
-            if (typeof Items === 'undefined') {
-                consolePrint('Items system not loaded.', 'error');
-                return;
-            }
             if (Items.inventory.length === 0) {
                 consolePrint('Inventory is empty.');
                 return;
@@ -909,10 +890,6 @@ const commands = {
         description: 'Clear all item effects',
         hidden: true,
         execute: () => {
-            if (typeof Items === 'undefined') {
-                consolePrint('Items system not loaded.', 'error');
-                return;
-            }
             Items.clearEffects();
             consolePrint('Cleared all item effects.');
         }
@@ -921,10 +898,6 @@ const commands = {
         description: 'Take damage',
         hidden: true,
         execute: (args) => {
-            if (typeof Items === 'undefined') {
-                consolePrint('Items system not loaded.', 'error');
-                return;
-            }
             const amount = parseInt(args[0]) || 1;
             const src = args[1] || 'player';
             Eye.damage(amount, 'fall', src);
@@ -935,10 +908,6 @@ const commands = {
         description: 'Restore health',
         hidden: true,
         execute: (args) => {
-            if (typeof Items === 'undefined') {
-                consolePrint('Items system not loaded.', 'error');
-                return;
-            }
             const amount = parseInt(args[0]) || 2;
             Eye.heal(amount);
             consolePrint(`Healed ${amount}. Health: ${Eye.health}/${Eye.maxHealth}`);
@@ -947,10 +916,6 @@ const commands = {
     health: {
         description: 'Show or set health',
         execute: (args) => {
-            if (typeof Items === 'undefined') {
-                consolePrint('Items system not loaded.', 'error');
-                return;
-            }
             if (args.length > 0) {
                 Eye.health = Math.min(Eye.maxHealth, Math.max(0, parseInt(args[0]) || 0));
                 Eye.renderHealthBar();
@@ -963,10 +928,6 @@ const commands = {
         description: 'Add heart container',
         hidden: true,
         execute: () => {
-            if (typeof Items === 'undefined') {
-                consolePrint('Items system not loaded.', 'error');
-                return;
-            }
             Eye.addContainer();
             consolePrint(`Added heart container. Max health: ${Eye.maxHealth/2} hearts`);
         }
@@ -1085,11 +1046,7 @@ function openTracker() {
     container.className = 'tracker tracker-modal';
     
     // Init tracker UI
-    if (typeof Tracker !== 'undefined') {
-        Tracker.createUI(container);
-    } else {
-        container.innerHTML += '<p style="padding:20px;color:#888;">Tracker not loaded. Include tracker.js</p>';
-    }
+    Tracker.createUI(container);
     
     overlay.appendChild(container);
     document.body.appendChild(overlay);
@@ -1105,7 +1062,7 @@ function closeTracker() {
     if (trackerModal) {
         trackerModal.style.display = 'none';
         trackerVisible = false;
-        if (typeof Tracker !== 'undefined') Tracker.stop();
+        Tracker.stop();
     }
 }
 
@@ -1144,9 +1101,9 @@ function loadEyeSettings() {
     const saved = localStorage.getItem('eyeSettings');
     if (saved) {
         const settings = JSON.parse(saved);
-        if (settings.blinkEnabled === false && typeof disableBlinking === 'function') disableBlinking();
-        if (settings.sleepEnabled === false && typeof setSleepEnabled === 'function') setSleepEnabled(false);
-        if (settings.trackingEnabled === false && typeof setCursorTrackingEnabled === 'function') setCursorTrackingEnabled(false);
+        if (settings.blinkEnabled === false) disableBlinking();
+        if (settings.sleepEnabled === false) setSleepEnabled(false);
+        if (settings.trackingEnabled === false) setCursorTrackingEnabled(false);
         if (settings.darkMode) { darkMode = true; document.body.classList.add('dark-mode'); setAchievementFlag('darkModeEnabled'); }
         if (settings.consoleEnabled) consoleEnabled = true;
         if (settings.upperColor) document.documentElement.style.setProperty('--color-positive', settings.upperColor);

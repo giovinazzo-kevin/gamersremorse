@@ -1,4 +1,14 @@
-﻿window.svg = document.getElementById('eye');
+﻿/* Eye - The soul of the application
+ * 
+ * PHILOSOPHY:
+ * - State lives here, systems read from it
+ * - Expressions are data (lerp targets), not procedures
+ * - Eye owns its health; Items delegates to Eye, not vice versa
+ * - No defensive typeof checks - load order is guaranteed
+ * - Comments explain WHY, not WHAT
+ */
+
+window.svg = document.getElementById('eye');
 const frameInterval = 1000 / 15;
 let t = 0;
 let lastFrame = 0;
@@ -1423,6 +1433,11 @@ const Eye = {
         killEye(anim);
         setAchievementFlag('yasd');
         
+        // Clear inventory on death
+        Items.inventory = [];
+        Items.activeEffects = {};
+        Items.saveInventory();
+        
         // Reset health after respawn
         setTimeout(() => {
             state.health = state.maxHealth = 12;
@@ -1437,7 +1452,7 @@ const Eye = {
         if (!bar) return;
         
         // Hidden until tookDamage achievement unlocked
-        const hasUnlocked = typeof achievementState !== 'undefined' && achievementState.unlocked?.kill_eye;
+        const hasUnlocked = achievementState?.unlocked?.kill_eye;
         if (!hasUnlocked) {
             bar.innerHTML = '';
             return;
@@ -1503,6 +1518,22 @@ const Eye = {
 
 // Expose globally
 window.Eye = Eye;
+
+// === ITEM EFFECTS INTERPRETER ===
+// Takes merged effects from Items system, applies to eye state
+function applyItemEffects(effects) {
+    if (effects.dilation !== undefined) state.targetDilation = effects.dilation;
+    if (effects.pupilSize) state.targetIrisRadius = 0.15 * effects.pupilSize;
+    if (effects.giant) state.targetIrisRadius = 0.3;
+    if (effects.jitter) state.driftStrength = 0.02;
+    if (effects.flustered) setExpression('flustered');
+    if (effects.tearsUp) state.blinkInterval = 2; // blink more
+    if (effects.blinkRate) state.blinkInterval = 4 / effects.blinkRate;
+    // Tint could be applied via CSS vars if needed
+    // if (effects.tint) document.documentElement.style.setProperty('--eye-tint', effects.tint);
+}
+
+window.applyItemEffects = applyItemEffects;
 
 // Load state on init
 if (document.readyState === 'loading') {
