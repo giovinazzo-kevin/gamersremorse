@@ -433,7 +433,7 @@ const Tracker = (() => {
         
         const itemBpm = item.bpm || DEFAULT_BPM;
         const itemSpeed = item.speed || DEFAULT_SPEED;
-        const msPerRow = (60000 / itemBpm) / (itemSpeed / 4);
+        const msPerRow = (speed * 2500) / bpm;
         
         // Setup effects based on library item
         let delayNode = null;
@@ -607,7 +607,17 @@ const Tracker = (() => {
         const icon = prompt('Enter an emoji icon:', '🎵') || '🎵';
         saveToCustomLibrary(name, icon);
     }
-    
+
+    function createNewPattern() {
+        patterns = { 0: createEmptyPattern() };
+        sequence = [0];
+        bpm = DEFAULT_BPM;
+        speed = DEFAULT_SPEED;
+        currentPattern = 0;
+        currentRow = 0;
+        updateDisplay();
+    }
+
     function updateLibraryDisplay() {
         const list = trackerElement?.querySelector('#tracker-library-list');
         if (!list) return;
@@ -646,6 +656,10 @@ const Tracker = (() => {
                     </div>`;
                 }
             }
+            // New pattern button
+            html += `<div class="library-item" id="new-pattern-btn" style="justify-content: center; color: #54bebe;">
+                <span>+ New Pattern</span>
+            </div>`;
         } else if (libraryTab === 'instruments') {
             const allInst = getAllInstruments();
             
@@ -686,6 +700,10 @@ const Tracker = (() => {
         
         // Add click handlers for custom songs
         if (libraryTab === 'patterns') {
+            const newBtn = list.querySelector('#new-pattern-btn');
+            if (newBtn) {
+                newBtn.onclick = () => createNewPattern();
+            }
             list.querySelectorAll('.library-item.custom').forEach(el => {
                 el.onclick = (e) => {
                     if (!e.target.classList.contains('library-delete')) {
@@ -831,6 +849,28 @@ const Tracker = (() => {
         return { rows, length };
     }
     
+    function resizePattern(newLength) {
+        const pat = patterns[sequence[currentPattern]];
+        if (!pat) return;
+        newLength = Math.max(1, Math.min(256, newLength));
+        
+        if (newLength > pat.length) {
+            while (pat.rows.length < newLength) {
+                pat.rows.push({
+                    pulse1: { note: null, octave: null, inst: null, vol: null, fx: null },
+                    pulse2: { note: null, octave: null, inst: null, vol: null, fx: null },
+                    triangle: { note: null, octave: null, inst: null, vol: null, fx: null },
+                    noise: { note: null, octave: null, inst: null, vol: null, fx: null },
+                });
+            }
+        } else {
+            pat.rows.length = newLength;
+        }
+        pat.length = newLength;
+        if (currentRow >= newLength) currentRow = newLength - 1;
+        updateDisplay();
+    }
+    
     // === NOTE HELPERS ===
     function noteToFreq(note, octave) {
         if (!note || note === '---') return null;
@@ -883,7 +923,7 @@ const Tracker = (() => {
         playing = true;
         currentRow = 0;
         currentPattern = 0;
-        const msPerRow = (60000 / bpm) / (speed / 4);
+        const msPerRow = (speed * 2500) / bpm;
         playInterval = setInterval(() => tick(), msPerRow);
         startVisualizerLoop();
         updateDisplay();
@@ -1440,6 +1480,7 @@ const Tracker = (() => {
                     <span class="tracker-param" data-param="bpm" title="Click to change, scroll to adjust">BPM: <span id="tracker-bpm">${bpm}</span></span>
                     <span class="tracker-param" data-param="pat" title="Click to change, scroll to adjust">Pat: <span id="tracker-pattern">${currentPattern}</span></span>
                     <span class="tracker-param" data-param="inst" title="Click to change, scroll to adjust">Inst: <span id="tracker-inst">${currentInstrument !== null ? currentInstrument.toString(16).toUpperCase().padStart(2, '0') : '--'}</span></span>
+                    <span class="tracker-param" data-param="len" title="Click to change, scroll to adjust">Len: <span id="tracker-len">${DEFAULT_ROWS}</span></span>
                 </div>
                 <button class="tracker-help-btn" id="tracker-help" title="Keyboard shortcuts">?</button>
                 <button class="tracker-help-btn" id="tracker-maximize" title="Maximize">⛶</button>
@@ -1633,10 +1674,12 @@ const Tracker = (() => {
             const param = el.dataset.param;
             
             el.addEventListener('click', () => {
+                const pattern = patterns[sequence[currentPattern]];
                 const current = param === 'oct' ? currentOctave : 
                                 param === 'bpm' ? bpm : 
                                 param === 'pat' ? currentPattern :
-                                param === 'inst' ? currentInstrument : 0;
+                                param === 'inst' ? currentInstrument :
+                                param === 'len' ? (pattern?.length || DEFAULT_ROWS) : 0;
                 const input = prompt(`Enter ${param.toUpperCase()}:`, current);
                 if (input !== null) {
                     const val = parseInt(input);
@@ -1648,6 +1691,7 @@ const Tracker = (() => {
                             currentInstrument = Math.max(0, Math.min(getAllInstruments().length - 1, val));
                             updateEditorPanel();
                         }
+                        else if (param === 'len') resizePattern(val);
                         updateDisplay();
                     }
                 }
@@ -1656,12 +1700,17 @@ const Tracker = (() => {
             el.addEventListener('wheel', (e) => {
                 e.preventDefault();
                 const delta = e.deltaY > 0 ? -1 : 1;
+                const step = e.shiftKey ? 4 : 1;
                 if (param === 'oct') currentOctave = Math.max(0, Math.min(7, currentOctave + delta));
                 else if (param === 'bpm') bpm = Math.max(30, Math.min(300, bpm + delta * 5));
                 else if (param === 'pat') currentPattern = Math.max(0, Math.min(sequence.length - 1, currentPattern + delta));
                 else if (param === 'inst') {
                     currentInstrument = Math.max(0, Math.min(getAllInstruments().length - 1, (currentInstrument ?? 0) + delta));
                     updateEditorPanel();
+                }
+                else if (param === 'len') {
+                    const pattern = patterns[sequence[currentPattern]];
+                    if (pattern) resizePattern(pattern.length + delta * step);
                 }
                 updateDisplay();
             });
@@ -1746,10 +1795,12 @@ const Tracker = (() => {
         const bpmEl = trackerElement.querySelector('#tracker-bpm');
         const patEl = trackerElement.querySelector('#tracker-pattern');
         const instEl = trackerElement.querySelector('#tracker-inst');
+        const lenEl = trackerElement.querySelector('#tracker-len');
         if (octEl) octEl.textContent = currentOctave;
         if (bpmEl) bpmEl.textContent = bpm;
         if (patEl) patEl.textContent = currentPattern;
         if (instEl) instEl.textContent = currentInstrument !== null ? currentInstrument.toString(16).toUpperCase().padStart(2, '0') : '--';
+        if (lenEl) lenEl.textContent = pattern?.length || DEFAULT_ROWS;
         
         // Update channel headers
         trackerElement.querySelectorAll('.tracker-channel-header').forEach((el, i) => {
@@ -2471,7 +2522,7 @@ const Tracker = (() => {
         
         const itemBpm = item.bpm || DEFAULT_BPM;
         const itemSpeed = item.speed || DEFAULT_SPEED;
-        const msPerRow = (60000 / itemBpm) / (itemSpeed / 4);
+        const msPerRow = (itemSpeed * 2500) / itemBpm;
         
         let rowIndex = 0;
         for (const patId of item.sequence) {
