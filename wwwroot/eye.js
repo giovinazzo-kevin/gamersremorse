@@ -1374,6 +1374,11 @@ function showRespawnTimer(container, eyeEl) {
             eyeEl.style.visibility = 'visible';
             state.dead = false;
             
+            // Reset blink state
+            state.blink = 0;
+            state.blinkTarget = 0;
+            enableBlinking();
+            
             // Disappointed reaction with timeout
             const reaction = Date.now();
             state.lastReaction = reaction;
