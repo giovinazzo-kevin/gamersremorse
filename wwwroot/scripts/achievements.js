@@ -116,7 +116,7 @@ const ACHIEVEMENTS = {
     yasd: {
         id: 'yasd',
         title: 'YASD',
-        description: 'Misclick',
+        description: 'Learn it the hard way',
         icon: '💀',
         hidden: true,
         check: (state) => state.yasd
