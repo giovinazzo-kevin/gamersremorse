@@ -16,6 +16,7 @@ const sfx = {
         if (callback) setTimeout(callback, 500);
     },
     pow: () => Tracker.playLibraryItem('pow'),
+    tear: () => Tracker.playLibraryItem('tear'),
     screenshot: () => Tracker.playLibraryItem('screenshot'),
     shame: () => Tracker.playLibraryItem('shame'),
     fame: () => Tracker.playLibraryItem('fame'),

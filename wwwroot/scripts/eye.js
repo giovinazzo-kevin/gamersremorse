@@ -9,7 +9,7 @@
  */
 
 window.svg = document.getElementById('eye');
-const frameInterval = 1000 / 15;
+const frameInterval = 1000 / 60;
 let t = 0;
 let lastFrame = 0;
 let numBlinks = 0;
@@ -1119,12 +1119,18 @@ function tick(timestamp) {
         updateBlink(dt);
 
         if (state.awake && !state.busy && state.blink < 0.05 && Date.now() > state.nextBlinkTime) {
-            blink();
-            if (state.pendingDoubleBlink) {
-                state.nextBlinkTime = Date.now() + 150;
-                state.pendingDoubleBlink = false;
-            } else {
-                scheduleNextBlink();
+            const shootCooldown = 500; // ms after last shot before natural blinks
+            if (Date.now() - (state.lastShot || 0) < shootCooldown) {
+                scheduleNextBlink(); // push it out
+            }
+            else {
+                blink();
+                if (state.pendingDoubleBlink) {
+                    state.nextBlinkTime = Date.now() + 150;
+                    state.pendingDoubleBlink = false;
+                } else {
+                    scheduleNextBlink();
+                }
             }
         }
 
@@ -1520,7 +1526,11 @@ const Eye = {
             if (state.health <= 0) state.health = state.maxHealth;
         }
         this.renderHealthBar();
-    }
+    },
+
+    blink() {
+        blink();
+    },
 };
 
 // Expose globally
@@ -1541,13 +1551,6 @@ function applyItemEffects(effects) {
 }
 
 window.applyItemEffects = applyItemEffects;
-
-// Load state on init
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => Eye.load());
-} else {
-    Eye.load();
-}
 
 document.addEventListener('mousemove', onMouseMove);
 svg.addEventListener('click', () => {

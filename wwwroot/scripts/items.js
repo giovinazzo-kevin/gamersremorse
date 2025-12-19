@@ -239,7 +239,50 @@ const Items = {
             condition: { stockholmIndex: { gt: 2.0 } },
             effects: { giant: true, pupilSize: 2.0 },
             sound: 'fame'
-        }
+        },
+        cupids_arrow: {
+            id: 'cupids_arrow',
+            name: "Cupid's Arrow",
+            icon: '💘',
+            flavor: '"Piercing shots"',
+            description: 'Tears pass through enemies.',
+            tags: ['HEALTHY'],
+            rarity: 'uncommon',
+            effects: { piercing: true },
+        },
+
+        rubber_cement: {
+            id: 'rubber_cement',
+            name: 'Rubber Cement',
+            icon: '🫧',
+            flavor: '"Boing"',
+            description: 'Tears bounce off walls.',
+            tags: ['DIVISIVE'],
+            rarity: 'uncommon',
+            effects: { bouncing: true },
+        },
+
+        spoon_bender: {
+            id: 'spoon_bender',
+            name: 'Spoon Bender',
+            icon: '🥄',
+            flavor: '"Psychic shot"',
+            description: 'Tears seek enemies.',
+            tags: ['ADDICTIVE'],
+            rarity: 'rare',
+            effects: { homing: true },
+        },
+
+        crown_of_thorns: {
+            id: 'crown_of_thorns',
+            name: 'Crown of Thorns',
+            icon: '👑',
+            flavor: '"Suffer"',
+            description: 'Your tears are blood.',
+            tags: ['PREDATORY', 'EXTRACTIVE'],
+            rarity: 'uncommon',
+            effects: { bloody: true },
+        },
     },
     
     // === CONSUMABLES ===
@@ -743,12 +786,5 @@ const Items = {
         this.showConsumable(consumableId);
     }
 };
-
-// Initialize
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => Items.loadInventory());
-} else {
-    Items.loadInventory();
-}
 
 window.Items = Items;
