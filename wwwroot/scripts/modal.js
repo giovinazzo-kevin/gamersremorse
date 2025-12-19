@@ -252,7 +252,7 @@ function buildInterfaceTab(content, refs) {
     refs.darkModeCheckbox.checked = darkMode;
     refs.darkModeCheckbox.onchange = () => setDarkMode(refs.darkModeCheckbox.checked, false);
     darkModeRow.appendChild(refs.darkModeCheckbox);
-    darkModeRow.appendChild(document.createTextNode(' Dark mode'));
+    darkModeRow.appendChild(document.createTextNode(' Enable dark mode'));
     leftCol.appendChild(darkModeRow);
 
     // Console toggle
