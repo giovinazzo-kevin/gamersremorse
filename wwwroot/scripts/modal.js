@@ -264,7 +264,7 @@ function buildInterfaceTab(content, refs) {
     refs.consoleCheckbox.checked = consoleEnabled;
     refs.consoleCheckbox.onchange = () => setConsoleEnabled(refs.consoleCheckbox.checked, false);
     consoleRow.appendChild(refs.consoleCheckbox);
-    consoleRow.appendChild(document.createTextNode(' Enable developer console (~)'));
+    consoleRow.appendChild(document.createTextNode(' Enable developer console'));
     leftCol.appendChild(consoleRow);
 
     // Page selection
