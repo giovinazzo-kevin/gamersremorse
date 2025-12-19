@@ -460,7 +460,7 @@ const Tracker = (() => {
         const freq = noteToFreq(cell.note, cell.octave);
         if (!freq) return;
         
-        const inst = instruments[cell.inst || 0] || instruments[0];
+        const inst = getAllInstruments()[cell.inst || 0] || getAllInstruments()[0];
         const volume = (cell.vol !== null ? cell.vol : 15) / 15 * 0.15;
         
         // Per-voice bitcrusher for proper 8-bit sound
@@ -497,7 +497,11 @@ const Tracker = (() => {
         
         const osc = audioCtx.createOscillator();
         const gain = audioCtx.createGain();
-        osc.type = (channel === 'triangle' || inst.type === 'triangle') ? 'triangle' : 'square';
+        // Map instrument type to Web Audio oscillator type
+        if (inst.type === 'triangle' || channel === 'triangle') osc.type = 'triangle';
+        else if (inst.type === 'sawtooth') osc.type = 'sawtooth';
+        else if (inst.type === 'sine') osc.type = 'sine';
+        else osc.type = 'square'; // pulse
         osc.frequency.value = freq;
         osc.connect(crusher);
         crusher.connect(gain);
@@ -630,17 +634,39 @@ const Tracker = (() => {
                 }
             }
         } else if (libraryTab === 'instruments') {
-            // Show instruments
-            for (let i = 0; i < instruments.length; i++) {
-                const inst = instruments[i];
-                const isSelected = currentInstrument !== null && i === currentInstrument;
-                const icon = inst.type === 'noise' ? '🎲' : inst.type === 'triangle' ? '🔺' : '■';
+            const allInst = getAllInstruments();
+            
+            // Built-in section
+            html += `<div class="library-section-header">BUILT-IN</div>`;
+            for (let i = 0; i < builtInInstruments.length; i++) {
+                const inst = allInst[i];
+                const isSelected = currentInstrument === i;
+                const icon = inst.type === 'noise' ? '🎲' : inst.type === 'triangle' ? '🔺' : inst.type === 'sine' ? '🌊' : inst.type === 'sawtooth' ? '🪚' : '■';
                 html += `<div class="library-item ${isSelected ? 'selected' : ''}" data-inst="${i}">
                     <span class="library-icon">${icon}</span>
                     <span class="library-name">${inst.name}</span>
                     <span class="library-inst-num">${i.toString(16).toUpperCase().padStart(2, '0')}</span>
                 </div>`;
             }
+            
+            // Custom section
+            html += `<div class="library-section-header">CUSTOM</div>`;
+            for (let i = builtInInstruments.length; i < allInst.length; i++) {
+                const inst = allInst[i];
+                const isSelected = currentInstrument === i;
+                const icon = inst.type === 'noise' ? '🎲' : inst.type === 'triangle' ? '🔺' : inst.type === 'sine' ? '🌊' : inst.type === 'sawtooth' ? '🪚' : '■';
+                html += `<div class="library-item custom ${isSelected ? 'selected' : ''}" data-inst="${i}">
+                    <span class="library-icon">${icon}</span>
+                    <span class="library-name">${inst.name}</span>
+                    <span class="library-inst-num">${i.toString(16).toUpperCase().padStart(2, '0')}</span>
+                    <span class="library-delete" data-delete-inst="${i}">×</span>
+                </div>`;
+            }
+            
+            // New button
+            html += `<div class="library-item" id="new-instrument-btn" style="justify-content: center; color: #54bebe;">
+                <span>+ New Instrument</span>
+            </div>`;
         }
         
         list.innerHTML = html;
@@ -655,19 +681,29 @@ const Tracker = (() => {
                 };
             });
         } else if (libraryTab === 'instruments') {
-            list.querySelectorAll('.library-item').forEach(el => {
-                el.onclick = () => {
+            list.querySelectorAll('.library-item[data-inst]').forEach(el => {
+                el.onclick = (e) => {
+                    if (e.target.dataset.deleteInst) {
+                        deleteCustomInstrument(parseInt(e.target.dataset.deleteInst));
+                        return;
+                    }
                     currentInstrument = parseInt(el.dataset.inst);
                     updateLibraryDisplay();
                     updateDisplay();
                     updateEditorPanel();
                 };
             });
+            
+            const newBtn = list.querySelector('#new-instrument-btn');
+            if (newBtn) {
+                newBtn.onclick = () => createCustomInstrument();
+            }
         }
     }
     
     // === INSTRUMENTS ===
-    const instruments = [
+    // Original built-ins (never mutated, used for reset)
+    const builtInInstruments = [
         { name: '50% Pulse', type: 'pulse', duty: 0.5, attack: 0.01, decay: 0.1, sustain: 0.7, release: 0.1 },
         { name: '25% Pulse', type: 'pulse', duty: 0.25, attack: 0.01, decay: 0.05, sustain: 0.8, release: 0.05 },
         { name: '12.5% Pulse', type: 'pulse', duty: 0.125, attack: 0.005, decay: 0.05, sustain: 0.6, release: 0.1 },
@@ -678,6 +714,72 @@ const Tracker = (() => {
         { name: 'Pow Hit', type: 'noise', attack: 0.001, decay: 0.08, sustain: 0.2, release: 0.04 },
         { name: 'Click', type: 'noise', attack: 0.001, decay: 0.015, sustain: 0, release: 0.01 },
     ];
+    
+    // Working copy of built-ins (editable for session, resets on reload)
+    let workingInstruments = JSON.parse(JSON.stringify(builtInInstruments));
+    
+    // Custom instruments (persisted to localStorage)
+    let customInstruments = [];
+    
+    // Combined getter - all code uses this
+    function getAllInstruments() {
+        return [...workingInstruments, ...customInstruments];
+    }
+    
+    function isBuiltInInstrument(index) {
+        return index !== null && index < builtInInstruments.length;
+    }
+    
+    function isCustomInstrument(index) {
+        return index !== null && index >= builtInInstruments.length;
+    }
+    
+    function saveCustomInstruments() {
+        localStorage.setItem('trackerCustomInstruments', JSON.stringify(customInstruments));
+    }
+    
+    function loadCustomInstruments() {
+        const saved = localStorage.getItem('trackerCustomInstruments');
+        if (saved) customInstruments = JSON.parse(saved);
+    }
+    
+    function createCustomInstrument(sourceIndex = null) {
+        let inst;
+        if (sourceIndex !== null) {
+            inst = JSON.parse(JSON.stringify(getAllInstruments()[sourceIndex]));
+            inst.name = inst.name + ' (copy)';
+        } else {
+            inst = { name: 'New Instrument', type: 'pulse', duty: 0.5, attack: 0.01, decay: 0.1, sustain: 0.7, release: 0.1 };
+        }
+        customInstruments.push(inst);
+        saveCustomInstruments();
+        updateLibraryDisplay();
+        currentInstrument = getAllInstruments().length - 1;
+        updateEditorPanel();
+        return currentInstrument;
+    }
+    
+    function deleteCustomInstrument(index) {
+        const customIndex = index - builtInInstruments.length;
+        if (customIndex >= 0 && customIndex < customInstruments.length) {
+            customInstruments.splice(customIndex, 1);
+            saveCustomInstruments();
+            if (currentInstrument === index) currentInstrument = null;
+            else if (currentInstrument > index) currentInstrument--;
+            updateLibraryDisplay();
+            updateEditorPanel();
+            return true;
+        }
+        return false;
+    }
+    
+    function resetBuiltInInstrument(index) {
+        if (index < builtInInstruments.length) {
+            workingInstruments[index] = JSON.parse(JSON.stringify(builtInInstruments[index]));
+            updateEditorPanel();
+            updateLibraryDisplay();
+        }
+    }
     
     // === INIT ===
     function init() {
@@ -696,6 +798,7 @@ const Tracker = (() => {
         
         loadUnlockedLibrary();
         loadCustomLibrary();
+        loadCustomInstruments();
     }
     
     function createEmptyPattern(length = DEFAULT_ROWS) {
@@ -859,7 +962,7 @@ const Tracker = (() => {
         if (!audioCtx) return;
         const freq = noteToFreq(cell.note, cell.octave);
         if (!freq) return;
-        const inst = instruments[cell.inst || 0] || instruments[0];
+        const inst = getAllInstruments()[cell.inst || 0] || getAllInstruments()[0];
         const volume = (cell.vol !== null ? cell.vol : 15) / 15 * 0.15;
         const now = audioCtx.currentTime;
         
@@ -888,7 +991,11 @@ const Tracker = (() => {
         
         const osc = audioCtx.createOscillator();
         const gain = audioCtx.createGain();
-        osc.type = (channel === 'triangle' || inst.type === 'triangle') ? 'triangle' : 'square';
+        // Map instrument type to Web Audio oscillator type
+        if (inst.type === 'triangle' || channel === 'triangle') osc.type = 'triangle';
+        else if (inst.type === 'sawtooth') osc.type = 'sawtooth';
+        else if (inst.type === 'sine') osc.type = 'sine';
+        else osc.type = 'square'; // pulse
         osc.frequency.value = freq;
         osc.connect(crusher);
         crusher.connect(gain);
@@ -905,7 +1012,7 @@ const Tracker = (() => {
         if (!audioCtx) return;
         const freq = noteToFreq(cell.note, cell.octave);
         if (!freq) return;
-        const inst = instruments[cell.inst || 0] || instruments[0];
+        const inst = getAllInstruments()[cell.inst || 0] || getAllInstruments()[0];
         const volume = (cell.vol !== null ? cell.vol : 15) / 15 * 0.15;
         const now = audioCtx.currentTime;
         const gain = audioCtx.createGain();
@@ -932,7 +1039,11 @@ const Tracker = (() => {
         }
         
         const osc = audioCtx.createOscillator();
-        osc.type = (channel === 'triangle' || inst.type === 'triangle') ? 'triangle' : 'square';
+        // Map instrument type to Web Audio oscillator type
+        if (inst.type === 'triangle' || channel === 'triangle') osc.type = 'triangle';
+        else if (inst.type === 'sawtooth') osc.type = 'sawtooth';
+        else if (inst.type === 'sine') osc.type = 'sine';
+        else osc.type = 'square'; // pulse
         osc.frequency.value = freq;
         osc.connect(crusher);
         crusher.connect(gain);
@@ -957,7 +1068,7 @@ const Tracker = (() => {
         const freq = noteToFreq(note, octave);
         if (!freq) return;
         
-        const inst = instruments[currentInstrument ?? 0] || instruments[0];
+        const inst = getAllInstruments()[currentInstrument ?? 0] || getAllInstruments()[0];
         const volume = 0.15; // Full volume
         const now = audioCtx.currentTime;
         
@@ -988,7 +1099,11 @@ const Tracker = (() => {
         }
         
         const osc = audioCtx.createOscillator();
-        osc.type = (channel === 'triangle' || inst.type === 'triangle') ? 'triangle' : 'square';
+        // Map instrument type to Web Audio oscillator type
+        if (inst.type === 'triangle' || channel === 'triangle') osc.type = 'triangle';
+        else if (inst.type === 'sawtooth') osc.type = 'sawtooth';
+        else if (inst.type === 'sine') osc.type = 'sine';
+        else osc.type = 'square'; // pulse
         osc.frequency.value = freq;
         osc.connect(crusher);
         crusher.connect(gain);
@@ -1342,6 +1457,8 @@ const Tracker = (() => {
                             <select id="editor-inst-type" class="editor-select">
                                 <option value="pulse">Pulse</option>
                                 <option value="triangle">Triangle</option>
+                                <option value="sawtooth">Sawtooth (VRC6)</option>
+                                <option value="sine">Sine (VRC7/N163)</option>
                                 <option value="noise">Noise</option>
                             </select>
                         </div>
@@ -1373,6 +1490,11 @@ const Tracker = (() => {
                             <input type="range" id="editor-inst-release" min="0.01" max="2" step="0.01" class="editor-slider" />
                             <span id="editor-release-value" class="editor-value">0.1</span>
                         </div>
+                    </div>
+                    <div class="editor-section" id="editor-actions">
+                        <button class="tracker-btn" id="editor-save-as-new" title="Save as new custom instrument">Save As New</button>
+                        <button class="tracker-btn" id="editor-reset" title="Reset to default" style="display: none;">Reset</button>
+                        <button class="tracker-btn" id="editor-delete" title="Delete custom instrument" style="display: none;">Delete</button>
                     </div>
                 </div>
             </div>
@@ -1496,7 +1618,7 @@ const Tracker = (() => {
                         else if (param === 'bpm') bpm = Math.max(30, Math.min(300, val));
                         else if (param === 'pat') currentPattern = Math.max(0, Math.min(sequence.length - 1, val));
                         else if (param === 'inst') {
-                            currentInstrument = Math.max(0, Math.min(instruments.length - 1, val));
+                            currentInstrument = Math.max(0, Math.min(getAllInstruments().length - 1, val));
                             updateEditorPanel();
                         }
                         updateDisplay();
@@ -1511,7 +1633,7 @@ const Tracker = (() => {
                 else if (param === 'bpm') bpm = Math.max(30, Math.min(300, bpm + delta * 5));
                 else if (param === 'pat') currentPattern = Math.max(0, Math.min(sequence.length - 1, currentPattern + delta));
                 else if (param === 'inst') {
-                    currentInstrument = Math.max(0, Math.min(instruments.length - 1, currentInstrument + delta));
+                    currentInstrument = Math.max(0, Math.min(getAllInstruments().length - 1, (currentInstrument ?? 0) + delta));
                     updateEditorPanel();
                 }
                 updateDisplay();
@@ -1656,7 +1778,7 @@ const Tracker = (() => {
             });
         }
         
-        const inst = instruments[currentInstrument];
+        const inst = getAllInstruments()[currentInstrument];
         if (!inst) return;
         
         // Update input values
@@ -1686,11 +1808,20 @@ const Tracker = (() => {
         // Draw static oscilloscope
         drawStaticOscilloscope();
         drawStaticSpectrogram();
+        
+        // Update action buttons visibility
+        const resetBtn = trackerElement?.querySelector('#editor-reset');
+        const deleteBtn = trackerElement?.querySelector('#editor-delete');
+        const saveAsNewBtn = trackerElement?.querySelector('#editor-save-as-new');
+        
+        if (resetBtn) resetBtn.style.display = isBuiltInInstrument(currentInstrument) ? 'inline-block' : 'none';
+        if (deleteBtn) deleteBtn.style.display = isCustomInstrument(currentInstrument) ? 'inline-block' : 'none';
+        if (saveAsNewBtn) saveAsNewBtn.style.display = currentInstrument !== null ? 'inline-block' : 'none';
     }
     
     function updateEditorValueLabels() {
         if (currentInstrument === null) return;
-        const inst = instruments[currentInstrument];
+        const inst = getAllInstruments()[currentInstrument];
         if (!inst) return;
         
         const dutyVal = trackerElement?.querySelector('#editor-duty-value');
@@ -1734,7 +1865,7 @@ const Tracker = (() => {
             return;
         }
         
-        const inst = instruments[currentInstrument];
+        const inst = getAllInstruments()[currentInstrument];
         if (!inst) return;
         
         // Draw center line
@@ -1772,6 +1903,23 @@ const Tracker = (() => {
                 } else {
                     y = midY - (2 - t * 2) * (h * 0.35);
                 }
+                if (x === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            }
+        } else if (inst.type === 'sine') {
+            // Draw sine wave
+            for (let x = 0; x < w; x++) {
+                const phase = (x / w) * cycles * Math.PI * 2;
+                const y = midY - Math.sin(phase) * (h * 0.35);
+                if (x === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            }
+        } else if (inst.type === 'sawtooth') {
+            // Draw sawtooth wave
+            for (let x = 0; x < w; x++) {
+                const phase = (x / w) * cycles;
+                const t = phase % 1;
+                const y = midY - (t * 2 - 1) * (h * 0.35);
                 if (x === 0) ctx.moveTo(x, y);
                 else ctx.lineTo(x, y);
             }
@@ -1939,9 +2087,12 @@ const Tracker = (() => {
         const nameEl = trackerElement?.querySelector('#editor-inst-name');
         if (nameEl) {
             nameEl.addEventListener('input', (e) => {
-                if (currentInstrument !== null) instruments[currentInstrument].name = e.target.value;
+                if (currentInstrument === null) return;
+                getAllInstruments()[currentInstrument].name = e.target.value;
+                if (isCustomInstrument(currentInstrument)) saveCustomInstruments();
                 updateLibraryDisplay();
             });
+            nameEl.addEventListener('blur', () => trackerElement?.focus());
         }
         
         // Type select
@@ -1949,12 +2100,14 @@ const Tracker = (() => {
         if (typeEl) {
             typeEl.addEventListener('change', (e) => {
                 if (currentInstrument === null) return;
-                instruments[currentInstrument].type = e.target.value;
+                getAllInstruments()[currentInstrument].type = e.target.value;
+                if (isCustomInstrument(currentInstrument)) saveCustomInstruments();
                 const dutyRow = trackerElement?.querySelector('#editor-duty-row');
                 if (dutyRow) dutyRow.style.display = e.target.value === 'pulse' ? 'flex' : 'none';
                 drawStaticOscilloscope();
                 updateLibraryDisplay();
             });
+            typeEl.addEventListener('blur', () => trackerElement?.focus());
         }
         
         // Duty slider
@@ -1962,10 +2115,12 @@ const Tracker = (() => {
         if (dutyEl) {
             dutyEl.addEventListener('input', (e) => {
                 if (currentInstrument === null) return;
-                instruments[currentInstrument].duty = parseFloat(e.target.value);
+                getAllInstruments()[currentInstrument].duty = parseFloat(e.target.value);
+                if (isCustomInstrument(currentInstrument)) saveCustomInstruments();
                 updateEditorValueLabels();
                 drawStaticOscilloscope();
             });
+            dutyEl.addEventListener('change', () => trackerElement?.focus());
         }
         
         // ADSR sliders
@@ -1973,36 +2128,66 @@ const Tracker = (() => {
         if (attackEl) {
             attackEl.addEventListener('input', (e) => {
                 if (currentInstrument === null) return;
-                instruments[currentInstrument].attack = parseFloat(e.target.value);
+                getAllInstruments()[currentInstrument].attack = parseFloat(e.target.value);
+                if (isCustomInstrument(currentInstrument)) saveCustomInstruments();
                 updateEditorValueLabels();
             });
+            attackEl.addEventListener('change', () => trackerElement?.focus());
         }
         
         const decayEl = trackerElement?.querySelector('#editor-inst-decay');
         if (decayEl) {
             decayEl.addEventListener('input', (e) => {
                 if (currentInstrument === null) return;
-                instruments[currentInstrument].decay = parseFloat(e.target.value);
+                getAllInstruments()[currentInstrument].decay = parseFloat(e.target.value);
+                if (isCustomInstrument(currentInstrument)) saveCustomInstruments();
                 updateEditorValueLabels();
             });
+            decayEl.addEventListener('change', () => trackerElement?.focus());
         }
         
         const sustainEl = trackerElement?.querySelector('#editor-inst-sustain');
         if (sustainEl) {
             sustainEl.addEventListener('input', (e) => {
                 if (currentInstrument === null) return;
-                instruments[currentInstrument].sustain = parseFloat(e.target.value);
+                getAllInstruments()[currentInstrument].sustain = parseFloat(e.target.value);
+                if (isCustomInstrument(currentInstrument)) saveCustomInstruments();
                 updateEditorValueLabels();
             });
+            sustainEl.addEventListener('change', () => trackerElement?.focus());
         }
         
         const releaseEl = trackerElement?.querySelector('#editor-inst-release');
         if (releaseEl) {
             releaseEl.addEventListener('input', (e) => {
                 if (currentInstrument === null) return;
-                instruments[currentInstrument].release = parseFloat(e.target.value);
+                getAllInstruments()[currentInstrument].release = parseFloat(e.target.value);
+                if (isCustomInstrument(currentInstrument)) saveCustomInstruments();
                 updateEditorValueLabels();
             });
+            releaseEl.addEventListener('change', () => trackerElement?.focus());
+        }
+        
+        // Action buttons
+        const saveAsNewBtn = trackerElement?.querySelector('#editor-save-as-new');
+        if (saveAsNewBtn) {
+            saveAsNewBtn.onclick = () => {
+                if (currentInstrument !== null) createCustomInstrument(currentInstrument);
+            };
+        }
+        
+        const resetBtn = trackerElement?.querySelector('#editor-reset');
+        if (resetBtn) {
+            resetBtn.onclick = () => {
+                if (isBuiltInInstrument(currentInstrument)) resetBuiltInInstrument(currentInstrument);
+            };
+        }
+        
+        const deleteBtn = trackerElement?.querySelector('#editor-delete');
+        if (deleteBtn) {
+            deleteBtn.onclick = () => {
+                if (isCustomInstrument(currentInstrument)) deleteCustomInstrument(currentInstrument);
+            };
         }
     }
     
@@ -2201,7 +2386,7 @@ const Tracker = (() => {
     
     // === SAVE/LOAD ===
     function exportSong() {
-        return JSON.stringify({ patterns, sequence, bpm, speed, instruments });
+        return JSON.stringify({ patterns, sequence, bpm, speed, instruments: getAllInstruments() });
     }
     
     function importSong(json) {
@@ -2298,6 +2483,10 @@ const Tracker = (() => {
         getLibrary,
         exportSong,
         importSong,
+        getAllInstruments,
+        createCustomInstrument,
+        deleteCustomInstrument,
+        resetBuiltInInstrument,
         get playing() { return playing; },
         get currentRow() { return currentRow; },
         get currentPattern() { return currentPattern; },
