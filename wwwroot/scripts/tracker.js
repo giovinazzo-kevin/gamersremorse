@@ -96,7 +96,7 @@ const Tracker = (() => {
         'zelda_secret': {
             name: 'Zelda Secret',
             icon: '✨',
-            bpm: 333,
+            bpm: 125,
             speed: 6,
             delay: { time: 0.15, feedback: 0.3 },
             pan: 'alternate',
@@ -156,7 +156,7 @@ const Tracker = (() => {
         'death': {
             name: 'Death',
             icon: '💀',
-            bpm: 280,
+            bpm: 105,
             speed: 6,
             patterns: {
                 // SMB death ~1.74s. At 280bpm speed 6: ~143ms per row
@@ -188,7 +188,7 @@ const Tracker = (() => {
         'pre_death': {
             name: 'Fatal',
             icon: '💢',
-            bpm: 500,
+            bpm: 188,
             speed: 6,
             patterns: {
                 0: createPatternFromNotes([
@@ -202,7 +202,7 @@ const Tracker = (() => {
         'tear': {
             name: 'Tear',
             icon: '💧',
-            bpm: 1000,
+            bpm: 375,
             speed: 6,
             patterns: {
                 0: createPatternFromNotes([
@@ -302,7 +302,7 @@ const Tracker = (() => {
         'shame': {
             name: 'Shame',
             icon: '😔',
-            bpm: 200,
+            bpm: 75,
             speed: 6,
             patterns: {
                 // Locrian scale - cursed, unstable
@@ -319,7 +319,7 @@ const Tracker = (() => {
         'fame': {
             name: 'Fame',
             icon: '⭐',
-            bpm: 350,
+            bpm: 131,
             speed: 6,
             delay: { time: 0.1, feedback: 0.4 },
             patterns: {
@@ -341,7 +341,7 @@ const Tracker = (() => {
         'error': {
             name: 'Error',
             icon: '⚠️',
-            bpm: 250,
+            bpm: 94,
             speed: 6,
             patterns: {
                 // Whole tone - dreamy, unsettling
