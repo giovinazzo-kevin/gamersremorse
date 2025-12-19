@@ -79,8 +79,13 @@ const Tracker = (() => {
     let selection = null; // { startRow, startCh, startCol, endRow, endCh, endCol }
     let isDragging = false;
     
+    // Held notes for proper ADSR (key → {osc/noise, gain, inst})
+    const heldNotes = new Map();
+    
     let trackerElement = null;
     let patternElement = null;
+    let libraryTab = 'patterns'; // 'patterns' or 'instruments'
+    let isMaximized = false;
     
     // === LIBRARY ===
     // Pre-made patterns/songs that can be loaded
@@ -589,34 +594,48 @@ const Tracker = (() => {
         
         let html = '';
         
-        // Built-in patterns
-        for (const [id, item] of Object.entries(library)) {
-            if (item.synth) continue;
-            
-            const unlocked = unlockedLibrary.has(id);
-            if (unlocked) {
-                html += `<div class="library-item" data-id="${id}" onclick="Tracker.loadFromLibrary('${id}')">
-                    <span class="library-icon">${item.icon}</span>
-                    <span class="library-name">${item.name}</span>
-                </div>`;
-            } else {
-                html += `<div class="library-item locked">
-                    <span class="library-icon">🔒</span>
-                    <span class="library-name">???</span>
-                </div>`;
+        if (libraryTab === 'patterns') {
+            // Built-in patterns
+            for (const [id, item] of Object.entries(library)) {
+                if (item.synth) continue;
+                
+                const unlocked = unlockedLibrary.has(id);
+                if (unlocked) {
+                    html += `<div class="library-item" data-id="${id}" onclick="Tracker.loadFromLibrary('${id}')">
+                        <span class="library-icon">${item.icon}</span>
+                        <span class="library-name">${item.name}</span>
+                    </div>`;
+                } else {
+                    html += `<div class="library-item locked">
+                        <span class="library-icon">🔒</span>
+                        <span class="library-name">???</span>
+                    </div>`;
+                }
             }
-        }
-        
-        // Custom songs
-        const customIds = Object.keys(customLibrary);
-        if (customIds.length > 0) {
-            html += `<div class="library-section-header">CUSTOM</div>`;
-            for (const id of customIds) {
-                const item = customLibrary[id];
-                html += `<div class="library-item custom" data-id="${id}">
-                    <span class="library-icon">${item.icon}</span>
-                    <span class="library-name">${item.name}</span>
-                    <span class="library-delete" onclick="event.stopPropagation(); Tracker.deleteCustomSong('${id}')">×</span>
+            
+            // Custom songs
+            const customIds = Object.keys(customLibrary);
+            if (customIds.length > 0) {
+                html += `<div class="library-section-header">CUSTOM</div>`;
+                for (const id of customIds) {
+                    const item = customLibrary[id];
+                    html += `<div class="library-item custom" data-id="${id}">
+                        <span class="library-icon">${item.icon}</span>
+                        <span class="library-name">${item.name}</span>
+                        <span class="library-delete" onclick="event.stopPropagation(); Tracker.deleteCustomSong('${id}')">×</span>
+                    </div>`;
+                }
+            }
+        } else if (libraryTab === 'instruments') {
+            // Show instruments
+            for (let i = 0; i < instruments.length; i++) {
+                const inst = instruments[i];
+                const isSelected = i === currentInstrument;
+                const icon = inst.type === 'noise' ? '🎲' : inst.type === 'triangle' ? '🔺' : '■';
+                html += `<div class="library-item ${isSelected ? 'selected' : ''}" data-inst="${i}">
+                    <span class="library-icon">${icon}</span>
+                    <span class="library-name">${inst.name}</span>
+                    <span class="library-inst-num">${i.toString(16).toUpperCase().padStart(2, '0')}</span>
                 </div>`;
             }
         }
@@ -624,13 +643,23 @@ const Tracker = (() => {
         list.innerHTML = html;
         
         // Add click handlers for custom songs
-        list.querySelectorAll('.library-item.custom').forEach(el => {
-            el.onclick = (e) => {
-                if (!e.target.classList.contains('library-delete')) {
-                    Tracker.loadCustomSong(el.dataset.id);
-                }
-            };
-        });
+        if (libraryTab === 'patterns') {
+            list.querySelectorAll('.library-item.custom').forEach(el => {
+                el.onclick = (e) => {
+                    if (!e.target.classList.contains('library-delete')) {
+                        Tracker.loadCustomSong(el.dataset.id);
+                    }
+                };
+            });
+        } else if (libraryTab === 'instruments') {
+            list.querySelectorAll('.library-item').forEach(el => {
+                el.onclick = () => {
+                    currentInstrument = parseInt(el.dataset.inst);
+                    updateLibraryDisplay();
+                    updateDisplay();
+                };
+            });
+        }
     }
     
     // === INSTRUMENTS ===
@@ -902,6 +931,87 @@ const Tracker = (() => {
         playNote(CHANNELS[currentChannel], cell);
     }
     
+    // Start a held note (proper ADSR: A→D→hold at S)
+    function startHeldNote(key, note, octave) {
+        if (heldNotes.has(key)) return; // Already held
+        if (!audioCtx) return;
+        
+        const channel = CHANNELS[currentChannel];
+        const freq = noteToFreq(note, octave);
+        if (!freq) return;
+        
+        const inst = instruments[currentInstrument] || instruments[0];
+        const volume = 0.15; // Full volume
+        const now = audioCtx.currentTime;
+        
+        const crusher = createBitcrusher(audioCtx);
+        const gain = audioCtx.createGain();
+        
+        if (channel === 'noise' || inst.type === 'noise') {
+            const bufferSize = audioCtx.sampleRate * 4; // Long buffer for sustain
+            const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+            const data = buffer.getChannelData(0);
+            for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+            const noise = audioCtx.createBufferSource();
+            noise.buffer = buffer;
+            noise.loop = true;
+            noise.connect(crusher);
+            crusher.connect(gain);
+            gain.connect(audioCtx.destination);
+            
+            // A→D→S (hold at sustain)
+            gain.gain.setValueAtTime(0, now);
+            gain.gain.linearRampToValueAtTime(volume, now + inst.attack);
+            gain.gain.linearRampToValueAtTime(volume * inst.sustain, now + inst.attack + inst.decay);
+            
+            noise.start(now);
+            heldNotes.set(key, { noise, gain, inst });
+            return;
+        }
+        
+        const osc = audioCtx.createOscillator();
+        osc.type = (channel === 'triangle' || inst.type === 'triangle') ? 'triangle' : 'square';
+        osc.frequency.value = freq;
+        osc.connect(crusher);
+        crusher.connect(gain);
+        gain.connect(audioCtx.destination);
+        
+        // A→D→S (hold at sustain)
+        gain.gain.setValueAtTime(0, now);
+        gain.gain.linearRampToValueAtTime(volume, now + inst.attack);
+        gain.gain.linearRampToValueAtTime(volume * inst.sustain, now + inst.attack + inst.decay);
+        
+        osc.start(now);
+        heldNotes.set(key, { osc, gain, inst });
+    }
+    
+    // Release a held note (trigger R envelope)
+    function releaseHeldNote(key) {
+        const held = heldNotes.get(key);
+        if (!held) return;
+        
+        const now = audioCtx?.currentTime || 0;
+        const release = held.inst?.release || 0.1;
+        
+        // Trigger release envelope
+        held.gain.gain.cancelScheduledValues(now);
+        held.gain.gain.setValueAtTime(held.gain.gain.value, now);
+        held.gain.gain.linearRampToValueAtTime(0.001, now + release);
+        
+        // Stop oscillator/noise after release
+        if (held.osc) held.osc.stop(now + release + 0.05);
+        if (held.noise) held.noise.stop(now + release + 0.05);
+        
+        heldNotes.delete(key);
+    }
+    
+    // Release all held notes
+    function releaseAllHeldNotes() {
+        for (const key of heldNotes.keys()) {
+            releaseHeldNote(key);
+        }
+    }
+    
     // === EDITING ===
     function insertNote(note, octave) {
         if (!editMode) {
@@ -1127,13 +1237,27 @@ const Tracker = (() => {
                         <div class="help-row"><span class="help-key">1</span> Note off (===)</div>
                         <div class="help-row"><span class="help-key">0-9, A-F</span> Hex entry (inst/vol)</div>
                         <div class="help-row"><span class="help-key">Delete</span> Clear cell</div>
-                        <div class="help-row"><span class="help-key">+ / -</span> Octave up/down</div>
+                        <div class="help-row"><span class="help-key">+/-</span> Transpose semitone</div>
+                        <div class="help-row"><span class="help-key">Shift +/-</span> Transpose octave</div>
+                        <div class="help-row"><span class="help-key">Ctrl +/-</span> Change input octave</div>
                     </div>
                     <button class="tracker-btn" onclick="this.parentElement.parentElement.remove()">Close</button>
                 </div>
             </div>
         `;
         trackerElement.insertAdjacentHTML('beforeend', helpHtml);
+    }
+    
+    function toggleMaximize() {
+        isMaximized = !isMaximized;
+        const container = trackerElement.closest('.tracker-modal') || trackerElement;
+        container.classList.toggle('maximized', isMaximized);
+        
+        const btn = trackerElement.querySelector('#tracker-maximize');
+        if (btn) {
+            btn.textContent = isMaximized ? '❐' : '⛶';
+            btn.title = isMaximized ? 'Restore' : 'Maximize';
+        }
     }
     
     // === DISPLAY ===
@@ -1156,11 +1280,15 @@ const Tracker = (() => {
                     <span class="tracker-param" data-param="inst" title="Click to change, scroll to adjust">Inst: <span id="tracker-inst">${currentInstrument.toString(16).toUpperCase().padStart(2, '0')}</span></span>
                 </div>
                 <button class="tracker-help-btn" id="tracker-help" title="Keyboard shortcuts">?</button>
+                <button class="tracker-help-btn" id="tracker-maximize" title="Maximize">⛶</button>
                 <button class="tracker-close" id="tracker-close">×</button>
             </div>
             <div class="tracker-body">
                 <div class="tracker-library">
-                    <div class="library-header">LIBRARY</div>
+                    <div class="library-tabs">
+                        <button class="library-tab active" data-tab="patterns">PAT</button>
+                        <button class="library-tab" data-tab="instruments">INST</button>
+                    </div>
                     <div class="library-list" id="tracker-library-list"></div>
                 </div>
                 <div class="tracker-main">
@@ -1260,6 +1388,12 @@ const Tracker = (() => {
             helpBtn.onclick = () => showHelp();
         }
         
+        // Maximize button
+        const maxBtn = trackerElement.querySelector('#tracker-maximize');
+        if (maxBtn) {
+            maxBtn.onclick = () => toggleMaximize();
+        }
+        
         // Clickable/scrollable params
         trackerElement.querySelectorAll('.tracker-param').forEach(el => {
             const param = el.dataset.param;
@@ -1301,8 +1435,19 @@ const Tracker = (() => {
             };
         });
         
+        // Library tab handlers
+        trackerElement.querySelectorAll('.library-tab').forEach(el => {
+            el.onclick = () => {
+                libraryTab = el.dataset.tab;
+                trackerElement.querySelectorAll('.library-tab').forEach(t => t.classList.remove('active'));
+                el.classList.add('active');
+                updateLibraryDisplay();
+            };
+        });
+        
         trackerElement.tabIndex = 0;
         trackerElement.addEventListener('keydown', handleKeyDown);
+        trackerElement.addEventListener('keyup', handleKeyUp);
         
         updateDisplay();
         updateLibraryDisplay();
@@ -1358,9 +1503,11 @@ const Tracker = (() => {
         const octEl = trackerElement.querySelector('#tracker-octave');
         const bpmEl = trackerElement.querySelector('#tracker-bpm');
         const patEl = trackerElement.querySelector('#tracker-pattern');
+        const instEl = trackerElement.querySelector('#tracker-inst');
         if (octEl) octEl.textContent = currentOctave;
         if (bpmEl) bpmEl.textContent = bpm;
         if (patEl) patEl.textContent = currentPattern;
+        if (instEl) instEl.textContent = currentInstrument.toString(16).toUpperCase().padStart(2, '0');
         
         // Update channel headers
         trackerElement.querySelectorAll('.tracker-channel-header').forEach((el, i) => {
@@ -1410,6 +1557,7 @@ const Tracker = (() => {
     
     function handleKeyDown(e) {
         if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+        if (e.repeat) return;
         const pattern = patterns[sequence[currentPattern]];
         if (!pattern) return;
         const key = e.key;
@@ -1542,7 +1690,12 @@ const Tracker = (() => {
             const noteData = parseNoteKey(key);
             if (noteData) {
                 e.preventDefault();
-                insertNote(noteData.note, noteData.octave);
+                if (editMode) {
+                    insertNote(noteData.note, noteData.octave);
+                } else {
+                    // Preview with proper ADSR hold
+                    startHeldNote(key, noteData.note, noteData.octave);
+                }
                 return;
             }
             
@@ -1571,6 +1724,11 @@ const Tracker = (() => {
                 return;
             }
         }
+    }
+    
+    function handleKeyUp(e) {
+        // Release held notes on key up
+        releaseHeldNote(e.key);
     }
     
     // === SAVE/LOAD ===
