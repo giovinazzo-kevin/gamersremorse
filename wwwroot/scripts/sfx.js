@@ -3,7 +3,7 @@
 
 // === BEAM CHARGE SOUND SYSTEM ===
 // R-TYPE style layered charge sound
-// Tier 1: Synth sweep (octave rise) → plateau with vibrato
+// Tier 1: Synth sweep (octave rise) -> plateau with vibrato
 // Tier 2+: Noise layer with swish joins
 // Tier 3+: Brief synth on top of swish
 const BeamCharge = (() => {
@@ -222,17 +222,24 @@ const BeamCharge = (() => {
         active = false;  // Immediately allow restart
         const now = ctx.currentTime;
         
+        // Capture node references so cleanup uses the RIGHT nodes
+        // (not whatever osc1/osc2/etc point to after a restart)
+        const myNodes = {
+            osc1, osc2, lfo, noiseNode, noiseLfo,
+            synthGain, noiseGain, noiseFilter, masterGain, lfoGain, noiseLfoGain
+        };
+        
         if (fireBeam) {
-            // PEW sequence: riser → pause → click → pause → BWAAAH
+            // PEW sequence: riser -> pause -> click -> pause -> BWAAAH
             const riserTime = 0.10;   // 100ms
             const pauseTime = 0.06;   // 60ms
             const clickDur = 0.008;
             
-            // Fade charge sound during riser
-            synthGain.gain.setTargetAtTime(0.1, now, riserTime * 0.3);
-            noiseGain.gain.setTargetAtTime(0.05, now, riserTime * 0.3);
+            // Fade charge sound during riser (use captured nodes)
+            myNodes.synthGain.gain.setTargetAtTime(0.1, now, riserTime * 0.3);
+            myNodes.noiseGain.gain.setTargetAtTime(0.05, now, riserTime * 0.3);
             
-            // === RISER: saw C6→C7 + noise sweep ===
+            // === RISER: saw C6->C7 + noise sweep ===
             const riserOsc = ctx.createOscillator();
             riserOsc.type = 'sawtooth';
             riserOsc.frequency.setValueAtTime(1046.5, now);  // C6
@@ -245,7 +252,7 @@ const BeamCharge = (() => {
             riserGain.gain.linearRampToValueAtTime(0, now + riserTime);
             
             riserOsc.connect(riserGain);
-            riserGain.connect(masterGain);
+            riserGain.connect(myNodes.masterGain);  // Use captured masterGain
             riserOsc.start(now);
             riserOsc.stop(now + riserTime + 0.01);
             
@@ -265,7 +272,7 @@ const BeamCharge = (() => {
             
             riserNoise.connect(riserNoiseFilter);
             riserNoiseFilter.connect(riserNoiseGain);
-            riserNoiseGain.connect(masterGain);
+            riserNoiseGain.connect(myNodes.masterGain);  // Use captured masterGain
             riserNoise.start(now);
             riserNoise.stop(now + riserTime + 0.01);
             
@@ -282,7 +289,7 @@ const BeamCharge = (() => {
             clickGain.gain.exponentialRampToValueAtTime(0.01, clickTime + clickDur);
             
             clickOsc.connect(clickGain);
-            clickGain.connect(masterGain);
+            clickGain.connect(myNodes.masterGain);  // Use captured masterGain
             clickOsc.start(clickTime);
             clickOsc.stop(clickTime + clickDur + 0.01);
             
@@ -290,24 +297,24 @@ const BeamCharge = (() => {
             const bwaaahTime = now + riserTime + pauseTime + clickDur + pauseTime;
             const dropFreq = 55;
             
-            // Schedule frequency drops
-            osc1.frequency.setValueAtTime(osc1.frequency.value, bwaaahTime);
-            osc1.frequency.exponentialRampToValueAtTime(dropFreq, bwaaahTime + 0.12);
-            osc2.frequency.setValueAtTime(osc2.frequency.value, bwaaahTime);
-            osc2.frequency.exponentialRampToValueAtTime(dropFreq, bwaaahTime + 0.12);
+            // Schedule frequency drops (use captured nodes)
+            myNodes.osc1.frequency.setValueAtTime(myNodes.osc1.frequency.value, bwaaahTime);
+            myNodes.osc1.frequency.exponentialRampToValueAtTime(dropFreq, bwaaahTime + 0.12);
+            myNodes.osc2.frequency.setValueAtTime(myNodes.osc2.frequency.value, bwaaahTime);
+            myNodes.osc2.frequency.exponentialRampToValueAtTime(dropFreq, bwaaahTime + 0.12);
             
             // Noise drops too
-            noiseFilter.frequency.setValueAtTime(noiseFilter.frequency.value, bwaaahTime);
-            noiseFilter.frequency.exponentialRampToValueAtTime(100, bwaaahTime + 0.15);
+            myNodes.noiseFilter.frequency.setValueAtTime(myNodes.noiseFilter.frequency.value, bwaaahTime);
+            myNodes.noiseFilter.frequency.exponentialRampToValueAtTime(100, bwaaahTime + 0.15);
             
             // Boost for BWAAAH then fade
-            synthGain.gain.setValueAtTime(0.5, bwaaahTime);
-            noiseGain.gain.setValueAtTime(0.3, bwaaahTime);
-            lfoGain.gain.setValueAtTime(0, bwaaahTime);
-            noiseLfoGain.gain.setValueAtTime(0, bwaaahTime);
+            myNodes.synthGain.gain.setValueAtTime(0.5, bwaaahTime);
+            myNodes.noiseGain.gain.setValueAtTime(0.3, bwaaahTime);
+            myNodes.lfoGain.gain.setValueAtTime(0, bwaaahTime);
+            myNodes.noiseLfoGain.gain.setValueAtTime(0, bwaaahTime);
             
-            masterGain.gain.setValueAtTime(0.25, bwaaahTime);
-            masterGain.gain.exponentialRampToValueAtTime(0.01, bwaaahTime + 0.2);
+            myNodes.masterGain.gain.setValueAtTime(0.25, bwaaahTime);
+            myNodes.masterGain.gain.exponentialRampToValueAtTime(0.01, bwaaahTime + 0.2);
             
             // Callback when beam should fire (at BWAAAH)
             const totalDelayMs = (riserTime + pauseTime + clickDur + pauseTime) * 1000;
@@ -315,22 +322,46 @@ const BeamCharge = (() => {
                 setTimeout(onFire, totalDelayMs);
             }
             
-            // Cleanup after everything finishes
+            // Cleanup after everything finishes (always cleanup, ignore generation)
             const cleanupDelay = totalDelayMs + 280;
-            setTimeout(() => cleanupIfSameGeneration(myGeneration), cleanupDelay);
+            setTimeout(() => cleanupNodesForce(myNodes), cleanupDelay);
         } else {
             // Cancelled - sad whine
-            osc1.frequency.exponentialRampToValueAtTime(60, now + 0.1);
-            osc2.frequency.exponentialRampToValueAtTime(60, now + 0.1);
-            masterGain.gain.setTargetAtTime(0, now, 0.06);
-            setTimeout(() => cleanupIfSameGeneration(myGeneration), 180);
+            // Need setValueAtTime anchor before exponentialRamp
+            myNodes.osc1.frequency.setValueAtTime(myNodes.osc1.frequency.value, now);
+            myNodes.osc2.frequency.setValueAtTime(myNodes.osc2.frequency.value, now);
+            myNodes.osc1.frequency.exponentialRampToValueAtTime(60, now + 0.1);
+            myNodes.osc2.frequency.exponentialRampToValueAtTime(60, now + 0.1);
+            myNodes.masterGain.gain.setTargetAtTime(0, now, 0.06);
+            setTimeout(() => cleanupNodesForce(myNodes), 180);
         }
     }
     
-    function cleanupIfSameGeneration(gen) {
-        // Only cleanup if no new sound has started
-        if (generation !== gen) return;
-        cleanupImmediate();
+    function cleanupNodesForce(nodes) {
+        // Always cleanup these specific nodes, regardless of generation
+        // Stop all oscillators/sources using captured references
+        [nodes.osc1, nodes.osc2, nodes.lfo, nodes.noiseNode, nodes.noiseLfo].forEach(node => {
+            if (node) try { node.stop(); } catch(e) {}
+        });
+        // Disconnect all nodes from graph
+        [nodes.osc1, nodes.osc2, nodes.lfo, nodes.noiseNode, nodes.noiseLfo, 
+         nodes.synthGain, nodes.noiseGain, nodes.noiseFilter, nodes.masterGain, 
+         nodes.lfoGain, nodes.noiseLfoGain].forEach(node => {
+            if (node) try { node.disconnect(); } catch(e) {}
+        });
+        
+        // Only null the module-level refs if they're still pointing to these nodes
+        if (osc1 === nodes.osc1) osc1 = null;
+        if (osc2 === nodes.osc2) osc2 = null;
+        if (lfo === nodes.lfo) lfo = null;
+        if (noiseNode === nodes.noiseNode) noiseNode = null;
+        if (noiseLfo === nodes.noiseLfo) noiseLfo = null;
+        if (synthGain === nodes.synthGain) synthGain = null;
+        if (noiseGain === nodes.noiseGain) noiseGain = null;
+        if (noiseFilter === nodes.noiseFilter) noiseFilter = null;
+        if (masterGain === nodes.masterGain) masterGain = null;
+        if (lfoGain === nodes.lfoGain) lfoGain = null;
+        if (noiseLfoGain === nodes.noiseLfoGain) noiseLfoGain = null;
     }
     
     function cleanupImmediate() {
@@ -396,6 +427,7 @@ const BeamSustain = (() => {
     let nextId = 0;
     
     let masterGain = null;
+    let masterGainConnected = false;  // Track connection state explicitly
     
     const baseFreq = 65;  // Low C2-ish
     const lfoRate = 6;    // womm womm rate (hz)
@@ -410,14 +442,18 @@ const BeamSustain = (() => {
     ];
     
     function ensureMaster() {
-        if (!ctx) {
-            ctx = Audio.getContext('sfx').ctx;
-            if (!ctx) return false;
-        }
-        if (!masterGain || !masterGain.context) {
+        ctx = Audio.getContext('sfx').ctx;
+        if (!ctx) return false;
+        
+        // Always recreate masterGain if not connected
+        if (!masterGain || !masterGainConnected) {
+            if (masterGain) {
+                try { masterGain.disconnect(); } catch(e) {}
+            }
             masterGain = ctx.createGain();
-            masterGain.gain.value = 0.25;
+            masterGain.gain.value = 0.177;  // ~-3db from 0.25
             masterGain.connect(ctx.destination);
+            masterGainConnected = true;
         }
         return true;
     }
@@ -515,13 +551,24 @@ const BeamSustain = (() => {
     }
     
     function stopVoice(id, voice) {
-        if (!ctx) return;
+        if (!ctx) {
+            voices.delete(id);
+            return;
+        }
+        
+        // Mark as stopping immediately to prevent double-stop
+        if (voice.stopping) return;
+        voice.stopping = true;
         
         const now = ctx.currentTime;
         
         // Quick fade out
-        voice.voiceGain.gain.setValueAtTime(voice.voiceGain.gain.value, now);
-        voice.voiceGain.gain.linearRampToValueAtTime(0, now + 0.08);
+        try {
+            voice.voiceGain.gain.setValueAtTime(voice.voiceGain.gain.value, now);
+            voice.voiceGain.gain.linearRampToValueAtTime(0, now + 0.08);
+        } catch(e) {
+            // Node already dead, just cleanup
+        }
         
         setTimeout(() => {
             [voice.osc, voice.lfo, voice.oscHi, voice.lfoHi].forEach(node => {
@@ -536,7 +583,27 @@ const BeamSustain = (() => {
         }, 100);
     }
     
-    return { start, stop, get active() { return voices.size > 0; } };
+    // Force cleanup of all voices (emergency reset)
+    function reset() {
+        for (const [id, voice] of voices) {
+            [voice.osc, voice.lfo, voice.oscHi, voice.lfoHi].forEach(node => {
+                if (node) try { node.stop(); } catch(e) {}
+            });
+            [voice.osc, voice.lfo, voice.oscGain, voice.lfoGain, 
+             voice.oscHi, voice.lfoHi, voice.oscHiGain, voice.lfoHiGain,
+             voice.voiceGain].forEach(node => {
+                if (node) try { node.disconnect(); } catch(e) {}
+            });
+        }
+        voices.clear();
+        if (masterGain) {
+            try { masterGain.disconnect(); } catch(e) {}
+            masterGain = null;
+            masterGainConnected = false;
+        }
+    }
+    
+    return { start, stop, reset, get active() { return voices.size > 0; } };
 })();
 
 // === GLOBAL ALIASES ===

@@ -442,6 +442,8 @@ const Combat = {
         // Reset expression when all beams finish
         if (hadBeams && this.beams.length === 0) {
             setExpression('neutral');
+            // Safety: ensure all sustain sounds are stopped
+            BeamSustain.stop();
         }
 
         if (!frozen) {
