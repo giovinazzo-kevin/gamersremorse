@@ -138,17 +138,33 @@ const Audio = (() => {
         const item = instruments.tracker?.getLibraryItem(id);
         if (!item) return false;
         
-        const durationMs = calculateDuration(item);
+        const durationSec = calculateDuration(item) / 1000;
         
-        // Play immediately
-        play(id, contextName, layerName);
+        // Schedule loops using Web Audio time (sample-accurate)
+        // We schedule ahead and use setTimeout only to trigger the next scheduling pass
+        const scheduleAhead = 0.1; // Schedule 100ms ahead
+        const scheduleInterval = 50; // Check every 50ms
         
-        // Schedule loop
-        layer.loopInterval = setInterval(() => {
-            if (layer.current === id) {
-                play(id, contextName, layerName);
+        let nextStartTime = context.ctx.currentTime;
+        
+        function scheduleLoop() {
+            if (layer.current !== id) return; // Stopped
+            
+            // Schedule loops until we're scheduleAhead seconds into the future
+            while (nextStartTime < context.ctx.currentTime + scheduleAhead) {
+                // Play at exact scheduled time
+                if (sound.type === 'tracker' && instruments.tracker) {
+                    instruments.tracker.playLibraryItem(sound.id, context.ctx, layer.gain, nextStartTime);
+                }
+                nextStartTime += durationSec;
             }
-        }, durationMs);
+            
+            // Schedule next check
+            layer.loopTimeout = setTimeout(scheduleLoop, scheduleInterval);
+        }
+        
+        // Start the scheduling loop
+        scheduleLoop();
         
         return true;
     }

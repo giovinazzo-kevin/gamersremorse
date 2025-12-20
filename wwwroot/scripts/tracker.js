@@ -441,7 +441,8 @@ const Tracker = (() => {
     
     // Play a library item directly (for SFX) without loading into editor
     // ctx and dest are passed by Audio manager
-    function playLibraryItem(id, ctx = null, dest = null) {
+    // startTime is optional - if provided, schedule from that time (for seamless loops)
+    function playLibraryItem(id, ctx = null, dest = null, startTime = null) {
         const item = library[id];
         if (!item) return false;
         
@@ -449,9 +450,18 @@ const Tracker = (() => {
         const useCtx = ctx || audioCtx || (audioCtx = new (window.AudioContext || window.webkitAudioContext)());
         const useDest = dest || useCtx.destination;
         
+        // Base time - use provided startTime or current time
+        const baseTime = startTime !== null ? startTime : useCtx.currentTime;
+        
         // If item has custom synth function, use that
         if (item.synth) {
-            item.synth(useCtx, useDest);
+            // For synths, we need to offset their internal scheduling
+            // This is trickier - for now just play at baseTime if it's in the future
+            if (startTime !== null && startTime > useCtx.currentTime) {
+                setTimeout(() => item.synth(useCtx, useDest), (startTime - useCtx.currentTime) * 1000);
+            } else {
+                item.synth(useCtx, useDest);
+            }
             return true;
         }
         
@@ -479,7 +489,7 @@ const Tracker = (() => {
             
             for (let r = 0; r < pat.length; r++) {
                 const row = pat.rows[r];
-                const time = useCtx.currentTime + (rowIndex * msPerRow / 1000);
+                const time = baseTime + (rowIndex * msPerRow / 1000);
                 
                 for (const ch of CHANNELS) {
                     const cell = row[ch];
