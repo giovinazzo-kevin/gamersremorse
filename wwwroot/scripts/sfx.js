@@ -257,8 +257,13 @@ const BeamCharge = (() => {
     }
     
     function cleanupImmediate() {
+        // Stop all oscillators/sources
         [osc1, osc2, lfo, noiseNode, noiseLfo].forEach(node => {
             if (node) try { node.stop(); } catch(e) {}
+        });
+        // Disconnect all nodes from graph
+        [osc1, osc2, lfo, noiseNode, noiseLfo, synthGain, noiseGain, noiseFilter, masterGain, lfoGain, noiseLfoGain].forEach(node => {
+            if (node) try { node.disconnect(); } catch(e) {}
         });
         osc1 = osc2 = lfo = noiseNode = noiseLfo = null;
         synthGain = noiseGain = noiseFilter = masterGain = null;
