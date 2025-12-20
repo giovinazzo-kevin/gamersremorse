@@ -172,6 +172,13 @@ select.modal-input option {
     flex-direction: column;
 }
 
+/* For tabs with sliders on both sides */
+.modal-columns .modal-col-right.sliders {
+    width: auto;
+    flex: 1;
+    align-items: flex-start;
+}
+
 .modal-label {
     margin-bottom: 4px;
 }

@@ -114,10 +114,11 @@ Particles.types.damage = {
     render(ctx, x, y, progress, data) {
         const alpha = 1 - progress;
         const scale = 1 + progress * 0.3;  // grow slightly as fading
+        const sizeConfig = Combat?.config?.damageNumberSize ?? 1;
         
         const value = data.value;
         const color = data.color || '#ffffff';
-        const size = Math.max(14, 12 + value * 2);  // bigger numbers = bigger font
+        const size = Math.max(14, 12 + value * 2) * sizeConfig;  // bigger numbers = bigger font
         
         ctx.save();
         ctx.font = `bold ${size * scale}px monospace`;
@@ -129,15 +130,15 @@ Particles.types.damage = {
         ctx.fillText(value, x + 1, y + 1);
         
         // Main text
-        ctx.fillStyle = color.startsWith('rgba') ? color : `rgba(${hexToRgb(color)}, ${alpha})`;
+        ctx.fillStyle = color.startsWith('rgba') ? color : `rgba(${hexToRgbString(color)}, ${alpha})`;
         ctx.fillText(value, x, y);
         
         ctx.restore();
     }
 };
 
-// Helper
-function hexToRgb(hex) {
+// Helper (local to avoid collision with utils.js)
+function hexToRgbString(hex) {
     const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
     if (result) {
         return `${parseInt(result[1], 16)}, ${parseInt(result[2], 16)}, ${parseInt(result[3], 16)}`;
@@ -147,7 +148,13 @@ function hexToRgb(hex) {
 
 // === Convenience spawners ===
 
-function spawnDamageNumber(x, y, value, color = '#ffffff') {
+function spawnDamageNumber(x, y, value, color = null) {
+    // Default to CSS variable colors
+    if (!color) {
+        const style = getComputedStyle(document.documentElement);
+        color = style.getPropertyValue('--color-positive').trim() || '#54bebe';
+    }
+    
     const vx = (Math.random() - 0.5) * 30;  // slight random drift
     const vy = -60 - Math.random() * 20;    // float up
     const lifetime = 0.8;

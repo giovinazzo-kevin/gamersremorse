@@ -317,9 +317,14 @@ function buildLockedTab(content) {
 }
 
 function buildGraphicsTab(content, refs) {
-    const col = document.createElement('div');
-    col.className = 'modal-col-left';
-    col.style.width = '100%';
+    const columns = document.createElement('div');
+    columns.className = 'modal-columns';
+    
+    const leftCol = document.createElement('div');
+    leftCol.className = 'modal-col-left';
+    
+    const rightCol = document.createElement('div');
+    rightCol.className = 'modal-col-right sliders';
 
     // Shadow quality dropdown
     const shadowRow = document.createElement('div');
@@ -346,7 +351,7 @@ function buildGraphicsTab(content, refs) {
         Combat.saveConfig();
     };
     shadowRow.appendChild(refs.shadowQuality);
-    col.appendChild(shadowRow);
+    leftCol.appendChild(shadowRow);
 
     // Tear Style dropdown
     const styleRow = document.createElement('div');
@@ -372,7 +377,7 @@ function buildGraphicsTab(content, refs) {
         Combat.saveConfig();
     };
     styleRow.appendChild(refs.tearStyle);
-    col.appendChild(styleRow);
+    leftCol.appendChild(styleRow);
 
     // Splash checkbox
     const splashRow = document.createElement('label');
@@ -387,7 +392,22 @@ function buildGraphicsTab(content, refs) {
     };
     splashRow.appendChild(refs.splashCheckbox);
     splashRow.appendChild(document.createTextNode(' Splash effects'));
-    col.appendChild(splashRow);
+    leftCol.appendChild(splashRow);
+
+    // Damage numbers checkbox
+    const dmgNumRow = document.createElement('label');
+    dmgNumRow.className = 'modal-checkbox-row';
+    refs.dmgNumCheckbox = document.createElement('input');
+    refs.dmgNumCheckbox.type = 'checkbox';
+    refs.dmgNumCheckbox.className = 'modal-checkbox';
+    refs.dmgNumCheckbox.checked = Combat.config.damageNumbers ?? true;
+    refs.dmgNumCheckbox.onchange = () => {
+        Combat.config.damageNumbers = refs.dmgNumCheckbox.checked;
+        Combat.saveConfig();
+    };
+    dmgNumRow.appendChild(refs.dmgNumCheckbox);
+    dmgNumRow.appendChild(document.createTextNode(' Damage numbers'));
+    leftCol.appendChild(dmgNumRow);
 
     // Screen shake slider (0-1000%, squared curve)
     const shake = buildSlider('Screen shake', 0, 1000, Math.sqrt(Combat.config.screenShake ?? 1) * 100, 1,
@@ -402,7 +422,7 @@ function buildGraphicsTab(content, refs) {
     );
     refs.shakeSlider = shake.slider;
     refs.shakeValue = shake.valueEl;
-    col.appendChild(shake.row);
+    leftCol.appendChild(shake.row);
 
     // Depth of field slider (0-100%)
     const dof = buildSlider('Depth of field', 0, 100, (Combat.config.depthOfField ?? 0) * 100, 1,
@@ -416,7 +436,7 @@ function buildGraphicsTab(content, refs) {
     );
     refs.dofSlider = dof.slider;
     refs.dofValue = dof.valueEl;
-    col.appendChild(dof.row);
+    leftCol.appendChild(dof.row);
 
     // Hitstop slider (0-200%)
     const hitstop = buildSlider('Hitstop', 0, 200, (Combat.config.hitstop ?? 1) * 100, 1,
@@ -429,7 +449,9 @@ function buildGraphicsTab(content, refs) {
     );
     refs.hitstopSlider = hitstop.slider;
     refs.hitstopValue = hitstop.valueEl;
-    col.appendChild(hitstop.row);
+    leftCol.appendChild(hitstop.row);
+
+    // === RIGHT COLUMN ===
 
     // Hit flash slider (0-100%)
     const hitFlash = buildSlider('Hit flash', 0, 100, (Combat.config.hitFlash ?? 0.5) * 100, 1,
@@ -442,7 +464,7 @@ function buildGraphicsTab(content, refs) {
     );
     refs.hitFlashSlider = hitFlash.slider;
     refs.hitFlashValue = hitFlash.valueEl;
-    col.appendChild(hitFlash.row);
+    rightCol.appendChild(hitFlash.row);
 
     // Low HP overlay slider (0-100%)
     const lowHP = buildSlider('Low HP overlay', 0, 100, (Combat.config.lowHPOverlay ?? 1) * 100, 1,
@@ -455,9 +477,50 @@ function buildGraphicsTab(content, refs) {
     );
     refs.lowHPSlider = lowHP.slider;
     refs.lowHPValue = lowHP.valueEl;
-    col.appendChild(lowHP.row);
+    rightCol.appendChild(lowHP.row);
 
-    content.appendChild(col);
+    // Carnage effect slider (0-100%)
+    const carnage = buildSlider('Carnage effect', 0, 100, (Combat.config.carnage ?? 1) * 100, 1,
+        v => v + '%',
+        v => {
+            Combat.config.carnage = v / 100;
+            Combat.saveConfig();
+        },
+        100
+    );
+    refs.carnageSlider = carnage.slider;
+    refs.carnageValue = carnage.valueEl;
+    rightCol.appendChild(carnage.row);
+
+    // Power scaling slider (0-100%)
+    const power = buildSlider('Power scaling', 0, 100, (Combat.config.powerScaling ?? 1) * 100, 1,
+        v => v + '%',
+        v => {
+            Combat.config.powerScaling = v / 100;
+            Combat.saveConfig();
+        },
+        100
+    );
+    refs.powerSlider = power.slider;
+    refs.powerValue = power.valueEl;
+    rightCol.appendChild(power.row);
+
+    // Damage number size slider (50-200%)
+    const dmgSize = buildSlider('Damage number size', 50, 200, (Combat.config.damageNumberSize ?? 1) * 100, 1,
+        v => v + '%',
+        v => {
+            Combat.config.damageNumberSize = v / 100;
+            Combat.saveConfig();
+        },
+        100
+    );
+    refs.dmgSizeSlider = dmgSize.slider;
+    refs.dmgSizeValue = dmgSize.valueEl;
+    rightCol.appendChild(dmgSize.row);
+
+    columns.appendChild(leftCol);
+    columns.appendChild(rightCol);
+    content.appendChild(columns);
 }
 
 function buildAchievementsTab(content) {
@@ -557,39 +620,50 @@ function buildAchievementItem(ach) {
 }
 
 function buildAudioTab(content) {
-    const col = document.createElement('div');
-    col.className = 'modal-col-left';
-    col.style.width = '100%';
+    const columns = document.createElement('div');
+    columns.className = 'modal-columns';
+    
+    const leftCol = document.createElement('div');
+    leftCol.className = 'modal-col-left';
+    
+    const rightCol = document.createElement('div');
+    rightCol.className = 'modal-col-right sliders';
+    
+    // === LEFT COLUMN ===
     
     // Master volume
     const master = buildSlider('Master', 0, 100, 100, 1,
         v => v + '%',
         v => { Audio.setVolume('sfx', v / 100); Audio.setVolume('music', v / 100); }
     );
-    col.appendChild(master.row);
+    leftCol.appendChild(master.row);
     
     // SFX volume
     const sfxVol = buildSlider('Sound Effects', 0, 100, 100, 1,
         v => v + '%',
         v => Audio.setVolume('sfx', v / 100)
     );
-    col.appendChild(sfxVol.row);
+    leftCol.appendChild(sfxVol.row);
+    
+    // === RIGHT COLUMN ===
     
     // Music volume
     const musicVol = buildSlider('Music', 0, 100, 100, 1,
         v => v + '%',
         v => Audio.setVolume('music', v / 100)
     );
-    col.appendChild(musicVol.row);
+    rightCol.appendChild(musicVol.row);
     
     // Danger loop volume (low HP beeping)
     const dangerVol = buildSlider('Low HP Warning', 0, 100, 100, 1,
         v => v + '%',
         v => Audio.setLayerVolume('music', 'danger', v / 100)
     );
-    col.appendChild(dangerVol.row);
+    rightCol.appendChild(dangerVol.row);
     
-    content.appendChild(col);
+    columns.appendChild(leftCol);
+    columns.appendChild(rightCol);
+    content.appendChild(columns);
 }
 
 function buildSoundsTab(content) {

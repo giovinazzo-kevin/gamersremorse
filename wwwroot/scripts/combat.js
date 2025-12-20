@@ -49,6 +49,10 @@ const Combat = {
         hitflash: true,
         hitFlash: 0.5,
         lowHPOverlay: 1,
+        carnage: 1,
+        powerScaling: 1,
+        damageNumbers: true,
+        damageNumberSize: 1,
     },
 
     init() {
@@ -380,7 +384,11 @@ const Combat = {
                         Atmosphere.addDamage(damagePerTick * ticks);
                         
                         // Damage number
-                        spawnDamageNumber(e.x, e.y - e.height / 2, Math.round(damagePerTick * ticks * 10) / 10, '#ff6600');
+                        if (this.config.damageNumbers !== false) {
+                            const style = getComputedStyle(document.documentElement);
+                            const color = style.getPropertyValue('--color-negative').trim() || '#c80064';
+                            spawnDamageNumber(e.x, e.y - e.height / 2, Math.round(damagePerTick * ticks * 10) / 10, color);
+                        }
                         
                         // Light feedback per tick
                         HitFlash.trigger(damagePerTick * 0.5);
@@ -486,7 +494,11 @@ const Combat = {
                         Atmosphere.addDamage(t.damage);
                         
                         // Damage number
-                        spawnDamageNumber(pos.x, pos.y, t.damage, '#88ccff');
+                        if (this.config.damageNumbers !== false) {
+                            const style = getComputedStyle(document.documentElement);
+                            const color = style.getPropertyValue('--color-positive').trim() || '#54bebe';
+                            spawnDamageNumber(pos.x, pos.y, t.damage, color);
+                        }
                         
                         ScreenShake.shake(t.damage * 4 * Atmosphere.getShakeMultiplier());
                         HitFlash.trigger(t.damage);

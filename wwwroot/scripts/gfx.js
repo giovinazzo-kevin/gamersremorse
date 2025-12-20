@@ -203,7 +203,8 @@ const Atmosphere = {
     updatePageFilter() {
         if (!this.pageWrapper) return;
         
-        const c = this.carnage;
+        const carnageScale = Combat?.config?.carnage ?? 1;
+        const c = this.carnage * carnageScale;
         
         if (c > 0.01) {
             // Update SVG filter blend
@@ -225,15 +226,19 @@ const Atmosphere = {
     
     // Multipliers for combat effects based on DPS
     getShakeMultiplier() {
+        const scaling = Combat?.config?.powerScaling ?? 1;
+        if (scaling === 0) return 1;
         const dps = this.getDPS();
         if (dps < 10) return 1;
-        return 1 + Math.log10(dps);  // DPS 10 = 2x, DPS 100 = 3x, DPS 1000 = 4x
+        return 1 + Math.log10(dps) * scaling;  // DPS 10 = 2x, DPS 100 = 3x, DPS 1000 = 4x (at 100% scaling)
     },
     
     getParticleMultiplier() {
+        const scaling = Combat?.config?.powerScaling ?? 1;
+        if (scaling === 0) return 1;
         const dps = this.getDPS();
         if (dps < 10) return 1;
-        return 1 + Math.log10(dps) * 0.5;  // DPS 10 = 1.5x, DPS 100 = 2x, DPS 1000 = 2.5x
+        return 1 + Math.log10(dps) * 0.5 * scaling;  // DPS 10 = 1.5x, DPS 100 = 2x, DPS 1000 = 2.5x (at 100% scaling)
     },
 };
 

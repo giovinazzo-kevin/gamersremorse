@@ -41,10 +41,13 @@ const COLOR_NAMES = {
 };
 
 function hexToRgb(hex) {
+    if (!hex || typeof hex !== 'string' || !hex.startsWith('#') || hex.length < 7) {
+        return { r: 128, g: 128, b: 128 };  // fallback gray
+    }
     const r = parseInt(hex.slice(1, 3), 16);
     const g = parseInt(hex.slice(3, 5), 16);
     const b = parseInt(hex.slice(5, 7), 16);
-    return { r, g, b };
+    return { r: r || 0, g: g || 0, b: b || 0 };
 }
 
 function getColors() {
