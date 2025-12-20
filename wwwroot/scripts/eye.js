@@ -1266,7 +1266,7 @@ function doFall(eyeEl) {
         
         eyeEl.style.transform = `translateY(${y}px)`;
         
-        if (y < window.innerHeight) {
+        if (y < window.innerHeight - 100) {
             requestAnimationFrame(animateFall);
             onDied();
         } else {
