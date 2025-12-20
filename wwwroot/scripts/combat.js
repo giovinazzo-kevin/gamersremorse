@@ -85,6 +85,17 @@ const Combat = {
         this.canvas.height = window.innerHeight;
     },
 
+    getEyeCenter() {
+        const svg = document.getElementById('eye');
+        if (!svg) return { x: 0, y: 0 };
+
+        const rect = svg.getBoundingClientRect();
+        return {
+            x: rect.left + rect.width / 2,
+            y: rect.top + rect.height / 2
+        };
+    },
+
     getPupilPosition() {
         const svg = document.getElementById('eye');
         if (!svg) return { x: 0, y: 0 };
@@ -169,9 +180,14 @@ const Combat = {
     stopFiring() {
         // Fire beam if at least tier 1 completed
         if (this.isCharging && this.completedTier > 0 && this.target) {
-            BeamCharge.stop(true);  // true = firing beam (BWAAAH)
-            this.fireBeam(this.target.x, this.target.y);
-            // Don't reset expression yet - beam is still firing
+            const tier = this.completedTier;
+            const target = { x: this.target.x, y: this.target.y };  // Copy target
+            
+            // PEW sequence -> callback fires beam
+            BeamCharge.stop(true, tier, () => {
+                this.fireBeam(target.x, target.y, tier);
+            });
+            // Don't reset expression yet - ignition sequence playing
         } else if (this.isCharging) {
             BeamCharge.stop(false);  // cancelled
             setExpression('neutral');
@@ -193,7 +209,7 @@ const Combat = {
         return this.completedTier > 0;
     },
 
-    fireBeam(targetX, targetY) {
+    fireBeam(targetX, targetY, tier) {
         const start = this.getPupilPosition();
         const dx = targetX - start.x;
         const dy = targetY - start.y;
@@ -201,8 +217,6 @@ const Combat = {
         const dirX = dx / dist;
         const dirY = dy / dist;
 
-        const tier = this.completedTier;
-        
         // Scale beam properties by tier
         // Duration: +25% per tier (base from item, default 0.5s)
         const baseDuration = this.frameEffects.laserDuration || 0.5;
@@ -232,7 +246,11 @@ const Combat = {
         });
 
         Eye.blink();
-        sfx.beam?.() || sfx.pow();
+        // Sound handled by BeamCharge (PEW -> BWAAAH sequence)
+        const sustainId = BeamSustain.start(tier);  // WHIRR while beam active, pitch by tier
+        
+        // Store sustain ID on the beam for cleanup
+        this.beams[this.beams.length - 1].sustainId = sustainId;
         
         // Lock gaze while firing
         setExpression('firing');
@@ -410,6 +428,13 @@ const Combat = {
                     // Enemy left beam, reset accumulator
                     b.tickAccum.delete(e);
                 }
+            }
+        }
+        // Stop sustain sounds for expired beams
+        for (const b of this.beams) {
+            if (b.elapsed >= b.duration && b.sustainId !== undefined) {
+                BeamSustain.stop(b.sustainId);
+                b.sustainId = undefined;  // Don't stop twice
             }
         }
         this.beams = this.beams.filter(b => b.elapsed < b.duration);
@@ -675,6 +700,11 @@ const Combat = {
 
         // Beams
         for (const b of this.beams) {
+            // Update beam origin to current iris position
+            const currentStart = this.getPupilPosition();
+            b.startX = currentStart.x;
+            b.startY = currentStart.y;
+            
             const progress = b.elapsed / b.duration;
             const alpha = 1 - progress * 0.5;  // fade slightly
             const baseWidth = b.width * (1 + progress * 0.3);  // expand over lifetime
