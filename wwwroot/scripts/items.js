@@ -164,6 +164,7 @@ const Items = {
             description: 'Pure concentrated evil.',
             tags: ['PREDATORY', 'ENSHITTIFIED'],
             rarity: 'legendary',
+            stackable: true,
             condition: { negativeRatio: { gt: 0.7 } },
             effects: { demonic: true, tint: '#ff0000', laserCharge: true },
             sound: 'zelda_secret'
@@ -430,21 +431,31 @@ const Items = {
             stinky: false,
             infected: false,
             divine: false,
-            laserCharge: false
+            laserCharge: 0  // Now a number - beam level
         };
         
-        // Stack effects from all active items
-        for (const item of Object.values(this.activeEffects)) {
-            if (item.effects) {
-                for (const [key, value] of Object.entries(item.effects)) {
-                    if (typeof value === 'boolean') {
-                        merged[key] = merged[key] || value;  // OR booleans
-                    } else if (typeof value === 'number') {
-                        // For numbers, use max (could be sum, depends on effect)
-                        merged[key] = Math.max(merged[key] || 0, value);
-                    } else {
-                        merged[key] = value;  // Last wins for strings/colors
-                    }
+        // Count items in inventory for stacking
+        const itemCounts = {};
+        for (const id of this.inventory) {
+            itemCounts[id] = (itemCounts[id] || 0) + 1;
+        }
+        
+        // Stack effects from all items (using counts for stackable items)
+        for (const [id, count] of Object.entries(itemCounts)) {
+            const item = this.catalog[id];
+            if (!item || !item.effects) continue;
+            
+            for (const [key, value] of Object.entries(item.effects)) {
+                if (key === 'laserCharge') {
+                    // laserCharge stacks additively based on item count
+                    merged.laserCharge += value ? count : 0;
+                } else if (typeof value === 'boolean') {
+                    merged[key] = merged[key] || value;  // OR booleans
+                } else if (typeof value === 'number') {
+                    // For numbers, use max (could be sum, depends on effect)
+                    merged[key] = Math.max(merged[key] || 0, value);
+                } else {
+                    merged[key] = value;  // Last wins for strings/colors
                 }
             }
         }
