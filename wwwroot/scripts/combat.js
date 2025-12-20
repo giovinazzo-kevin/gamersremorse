@@ -549,6 +549,9 @@ const Combat = {
             pierce,
             path: null,  // Calculated each frame
             tickAccum: new Map(),  // enemy -> time since last damage tick
+            // Iris tracking history for beam lag
+            irisHistory: [{ x: start.x, y: start.y, t: 0 }],
+            laggedOrigin: { x: start.x, y: start.y },  // cone back position (50ms behind)
         });
 
         Eye.blink();
@@ -695,9 +698,44 @@ const Combat = {
             b.startX = currentStart.x;
             b.startY = currentStart.y;
             
-            // Calculate beam path with piercing and bounces
+            // Track iris position history for beam lag
+            const now = b.elapsed;
+            b.irisHistory.push({ x: currentStart.x, y: currentStart.y, t: now });
+            
+            // Keep only last 200ms of history
+            const historyWindow = 0.2;
+            while (b.irisHistory.length > 2 && b.irisHistory[0].t < now - historyWindow) {
+                b.irisHistory.shift();
+            }
+            
+            // Get lagged position (50ms behind current)
+            const lagTime = 0.05;  // 50ms
+            const targetTime = now - lagTime;
+            let laggedPos = b.irisHistory[0];
+            for (let i = 0; i < b.irisHistory.length - 1; i++) {
+                const p0 = b.irisHistory[i];
+                const p1 = b.irisHistory[i + 1];
+                if (p0.t <= targetTime && p1.t >= targetTime) {
+                    // Interpolate between these two points
+                    const t = (targetTime - p0.t) / (p1.t - p0.t);
+                    laggedPos = {
+                        x: p0.x + (p1.x - p0.x) * t,
+                        y: p0.y + (p1.y - p0.y) * t
+                    };
+                    break;
+                }
+                if (p1.t <= targetTime) {
+                    laggedPos = p1;
+                }
+            }
+            b.laggedOrigin = laggedPos;
+            
+            // DON'T change direction - keep original firing direction
+            // The cone will connect iris to laggedOrigin, beam continues from there
+            
+            // Calculate beam path with piercing and bounces (from lagged origin, original direction)
             const { path, hitEnemies, bounceHits } = calculateBeamPath(
-                b.startX, b.startY, b.dirX, b.dirY,
+                laggedPos.x, laggedPos.y, b.dirX, b.dirY,
                 b.length, b.bounces, b.pierce, this.enemies, b.width
             );
             b.path = path;
@@ -1085,16 +1123,35 @@ const Combat = {
 
         // Beams
         for (const b of this.beams) {
-            // Update beam origin to current iris position
-            const currentStart = this.getPupilPosition();
-            b.startX = currentStart.x;
-            b.startY = currentStart.y;
+            // Get current iris position (cone tip) and lagged position (cone back)
+            const currentIris = this.getPupilPosition();
+            const laggedOrigin = b.laggedOrigin || currentIris;
 
             const progress = b.elapsed / b.duration;
             const alpha = 1 - progress * 0.5;  // fade slightly
             const baseWidth = b.width * (1 + progress * 0.3);  // expand over lifetime
             const tier = b.tier || 1;
             const time = Date.now() / 1000;
+
+            // Use path length if available, otherwise fall back to b.length
+            const pathLength = (b.path && b.path.length >= 2) ? getPathLength(b.path) : b.length;
+            const usePath = b.path && b.path.length >= 2;
+            
+            // Skip rendering if no valid path
+            if (!pathLength || pathLength <= 0) continue;
+
+            // Helper to get position along the beam
+            // dist=0 corresponds to laggedOrigin (path[0]), continues from there
+            const getBeamPos = (dist) => {
+                if (usePath) {
+                    return getPointAlongPath(b.path, dist);
+                } else {
+                    return {
+                        x: laggedOrigin.x + b.dirX * dist,
+                        y: laggedOrigin.y + b.dirY * dist
+                    };
+                }
+            };
 
             // Spread: beam widens along its length (cone factor)
             const spreadRate = 0.15 + tier * 0.05;  // how much it spreads per 100px
@@ -1106,7 +1163,7 @@ const Combat = {
 
             // Mid ratio wobbles between 0.25 and 0.75 of outer beam
             const midRatio = 0.5 + midDance * 0.25;  // 0.25 to 0.75
-            const outerRatio = 1 + outerDance;
+            const outerRatio = 1 + outerDance * 4;
 
             // Get actual iris diameter from eye state
             const eyeSvg = document.getElementById('eye');
@@ -1115,15 +1172,11 @@ const Combat = {
             const actualIrisRadius = baseIrisRadius + dilationBonus + state.attention * state.irisDilation;
             const irisDiameter = eyeSvg ? actualIrisRadius * eyeSvg.clientHeight * 2 * 0.60 : 60;
 
-            // Perpendicular vector for offset effects
-            const perpX = -b.dirY;
-            const perpY = b.dirX;
-
             // Draw beam as segments to allow width variation along length
             // OUTER BEAM: Segments scroll BACKWARD (aftershock rings)
             // INNER BEAM: Fixed width = iris diameter (energy channel)
             const segments = 25;
-            const segmentLength = b.length / segments;
+            const segmentLength = pathLength / segments;
             const scrollSpeed = 400;  // pixels per second backward
             const scrollPhase = (time * scrollSpeed / segmentLength) % 1;
 
@@ -1146,7 +1199,7 @@ const Combat = {
             const wavePhase = time * waveSpeed;
             const stepSize = 8;  // px per segment
 
-            for (let d = 0; d < b.length; d += stepSize) {
+            for (let d = 0; d < pathLength; d += stepSize) {
                 const wave = (d - wavePhase) / waveLength * Math.PI * 2;
                 const alphaMod = Math.sin(wave);
                 const colorMod = Math.cos(wave);
@@ -1157,15 +1210,15 @@ const Combat = {
                 const g = Math.floor(230 + colorMod * 25);
                 const b_ = Math.floor(200 + colorMod * 55);
 
-                const x0 = b.startX + b.dirX * d;
-                const y0 = b.startY + b.dirY * d;
-                const x1 = b.startX + b.dirX * Math.min(d + stepSize, b.length);
-                const y1 = b.startY + b.dirY * Math.min(d + stepSize, b.length);
+                const p0 = getBeamPos(d);
+                const p1 = getBeamPos(Math.min(d + stepSize, pathLength));
+                const lengthFalloff = Math.pow(1 - d / pathLength, 0.75);
+
 
                 this.ctx.beginPath();
-                this.ctx.moveTo(x0, y0);
-                this.ctx.lineTo(x1, y1);
-                this.ctx.strokeStyle = `rgba(${r}, ${g}, ${b_}, ${segAlpha})`;
+                this.ctx.moveTo(p0.x, p0.y);
+                this.ctx.lineTo(p1.x, p1.y);
+                this.ctx.strokeStyle = `rgba(${r}, ${g}, ${b_}, ${segAlpha * lengthFalloff})`;
                 this.ctx.lineWidth = innerWidth;
                 this.ctx.lineCap = 'round';
                 this.ctx.stroke();
@@ -1191,14 +1244,12 @@ const Combat = {
                 const width1 = coneStartWidth + (fullBeamWidth - coneStartWidth) * clampedT1;
                 const avgWidth = (width0 + width1) / 2 * (1 + outerDance);
 
-                const x0 = b.startX + b.dirX * dist0;
-                const y0 = b.startY + b.dirY * dist0;
-                const x1 = b.startX + b.dirX * dist1;
-                const y1 = b.startY + b.dirY * dist1;
+                const p0 = getBeamPos(dist0);
+                const p1 = getBeamPos(dist1);
 
                 this.ctx.beginPath();
-                this.ctx.moveTo(x0, y0);
-                this.ctx.lineTo(x1, y1);
+                this.ctx.moveTo(p0.x, p0.y);
+                this.ctx.lineTo(p1.x, p1.y);
                 this.ctx.strokeStyle = `rgba(255, 150, 50, ${alpha * 0.5})`;
                 this.ctx.lineWidth = avgWidth * midRatio;
                 this.ctx.stroke();
@@ -1210,56 +1261,57 @@ const Combat = {
                 const t0 = scrolledI / segments;
                 const t1 = (scrolledI + 1) / segments;
 
-                const dist0 = coneLength + t0 * (b.length - coneLength);
-                const dist1 = coneLength + t1 * (b.length - coneLength);
+                const dist0 = coneLength + t0 * (pathLength - coneLength);
+                const dist1 = coneLength + t1 * (pathLength - coneLength);
 
-                if (dist1 < coneLength || dist0 > b.length) continue;
+                if (dist1 < coneLength || dist0 > pathLength) continue;
 
                 const clampedDist0 = Math.max(coneLength, dist0);
-                const clampedDist1 = Math.min(b.length, dist1);
+                const clampedDist1 = Math.min(pathLength, dist1);
                 if (clampedDist1 - clampedDist0 < 1) continue;
 
                 const beamWidth0 = fullBeamWidth * (1 + clampedDist0 * spreadRate / 1000);
                 const beamWidth1 = fullBeamWidth * (1 + clampedDist1 * spreadRate / 1000);
-                const avgWidth = (beamWidth0 + beamWidth1) / 2 * (1 + outerDance);
+                const lengthFalloff = Math.pow(1 - dist1 / pathLength, 0.25);
+                const avgWidth = (beamWidth0 + beamWidth1) / 2 * (1 + outerDance) * lengthFalloff;
 
-                const x0 = b.startX + b.dirX * clampedDist0;
-                const y0 = b.startY + b.dirY * clampedDist0;
-                const x1 = b.startX + b.dirX * clampedDist1;
-                const y1 = b.startY + b.dirY * clampedDist1;
+                const p0 = getBeamPos(clampedDist0);
+                const p1 = getBeamPos(clampedDist1);
 
                 this.ctx.beginPath();
-                this.ctx.moveTo(x0, y0);
-                this.ctx.lineTo(x1, y1);
+                this.ctx.moveTo(p0.x, p0.y);
+                this.ctx.lineTo(p1.x, p1.y);
                 this.ctx.strokeStyle = `rgba(255, 150, 50, ${alpha * 0.5})`;
                 this.ctx.lineWidth = avgWidth * midRatio;
                 this.ctx.stroke();
             }
 
             // === LAYER 3: PULSES ===
-            const pulseCount = 4 + tier * 2;
+            const pulseCount = 8 + tier * 2;
             const pulseSpeed = 1400;  // pixels per second
             for (let p = 0; p < pulseCount; p++) {
                 const pulseOffset = (p / pulseCount);
-                const pulsePos = ((time * pulseSpeed / b.length + pulseOffset) % 1);
-                const pulseDist = pulsePos * b.length;
+                const pulsePos = ((time * pulseSpeed / pathLength + pulseOffset) % 1);
+                const pulseDist = pulsePos * pathLength;
 
-                const pulseX = b.startX + b.dirX * pulseDist;
-                const pulseY = b.startY + b.dirY * pulseDist;
+                const pulsePoint = getBeamPos(pulseDist);
+                
+                // Skip if invalid point
+                if (!pulsePoint || !isFinite(pulsePoint.x) || !isFinite(pulsePoint.y)) continue;
 
                 const pulseWidth = baseWidth * 0.3 * (1 + Math.sin(time * 25 + p) * 0.2);
                 const pulseAlpha = alpha * 0.9 * (1 - pulsePos * 0.3);
 
                 const gradient = this.ctx.createRadialGradient(
-                    pulseX, pulseY, 0,
-                    pulseX, pulseY, pulseWidth
+                    pulsePoint.x, pulsePoint.y, 0,
+                    pulsePoint.x, pulsePoint.y, pulseWidth
                 );
                 gradient.addColorStop(0, `rgba(255, 255, 255, ${pulseAlpha})`);
                 gradient.addColorStop(0.6, `rgba(255, 230, 180, ${pulseAlpha * 0.6})`);
                 gradient.addColorStop(1, `rgba(255, 200, 100, 0)`);
 
                 this.ctx.beginPath();
-                this.ctx.arc(pulseX, pulseY, pulseWidth, 0, Math.PI * 2);
+                this.ctx.arc(pulsePoint.x, pulsePoint.y, pulseWidth, 0, Math.PI * 2);
                 this.ctx.fillStyle = gradient;
                 this.ctx.fill();
             }
@@ -1296,14 +1348,12 @@ const Combat = {
                 const falloffWidth1 = innerWidth + (width1 - innerWidth) * widthFalloff;
                 const avgWidth = (falloffWidth0 + falloffWidth1) / 2 * (1 + outerDance);
 
-                const x0 = b.startX + b.dirX * dist0;
-                const y0 = b.startY + b.dirY * dist0;
-                const x1 = b.startX + b.dirX * dist1;
-                const y1 = b.startY + b.dirY * dist1;
+                const p0 = getBeamPos(dist0);
+                const p1 = getBeamPos(dist1);
 
                 this.ctx.beginPath();
-                this.ctx.moveTo(x0, y0);
-                this.ctx.lineTo(x1, y1);
+                this.ctx.moveTo(p0.x, p0.y);
+                this.ctx.lineTo(p1.x, p1.y);
                 this.ctx.strokeStyle = `rgba(255, 0, 0, ${alpha * 0.5})`;
                 this.ctx.lineWidth = avgWidth;
                 this.ctx.lineCap = 'round';
@@ -1316,29 +1366,26 @@ const Combat = {
                 const t0 = scrolledI / segments;
                 const t1 = (scrolledI + 1) / segments;
 
-                const dist0 = coneLength + t0 * (b.length - coneLength);
-                const dist1 = coneLength + t1 * (b.length - coneLength);
+                const dist0 = coneLength + t0 * (pathLength - coneLength);
+                const dist1 = coneLength + t1 * (pathLength - coneLength);
 
-                if (dist1 < coneLength || dist0 > b.length) continue;
+                if (dist1 < coneLength || dist0 > pathLength) continue;
 
                 const clampedDist0 = Math.max(coneLength, dist0);
-                const clampedDist1 = Math.min(b.length, dist1);
+                const clampedDist1 = Math.min(pathLength, dist1);
                 if (clampedDist1 - clampedDist0 < 1) continue;
 
                 const baseBeamWidth = fullBeamWidth * (1 + clampedDist0 * spreadRate / 1000);
                 const targetWidth = innerWidth;  // fall off toward inner beam width
-                const beamWidth0 = targetWidth + (baseBeamWidth - targetWidth) * widthFalloff;
-                const beamWidth1 = targetWidth + (baseBeamWidth - targetWidth) * widthFalloff;
-                const avgWidth = (beamWidth0 + beamWidth1) / 2 * (1 + outerDance);
+                const lengthFalloff = Math.pow(1 - dist1 / pathLength, 0.25);
+                const avgWidth = (targetWidth + (baseBeamWidth - targetWidth) * widthFalloff) * lengthFalloff * (1 + outerDance);
 
-                const x0 = b.startX + b.dirX * clampedDist0;
-                const y0 = b.startY + b.dirY * clampedDist0;
-                const x1 = b.startX + b.dirX * clampedDist1;
-                const y1 = b.startY + b.dirY * clampedDist1;
+                const p0 = getBeamPos(clampedDist0);
+                const p1 = getBeamPos(clampedDist1);
 
                 this.ctx.beginPath();
-                this.ctx.moveTo(x0, y0);
-                this.ctx.lineTo(x1, y1);
+                this.ctx.moveTo(p0.x, p0.y);
+                this.ctx.lineTo(p1.x, p1.y);
                 this.ctx.strokeStyle = `rgba(255, 0, 0, ${alpha * 0.5})`;
                 this.ctx.lineWidth = avgWidth;
                 this.ctx.lineCap = 'round';
