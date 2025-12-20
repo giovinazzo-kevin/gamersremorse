@@ -200,8 +200,8 @@ const Combat = {
         const tier = this.completedTier;
         
         // Scale beam properties by tier
-        // Duration: +25% per tier (base 0.15s)
-        const duration = 0.15 * Math.pow(1.25, tier - 1);
+        // Duration: +25% per tier (base 0.5s)
+        const duration = 0.5 * Math.pow(1.25, tier - 1);
         // Damage: +50% per tier (base 3)
         const damage = 3 * Math.pow(1.5, tier - 1);
         // Width: from item (default 25px), doubles at tier 5 (capped)
@@ -617,47 +617,121 @@ const Combat = {
         for (const b of this.beams) {
             const progress = b.elapsed / b.duration;
             const alpha = 1 - progress * 0.5;  // fade slightly
-            const width = b.width * (1 + progress * 0.3);  // expand slightly
+            const baseWidth = b.width * (1 + progress * 0.3);  // expand over lifetime
             const tier = b.tier || 1;
+            const time = Date.now() / 1000;
+            
+            // Spread: beam widens along its length (cone factor)
+            const spreadRate = 0.15 + tier * 0.05;  // how much it spreads per 100px
+            
+            // Dancing frequencies for each layer (different speeds)
+            const outerDance = Math.sin(time * 8) * 0.05;
+            const midDance = Math.sin(time * 12 + 1) * 0.08;
+            const coreDance = Math.sin(time * 18 + 2) * 0.1;
             
             // Core ratio increases with tier (inner beam more prominent)
-            const coreRatio = 0.15 + tier * 0.08;  // 0.23, 0.31, 0.39...
-            const midRatio = 0.4 + tier * 0.05;    // 0.45, 0.50, 0.55...
+            const coreRatio = (0.15 + tier * 0.08) * (1 + coreDance);
+            const midRatio = (0.4 + tier * 0.05) * (1 + midDance);
+            const outerRatio = 1 + outerDance;
             
-            // Saturation and contrast scale with tier (0 to 2 at tier 5, capped)
-            const filterAmount = Math.min(2, (tier - 1) / 4 * 2);  // tier 1 = 0, tier 5 = 2
-            const saturation = 1 + filterAmount;  // 1 to 3
-            const contrast = 1 + filterAmount;    // 1 to 3
+            // Draw beam as segments to allow width variation along length
+            // Segments scroll BACKWARD to create moving ring effect
+            const segments = 25;
+            const segmentLength = b.length / segments;
+            const scrollSpeed = 400;  // pixels per second backward
+            const scrollPhase = (time * scrollSpeed / segmentLength) % 1;  // 0-1 phase within one segment cycle
             
-            this.ctx.save();
-            this.ctx.filter = `saturate(${saturation}) contrast(${contrast})`;
-
-            // Outer beam (red)
-            this.ctx.beginPath();
-            this.ctx.moveTo(b.startX, b.startY);
-            this.ctx.lineTo(b.startX + b.dirX * b.length, b.startY + b.dirY * b.length);
-            this.ctx.strokeStyle = `rgba(255, 0, 0, ${alpha})`;
-            this.ctx.lineWidth = width;
-            this.ctx.lineCap = 'round';
-            this.ctx.stroke();
-
-            // Middle layer (orange)
-            this.ctx.beginPath();
-            this.ctx.moveTo(b.startX, b.startY);
-            this.ctx.lineTo(b.startX + b.dirX * b.length, b.startY + b.dirY * b.length);
-            this.ctx.strokeStyle = `rgba(255, 150, 50, ${alpha})`;
-            this.ctx.lineWidth = width * midRatio;
-            this.ctx.stroke();
-
-            // White hot center (more prominent at higher tiers)
-            this.ctx.beginPath();
-            this.ctx.moveTo(b.startX, b.startY);
-            this.ctx.lineTo(b.startX + b.dirX * b.length, b.startY + b.dirY * b.length);
-            this.ctx.strokeStyle = `rgba(255, 255, 255, ${alpha * (0.7 + tier * 0.1)})`;
-            this.ctx.lineWidth = width * coreRatio;
-            this.ctx.stroke();
+            // Perpendicular vector for offset effects
+            const perpX = -b.dirY;
+            const perpY = b.dirX;
             
-            this.ctx.restore();
+            for (let i = -1; i <= segments; i++) {
+                // Offset each segment's position by scroll phase (BACKWARD = subtract)
+                const scrolledI = i - scrollPhase;
+                const t0 = scrolledI / segments;
+                const t1 = (scrolledI + 1) / segments;
+                const dist0 = t0 * b.length;
+                const dist1 = t1 * b.length;
+                
+                // Skip if entirely outside beam
+                if (dist1 < 0 || dist0 > b.length) continue;
+                
+                // Clamp to beam bounds
+                const clampedDist0 = Math.max(0, dist0);
+                const clampedDist1 = Math.min(b.length, dist1);
+                
+                // Skip tiny segments
+                if (clampedDist1 - clampedDist0 < 1) continue;
+                
+                // Width grows along beam length (use unclamped for consistent sizing)
+                const width0 = baseWidth * outerRatio * (1 + clampedDist0 * spreadRate / 1000);
+                const width1 = baseWidth * outerRatio * (1 + clampedDist1 * spreadRate / 1000);
+                const avgWidth = (width0 + width1) / 2;
+                
+                // Segment positions (use clamped)
+                const x0 = b.startX + b.dirX * clampedDist0;
+                const y0 = b.startY + b.dirY * clampedDist0;
+                const x1 = b.startX + b.dirX * clampedDist1;
+                const y1 = b.startY + b.dirY * clampedDist1;
+                
+                // Outer beam (red)
+                this.ctx.beginPath();
+                this.ctx.moveTo(x0, y0);
+                this.ctx.lineTo(x1, y1);
+                this.ctx.strokeStyle = `rgba(255, 0, 0, ${alpha})`;
+                this.ctx.lineWidth = avgWidth;
+                this.ctx.lineCap = 'round';
+                this.ctx.stroke();
+                
+                // Middle layer (orange)
+                this.ctx.beginPath();
+                this.ctx.moveTo(x0, y0);
+                this.ctx.lineTo(x1, y1);
+                this.ctx.strokeStyle = `rgba(255, 150, 50, ${alpha})`;
+                this.ctx.lineWidth = avgWidth * midRatio;
+                this.ctx.stroke();
+                
+                // White hot center
+                this.ctx.beginPath();
+                this.ctx.moveTo(x0, y0);
+                this.ctx.lineTo(x1, y1);
+                this.ctx.strokeStyle = `rgba(255, 255, 255, ${alpha * (0.7 + tier * 0.1)})`;
+                this.ctx.lineWidth = avgWidth * coreRatio;
+                this.ctx.stroke();
+            }
+            
+            // Outer red rings - moving BACKWARD (recoil/structure)
+            // REMOVED - segments themselves will create the ring effect
+            
+            // Inner white pulses - moving FORWARD (energy expelled)
+            const pulseCount = 4 + tier * 2;
+            const pulseSpeed = 1400;  // pixels per second
+            for (let p = 0; p < pulseCount; p++) {
+                const pulseOffset = (p / pulseCount);
+                const pulsePos = ((time * pulseSpeed / b.length + pulseOffset) % 1);
+                const pulseDist = pulsePos * b.length;
+                
+                const pulseX = b.startX + b.dirX * pulseDist;
+                const pulseY = b.startY + b.dirY * pulseDist;
+                
+                // Pulse width - smaller, concentrated
+                const pulseWidth = baseWidth * 0.3 * (1 + Math.sin(time * 25 + p) * 0.2);
+                const pulseAlpha = alpha * 0.9 * (1 - pulsePos * 0.3);  // fade as it travels
+                
+                // Draw pulse as bright core
+                const gradient = this.ctx.createRadialGradient(
+                    pulseX, pulseY, 0,
+                    pulseX, pulseY, pulseWidth
+                );
+                gradient.addColorStop(0, `rgba(255, 255, 255, ${pulseAlpha})`);
+                gradient.addColorStop(0.6, `rgba(255, 230, 180, ${pulseAlpha * 0.6})`);
+                gradient.addColorStop(1, `rgba(255, 200, 100, 0)`);
+                
+                this.ctx.beginPath();
+                this.ctx.arc(pulseX, pulseY, pulseWidth, 0, Math.PI * 2);
+                this.ctx.fillStyle = gradient;
+                this.ctx.fill();
+            }
         }
 
         // Charge circle on cursor (R-TYPE style: two circles)
