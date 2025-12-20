@@ -939,7 +939,6 @@ const Combat = {
             }
         }
     },
-
     render() {
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
@@ -1086,275 +1085,266 @@ const Combat = {
 
         // Beams
         for (const b of this.beams) {
-            // Skip if no path calculated yet
-            if (!b.path || b.path.length < 2) continue;
-            
+            // Update beam origin to current iris position
+            const currentStart = this.getPupilPosition();
+            b.startX = currentStart.x;
+            b.startY = currentStart.y;
+
             const progress = b.elapsed / b.duration;
             const alpha = 1 - progress * 0.5;  // fade slightly
             const baseWidth = b.width * (1 + progress * 0.3);  // expand over lifetime
             const tier = b.tier || 1;
             const time = Date.now() / 1000;
-            
-            // Get actual path length (may be less than b.length due to bounces)
-            const pathLength = getPathLength(b.path);
-            
+
             // Spread: beam widens along its length (cone factor)
             const spreadRate = 0.15 + tier * 0.05;  // how much it spreads per 100px
-            
+
             // Dancing frequencies for each layer (different speeds)
-            const outerDance = Math.sin(time * 8) * 0.15;
+            const outerDance = Math.sin(time * 8) * 0.05;
             const midDance = Math.sin(time * 12 + 1);  // -1 to 1 for wobble range
             const coreDance = Math.sin(time * 18 + 2) * 0.1;
-            
+
             // Mid ratio wobbles between 0.25 and 0.75 of outer beam
             const midRatio = 0.5 + midDance * 0.25;  // 0.25 to 0.75
             const outerRatio = 1 + outerDance;
-            
+
             // Get actual iris diameter from eye state
             const eyeSvg = document.getElementById('eye');
             const baseIrisRadius = state.irisRadius;
             const dilationBonus = state.dilation * 0.08;
             const actualIrisRadius = baseIrisRadius + dilationBonus + state.attention * state.irisDilation;
             const irisDiameter = eyeSvg ? actualIrisRadius * eyeSvg.clientHeight * 2 * 0.60 : 60;
-            
+
+            // Perpendicular vector for offset effects
+            const perpX = -b.dirY;
+            const perpY = b.dirX;
+
             // Draw beam as segments to allow width variation along length
-            // Segment density is constant per unit length, not per total path
-            const segmentsPerPx = 10 / 1000;  // 10 segments per 1000px
-            const segments = Math.max(5, Math.floor(pathLength * segmentsPerPx));
-            const segmentLength = pathLength / segments;
+            // OUTER BEAM: Segments scroll BACKWARD (aftershock rings)
+            // INNER BEAM: Fixed width = iris diameter (energy channel)
+            const segments = 25;
+            const segmentLength = b.length / segments;
             const scrollSpeed = 400;  // pixels per second backward
             const scrollPhase = (time * scrollSpeed / segmentLength) % 1;
-            
-            const coneLength = Math.min(segmentLength * 1.5, pathLength * 0.1);  // cone zone
+
+            const coneLength = segmentLength * 1.5;  // cone zone before cylindrical beam
             const fullBeamWidth = baseWidth * outerRatio;
-            const coneStartWidth = irisDiameter / 0.60 * 0.85;
-            
+            const coneStartWidth = irisDiameter / 0.60 * 0.85;  // cone starts at 85% of actual iris
+
             // Shared variables for cone/cylinder loops
             const coneSegments = 8;
             const coneScrollPhase = (time * scrollSpeed / coneLength) % 1;
-            const innerWidthMult = 1 + (tier - 1) * 0.25;
+            const innerWidthMult = 1 + (tier - 1) * 0.25;  // 1x at tier 1, 2x at tier 5
             const innerWidth = irisDiameter * innerWidthMult * (1 + coreDance * 0.1);
-            
+
             // Use additive blending for laser effect
             this.ctx.globalCompositeOperation = 'lighter';
-            
-            // Spatial taper: beam narrows along path length
-            const getSpatialTaper = (dist) => {
-                const t = dist / pathLength;  // 0 at start, 1 at end
-                return 1 - t * 0.5;  // 100% at start, 50% at end
-            };
-            
+
             // === LAYER 1: INNER WHITE (scrolling wave, center core) ===
-            const waveSpeed = 800;
-            const waveLength = 80;
+            const waveSpeed = 800;  // px/s forward
+            const waveLength = 80;  // px per cycle
             const wavePhase = time * waveSpeed;
-            const stepSize = 8;
-            
-            for (let d = 0; d < pathLength; d += stepSize) {
+            const stepSize = 8;  // px per segment
+
+            for (let d = 0; d < b.length; d += stepSize) {
                 const wave = (d - wavePhase) / waveLength * Math.PI * 2;
                 const alphaMod = Math.sin(wave);
                 const colorMod = Math.cos(wave);
-                
+
                 const segAlpha = alpha * (0.7 + alphaMod * 0.3) * 0.5;
-                
+
                 const r = 255;
                 const g = Math.floor(230 + colorMod * 25);
                 const b_ = Math.floor(200 + colorMod * 55);
-                
-                const p0 = getPointAlongPath(b.path, d);
-                const p1 = getPointAlongPath(b.path, Math.min(d + stepSize, pathLength));
-                
+
+                const x0 = b.startX + b.dirX * d;
+                const y0 = b.startY + b.dirY * d;
+                const x1 = b.startX + b.dirX * Math.min(d + stepSize, b.length);
+                const y1 = b.startY + b.dirY * Math.min(d + stepSize, b.length);
+
                 this.ctx.beginPath();
-                this.ctx.moveTo(p0.x, p0.y);
-                this.ctx.lineTo(p1.x, p1.y);
+                this.ctx.moveTo(x0, y0);
+                this.ctx.lineTo(x1, y1);
                 this.ctx.strokeStyle = `rgba(${r}, ${g}, ${b_}, ${segAlpha})`;
                 this.ctx.lineWidth = innerWidth;
                 this.ctx.lineCap = 'round';
                 this.ctx.stroke();
             }
-            
+
             // === LAYER 2: MIDDLE ORANGE (cone + cylinder) ===
             // Cone middle
             for (let i = -1; i <= coneSegments; i++) {
                 const scrolledI = i - coneScrollPhase;
                 const t0 = scrolledI / coneSegments;
                 const t1 = (scrolledI + 1) / coneSegments;
-                
+
                 if (t1 < 0 || t0 > 1) continue;
-                
+
                 const clampedT0 = Math.max(0, t0);
                 const clampedT1 = Math.min(1, t1);
                 if (clampedT1 - clampedT0 < 0.01) continue;
-                
+
                 const dist0 = clampedT0 * coneLength;
                 const dist1 = clampedT1 * coneLength;
-                
+
                 const width0 = coneStartWidth + (fullBeamWidth - coneStartWidth) * clampedT0;
                 const width1 = coneStartWidth + (fullBeamWidth - coneStartWidth) * clampedT1;
                 const avgWidth = (width0 + width1) / 2 * (1 + outerDance);
-                
-                const p0 = getPointAlongPath(b.path, dist0);
-                const p1 = getPointAlongPath(b.path, dist1);
-                
+
+                const x0 = b.startX + b.dirX * dist0;
+                const y0 = b.startY + b.dirY * dist0;
+                const x1 = b.startX + b.dirX * dist1;
+                const y1 = b.startY + b.dirY * dist1;
+
                 this.ctx.beginPath();
-                this.ctx.moveTo(p0.x, p0.y);
-                this.ctx.lineTo(p1.x, p1.y);
+                this.ctx.moveTo(x0, y0);
+                this.ctx.lineTo(x1, y1);
                 this.ctx.strokeStyle = `rgba(255, 150, 50, ${alpha * 0.5})`;
                 this.ctx.lineWidth = avgWidth * midRatio;
                 this.ctx.stroke();
             }
-            
+
             // Cylinder middle
             for (let i = 0; i < segments; i++) {
                 const scrolledI = i - scrollPhase;
                 const t0 = scrolledI / segments;
                 const t1 = (scrolledI + 1) / segments;
-                
-                const dist0 = coneLength + t0 * (pathLength - coneLength);
-                const dist1 = coneLength + t1 * (pathLength - coneLength);
-                
-                if (dist1 < coneLength || dist0 > pathLength) continue;
-                
+
+                const dist0 = coneLength + t0 * (b.length - coneLength);
+                const dist1 = coneLength + t1 * (b.length - coneLength);
+
+                if (dist1 < coneLength || dist0 > b.length) continue;
+
                 const clampedDist0 = Math.max(coneLength, dist0);
-                const clampedDist1 = Math.min(pathLength, dist1);
+                const clampedDist1 = Math.min(b.length, dist1);
                 if (clampedDist1 - clampedDist0 < 1) continue;
-                
-                // Apply spatial taper
-                const taper0 = getSpatialTaper(clampedDist0);
-                const taper1 = getSpatialTaper(clampedDist1);
-                const avgTaper = (taper0 + taper1) / 2;
-                
+
                 const beamWidth0 = fullBeamWidth * (1 + clampedDist0 * spreadRate / 1000);
                 const beamWidth1 = fullBeamWidth * (1 + clampedDist1 * spreadRate / 1000);
-                const avgWidth = (beamWidth0 + beamWidth1) / 2 * (1 + outerDance) * avgTaper;
-                
-                const p0 = getPointAlongPath(b.path, clampedDist0);
-                const p1 = getPointAlongPath(b.path, clampedDist1);
-                
+                const avgWidth = (beamWidth0 + beamWidth1) / 2 * (1 + outerDance);
+
+                const x0 = b.startX + b.dirX * clampedDist0;
+                const y0 = b.startY + b.dirY * clampedDist0;
+                const x1 = b.startX + b.dirX * clampedDist1;
+                const y1 = b.startY + b.dirY * clampedDist1;
+
                 this.ctx.beginPath();
-                this.ctx.moveTo(p0.x, p0.y);
-                this.ctx.lineTo(p1.x, p1.y);
+                this.ctx.moveTo(x0, y0);
+                this.ctx.lineTo(x1, y1);
                 this.ctx.strokeStyle = `rgba(255, 150, 50, ${alpha * 0.5})`;
                 this.ctx.lineWidth = avgWidth * midRatio;
                 this.ctx.stroke();
             }
-            
+
             // === LAYER 3: PULSES ===
             const pulseCount = 4 + tier * 2;
-            const pulseSpeed = 1400;
+            const pulseSpeed = 1400;  // pixels per second
             for (let p = 0; p < pulseCount; p++) {
                 const pulseOffset = (p / pulseCount);
-                const pulsePos = ((time * pulseSpeed / pathLength + pulseOffset) % 1);
-                const pulseDist = pulsePos * pathLength;
-                
-                const pulsePoint = getPointAlongPath(b.path, pulseDist);
-                
+                const pulsePos = ((time * pulseSpeed / b.length + pulseOffset) % 1);
+                const pulseDist = pulsePos * b.length;
+
+                const pulseX = b.startX + b.dirX * pulseDist;
+                const pulseY = b.startY + b.dirY * pulseDist;
+
                 const pulseWidth = baseWidth * 0.3 * (1 + Math.sin(time * 25 + p) * 0.2);
                 const pulseAlpha = alpha * 0.9 * (1 - pulsePos * 0.3);
-                
+
                 const gradient = this.ctx.createRadialGradient(
-                    pulsePoint.x, pulsePoint.y, 0,
-                    pulsePoint.x, pulsePoint.y, pulseWidth
+                    pulseX, pulseY, 0,
+                    pulseX, pulseY, pulseWidth
                 );
                 gradient.addColorStop(0, `rgba(255, 255, 255, ${pulseAlpha})`);
                 gradient.addColorStop(0.6, `rgba(255, 230, 180, ${pulseAlpha * 0.6})`);
                 gradient.addColorStop(1, `rgba(255, 200, 100, 0)`);
-                
+
                 this.ctx.beginPath();
-                this.ctx.arc(pulsePoint.x, pulsePoint.y, pulseWidth, 0, Math.PI * 2);
+                this.ctx.arc(pulseX, pulseY, pulseWidth, 0, Math.PI * 2);
                 this.ctx.fillStyle = gradient;
                 this.ctx.fill();
             }
-            
+
             // Width falloff: sharp drop in last 25% of beam duration
-            const timeProgress = b.elapsed / b.duration;
+            const timeProgress = b.elapsed / b.duration;  // 0 to 1 over lifetime
             const falloffStart = 0.75;
             let widthFalloff = 1;
             if (timeProgress > falloffStart) {
-                const falloffT = (timeProgress - falloffStart) / (1 - falloffStart);
-                widthFalloff = 1 - falloffT * falloffT;
+                const falloffT = (timeProgress - falloffStart) / (1 - falloffStart);  // 0 to 1 in falloff zone
+                widthFalloff = 1 - falloffT * falloffT;  // quadratic dropoff
             }
-            
+
             // === LAYER 4: OUTER RED (cone + cylinder, drawn last = on top) ===
             // Cone outer
-            // Use same shockwave params as cylinder for continuity
-            const coneWaveCount = 3;
-            const coneWaveAmplitude = 0.5;
-            
             for (let i = -1; i <= coneSegments; i++) {
                 const scrolledI = i - coneScrollPhase;
                 const t0 = scrolledI / coneSegments;
                 const t1 = (scrolledI + 1) / coneSegments;
-                
+
                 if (t1 < 0 || t0 > 1) continue;
-                
+
                 const clampedT0 = Math.max(0, t0);
                 const clampedT1 = Math.min(1, t1);
                 if (clampedT1 - clampedT0 < 0.01) continue;
-                
+
                 const dist0 = clampedT0 * coneLength;
                 const dist1 = clampedT1 * coneLength;
-                
-                // Shockwave wobble for cone
-                const coneSegmentPhase = (scrolledI / coneSegments) * coneWaveCount * Math.PI * 2;
-                const coneWobble = 1 + Math.sin(coneSegmentPhase) * coneWaveAmplitude;
-                
+
                 const width0 = coneStartWidth + (fullBeamWidth - coneStartWidth) * clampedT0;
                 const width1 = coneStartWidth + (fullBeamWidth - coneStartWidth) * clampedT1;
+                // Apply falloff to cone width
                 const falloffWidth0 = innerWidth + (width0 - innerWidth) * widthFalloff;
                 const falloffWidth1 = innerWidth + (width1 - innerWidth) * widthFalloff;
-                const avgWidth = (falloffWidth0 + falloffWidth1) / 2 * coneWobble;
-                
-                const p0 = getPointAlongPath(b.path, dist0);
-                const p1 = getPointAlongPath(b.path, dist1);
-                
+                const avgWidth = (falloffWidth0 + falloffWidth1) / 2 * (1 + outerDance);
+
+                const x0 = b.startX + b.dirX * dist0;
+                const y0 = b.startY + b.dirY * dist0;
+                const x1 = b.startX + b.dirX * dist1;
+                const y1 = b.startY + b.dirY * dist1;
+
                 this.ctx.beginPath();
-                this.ctx.moveTo(p0.x, p0.y);
-                this.ctx.lineTo(p1.x, p1.y);
+                this.ctx.moveTo(x0, y0);
+                this.ctx.lineTo(x1, y1);
                 this.ctx.strokeStyle = `rgba(255, 0, 0, ${alpha * 0.5})`;
                 this.ctx.lineWidth = avgWidth;
                 this.ctx.lineCap = 'round';
                 this.ctx.stroke();
             }
-            
-            // Cylinder outer (one extra segment to cap the tip)
-            for (let i = 0; i <= segments; i++) {
+
+            // Cylinder outer
+            for (let i = 0; i < segments; i++) {
                 const scrolledI = i - scrollPhase;
                 const t0 = scrolledI / segments;
                 const t1 = (scrolledI + 1) / segments;
-                
-                const dist0 = coneLength + t0 * (pathLength - coneLength);
-                const dist1 = coneLength + t1 * (pathLength - coneLength);
-                
-                if (dist1 < coneLength || dist0 > pathLength) continue;
-                
+
+                const dist0 = coneLength + t0 * (b.length - coneLength);
+                const dist1 = coneLength + t1 * (b.length - coneLength);
+
+                if (dist1 < coneLength || dist0 > b.length) continue;
+
                 const clampedDist0 = Math.max(coneLength, dist0);
-                const clampedDist1 = Math.min(pathLength, dist1);
+                const clampedDist1 = Math.min(b.length, dist1);
                 if (clampedDist1 - clampedDist0 < 1) continue;
-                
-                // Apply spatial taper
-                const taper0 = getSpatialTaper(clampedDist0);
-                const taper1 = getSpatialTaper(clampedDist1);
-                const avgTaper = (taper0 + taper1) / 2;
-                
+
                 const baseBeamWidth = fullBeamWidth * (1 + clampedDist0 * spreadRate / 1000);
-                const targetWidth = innerWidth;
+                const targetWidth = innerWidth;  // fall off toward inner beam width
                 const beamWidth0 = targetWidth + (baseBeamWidth - targetWidth) * widthFalloff;
-                const beamWidth1 = targetWidth + (baseBeamWidth - targetWidth) * widthFalloff * 2;
-                const avgWidth = (beamWidth0 + beamWidth1) / 2 * avgTaper;
-                
-                const p0 = getPointAlongPath(b.path, clampedDist0);
-                const p1 = getPointAlongPath(b.path, clampedDist1);
-                
+                const beamWidth1 = targetWidth + (baseBeamWidth - targetWidth) * widthFalloff;
+                const avgWidth = (beamWidth0 + beamWidth1) / 2 * (1 + outerDance);
+
+                const x0 = b.startX + b.dirX * clampedDist0;
+                const y0 = b.startY + b.dirY * clampedDist0;
+                const x1 = b.startX + b.dirX * clampedDist1;
+                const y1 = b.startY + b.dirY * clampedDist1;
+
                 this.ctx.beginPath();
-                this.ctx.moveTo(p0.x, p0.y);
-                this.ctx.lineTo(p1.x, p1.y);
+                this.ctx.moveTo(x0, y0);
+                this.ctx.lineTo(x1, y1);
                 this.ctx.strokeStyle = `rgba(255, 0, 0, ${alpha * 0.5})`;
                 this.ctx.lineWidth = avgWidth;
                 this.ctx.lineCap = 'round';
                 this.ctx.stroke();
             }
-            
+
             // Reset blend mode
             this.ctx.globalCompositeOperation = 'source-over';
         }
@@ -1364,16 +1354,16 @@ const Combat = {
             const cx = this.target.x;
             const cy = this.target.y;
             const radius = 30;
-            
+
             // Tier colors: black → orange → red → magenta → purple → white
             const tierColors = ['#333333', '#ff8800', '#ff2200', '#ff00aa', '#aa00ff', '#ffffff'];
             const getTierColor = (tier) => tierColors[Math.min(tier, tierColors.length - 1)];
-            
+
             const completedTier = this.completedTier;
             const tierProgress = this.tierProgress;
             const isHolding = tierProgress >= 1 || completedTier >= this.beamLevel;
             const nextTier = Math.min(completedTier + 1, this.beamLevel);
-            
+
             // Background circle: completed tier color (full circle)
             const bgColor = getTierColor(completedTier);
             this.ctx.beginPath();
@@ -1381,30 +1371,30 @@ const Combat = {
             this.ctx.strokeStyle = bgColor;
             this.ctx.lineWidth = 4;
             this.ctx.stroke();
-            
+
             // Foreground circle: next tier color (filling arc)
             if (completedTier < this.beamLevel && tierProgress > 0 && tierProgress < 1) {
                 const fgColor = getTierColor(nextTier);
                 const startAngle = -Math.PI / 2;
                 const endAngle = startAngle + (Math.PI * 2 * tierProgress);
-                
+
                 this.ctx.beginPath();
                 this.ctx.arc(cx, cy, radius, startAngle, endAngle);
                 this.ctx.strokeStyle = fgColor;
                 this.ctx.lineWidth = 4;
                 this.ctx.stroke();
             }
-            
+
             // Flash when tier is complete and holding
             if (completedTier > 0) {
                 const flashFreq = this.getFlashRate(completedTier);
                 const flash = Math.sin(Date.now() / 1000 * Math.PI * 2 * flashFreq) > 0;
-                
+
                 // Pulse intensity scales with tier
                 const pulseFreq = 1 + completedTier * 0.3;
                 const pulse = (Math.sin(Date.now() / 1000 * Math.PI * 2 * pulseFreq) + 1) / 2;
                 const pulseIntensity = 0.1 + pulse * 0.2 * completedTier;
-                
+
                 // Flash ring
                 if (isHolding && flash) {
                     this.ctx.beginPath();
@@ -1413,14 +1403,14 @@ const Combat = {
                     this.ctx.lineWidth = 2;
                     this.ctx.stroke();
                 }
-                
+
                 // Pulse fill
                 this.ctx.beginPath();
                 this.ctx.arc(cx, cy, radius - 2, 0, Math.PI * 2);
                 this.ctx.fillStyle = `rgba(255, 255, 255, ${pulseIntensity})`;
                 this.ctx.fill();
             }
-            
+
             // Level indicator in center (shows completed tier)
             if (completedTier > 0) {
                 this.ctx.font = 'bold 16px monospace';
@@ -1433,7 +1423,7 @@ const Combat = {
 
         // Particles
         Particles.render(this.ctx);
-        
+
         // Hit flash - white overlay
         const flashIntensity = HitFlash.getIntensity() * this.config.hitFlash;
         if (flashIntensity > 0) {
