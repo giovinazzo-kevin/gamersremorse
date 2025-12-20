@@ -1,4 +1,4 @@
-﻿/* Combat System
+/* Combat System
  *
  * PHILOSOPHY:
  * - Projectiles are intensional: defined by trajectory, not state
@@ -218,31 +218,13 @@ const Combat = {
             dirX,
             dirY,
             width,
-            damage,
+            damage,  // DPS
             length,
             elapsed: 0,
             duration,
             tier,
+            tickAccum: new Map(),  // enemy -> time since last damage tick
         });
-
-        // Hit all enemies in beam path
-        for (const e of this.enemies) {
-            if (this.beamHitsEnemy(start, dirX, dirY, length, width, e)) {
-                e.health -= damage;
-                ScreenShake.shake(damage * 6);
-                HitFlash.trigger(damage);
-                this.hitstop(3, e);
-                sfx.pow();
-
-                e.knockbackVX = dirX * 300;
-                e.knockbackVY = dirY * 300;
-
-                if (e.dead) {
-                    ScreenShake.shake(damage * 20);
-                    this.hitstop(6);
-                }
-            }
-        }
 
         Eye.blink();
         sfx.beam?.() || sfx.pow();
@@ -369,6 +351,41 @@ const Combat = {
         const hadBeams = this.beams.length > 0;
         for (const b of this.beams) {
             b.elapsed += dt;
+            
+            // Damage tick: high frequency, low damage per tick
+            const tickRate = 20;  // hits per second
+            const tickInterval = 1 / tickRate;
+            const damagePerTick = b.damage / tickRate;
+            
+            for (const e of this.enemies) {
+                if (this.beamHitsEnemy({ x: b.startX, y: b.startY }, b.dirX, b.dirY, b.length, b.width, e)) {
+                    const accum = (b.tickAccum.get(e) || 0) + dt;
+                    
+                    if (accum >= tickInterval) {
+                        const ticks = Math.floor(accum / tickInterval);
+                        e.health -= damagePerTick * ticks;
+                        b.tickAccum.set(e, accum - ticks * tickInterval);
+                        
+                        // Light feedback per tick
+                        HitFlash.trigger(damagePerTick * 0.5);
+                        sfx.pow();
+                        
+                        // Continuous knockback push
+                        e.knockbackVX = b.dirX * 80;
+                        e.knockbackVY = b.dirY * 80;
+                        
+                        if (e.dead) {
+                            ScreenShake.shake(b.damage * 10);
+                            this.hitstop(4);
+                        }
+                    } else {
+                        b.tickAccum.set(e, accum);
+                    }
+                } else {
+                    // Enemy left beam, reset accumulator
+                    b.tickAccum.delete(e);
+                }
+            }
         }
         this.beams = this.beams.filter(b => b.elapsed < b.duration);
         
@@ -645,7 +662,7 @@ const Combat = {
             const baseIrisRadius = state.irisRadius;
             const dilationBonus = state.dilation * 0.08;
             const actualIrisRadius = baseIrisRadius + dilationBonus + state.attention * state.irisDilation;
-            const irisDiameter = eyeSvg ? actualIrisRadius * eyeSvg.clientHeight * 2 : 60;
+            const irisDiameter = eyeSvg ? actualIrisRadius * eyeSvg.clientHeight * 2 * 0.60 : 60;
             
             // Perpendicular vector for offset effects
             const perpX = -b.dirY;
@@ -661,21 +678,57 @@ const Combat = {
             
             const coneLength = segmentLength * 1.5;  // cone zone before cylindrical beam
             const fullBeamWidth = baseWidth * outerRatio;
+            const coneStartWidth = irisDiameter / 0.60 * 0.85;  // cone starts at 85% of actual iris
             
-            // === OUTER BEAM: CONE (scrolling, same phase as cylinder) ===
-            // Draws from iris outward, expanding from irisDiameter to fullBeamWidth
+            // Shared variables for cone/cylinder loops
             const coneSegments = 8;
             const coneScrollPhase = (time * scrollSpeed / coneLength) % 1;
+            const innerWidthMult = 1 + (tier - 1) * 0.25;  // 1x at tier 1, 2x at tier 5
+            const innerWidth = irisDiameter * innerWidthMult * (1 + coreDance * 0.1);
             
+            // Use additive blending for laser effect
+            this.ctx.globalCompositeOperation = 'lighter';
+            
+            // === LAYER 1: INNER WHITE (scrolling wave, center core) ===
+            const waveSpeed = 800;  // px/s forward
+            const waveLength = 80;  // px per cycle
+            const wavePhase = time * waveSpeed;
+            const stepSize = 8;  // px per segment
+            
+            for (let d = 0; d < b.length; d += stepSize) {
+                const wave = (d - wavePhase) / waveLength * Math.PI * 2;
+                const alphaMod = Math.sin(wave);
+                const colorMod = Math.cos(wave);
+                
+                const segAlpha = alpha * (0.7 + alphaMod * 0.3) * 0.5;
+                
+                const r = 255;
+                const g = Math.floor(230 + colorMod * 25);
+                const b_ = Math.floor(200 + colorMod * 55);
+                
+                const x0 = b.startX + b.dirX * d;
+                const y0 = b.startY + b.dirY * d;
+                const x1 = b.startX + b.dirX * Math.min(d + stepSize, b.length);
+                const y1 = b.startY + b.dirY * Math.min(d + stepSize, b.length);
+                
+                this.ctx.beginPath();
+                this.ctx.moveTo(x0, y0);
+                this.ctx.lineTo(x1, y1);
+                this.ctx.strokeStyle = `rgba(${r}, ${g}, ${b_}, ${segAlpha})`;
+                this.ctx.lineWidth = innerWidth;
+                this.ctx.lineCap = 'round';
+                this.ctx.stroke();
+            }
+            
+            // === LAYER 2: MIDDLE ORANGE (cone + cylinder) ===
+            // Cone middle
             for (let i = -1; i <= coneSegments; i++) {
                 const scrolledI = i - coneScrollPhase;
                 const t0 = scrolledI / coneSegments;
                 const t1 = (scrolledI + 1) / coneSegments;
                 
-                // Skip if outside cone
                 if (t1 < 0 || t0 > 1) continue;
                 
-                // Clamp to cone bounds
                 const clampedT0 = Math.max(0, t0);
                 const clampedT1 = Math.min(1, t1);
                 if (clampedT1 - clampedT0 < 0.01) continue;
@@ -683,9 +736,8 @@ const Combat = {
                 const dist0 = clampedT0 * coneLength;
                 const dist1 = clampedT1 * coneLength;
                 
-                // Width lerps from iris diameter to full beam width
-                const width0 = irisDiameter + (fullBeamWidth - irisDiameter) * clampedT0;
-                const width1 = irisDiameter + (fullBeamWidth - irisDiameter) * clampedT1;
+                const width0 = coneStartWidth + (fullBeamWidth - coneStartWidth) * clampedT0;
+                const width1 = coneStartWidth + (fullBeamWidth - coneStartWidth) * clampedT1;
                 const avgWidth = (width0 + width1) / 2 * (1 + outerDance);
                 
                 const x0 = b.startX + b.dirX * dist0;
@@ -693,45 +745,29 @@ const Combat = {
                 const x1 = b.startX + b.dirX * dist1;
                 const y1 = b.startY + b.dirY * dist1;
                 
-                // Outer (red)
                 this.ctx.beginPath();
                 this.ctx.moveTo(x0, y0);
                 this.ctx.lineTo(x1, y1);
-                this.ctx.strokeStyle = `rgba(255, 0, 0, ${alpha})`;
-                this.ctx.lineWidth = avgWidth;
-                this.ctx.lineCap = 'round';
-                this.ctx.stroke();
-                
-                // Middle (orange)
-                this.ctx.beginPath();
-                this.ctx.moveTo(x0, y0);
-                this.ctx.lineTo(x1, y1);
-                this.ctx.strokeStyle = `rgba(255, 150, 50, ${alpha})`;
+                this.ctx.strokeStyle = `rgba(255, 150, 50, ${alpha * 0.5})`;
                 this.ctx.lineWidth = avgWidth * midRatio;
                 this.ctx.stroke();
             }
             
-            // === OUTER BEAM: CYLINDER (scrolling segments) ===
-            // Starts after cone, scrolls backward
+            // Cylinder middle
             for (let i = 0; i < segments; i++) {
-                // Scroll phase offsets segment positions backward
                 const scrolledI = i - scrollPhase;
                 const t0 = scrolledI / segments;
                 const t1 = (scrolledI + 1) / segments;
                 
-                // Map to distance AFTER the cone
                 const dist0 = coneLength + t0 * (b.length - coneLength);
                 const dist1 = coneLength + t1 * (b.length - coneLength);
                 
-                // Skip if outside beam
                 if (dist1 < coneLength || dist0 > b.length) continue;
                 
-                // Clamp to valid range
                 const clampedDist0 = Math.max(coneLength, dist0);
                 const clampedDist1 = Math.min(b.length, dist1);
                 if (clampedDist1 - clampedDist0 < 1) continue;
                 
-                // Cylindrical: constant width with spread
                 const beamWidth0 = fullBeamWidth * (1 + clampedDist0 * spreadRate / 1000);
                 const beamWidth1 = fullBeamWidth * (1 + clampedDist1 * spreadRate / 1000);
                 const avgWidth = (beamWidth0 + beamWidth1) / 2 * (1 + outerDance);
@@ -741,36 +777,15 @@ const Combat = {
                 const x1 = b.startX + b.dirX * clampedDist1;
                 const y1 = b.startY + b.dirY * clampedDist1;
                 
-                // Outer (red)
                 this.ctx.beginPath();
                 this.ctx.moveTo(x0, y0);
                 this.ctx.lineTo(x1, y1);
-                this.ctx.strokeStyle = `rgba(255, 0, 0, ${alpha})`;
-                this.ctx.lineWidth = avgWidth;
-                this.ctx.lineCap = 'round';
-                this.ctx.stroke();
-                
-                // Middle (orange)
-                this.ctx.beginPath();
-                this.ctx.moveTo(x0, y0);
-                this.ctx.lineTo(x1, y1);
-                this.ctx.strokeStyle = `rgba(255, 150, 50, ${alpha})`;
+                this.ctx.strokeStyle = `rgba(255, 150, 50, ${alpha * 0.5})`;
                 this.ctx.lineWidth = avgWidth * midRatio;
                 this.ctx.stroke();
             }
             
-            // === INNER BEAM: Fixed width = iris diameter ===
-            // The white-hot energy channel, constant width throughout
-            const innerWidth = irisDiameter * (1 + coreDance * 0.1);  // slight wobble
-            this.ctx.beginPath();
-            this.ctx.moveTo(b.startX, b.startY);
-            this.ctx.lineTo(b.startX + b.dirX * b.length, b.startY + b.dirY * b.length);
-            this.ctx.strokeStyle = `rgba(255, 255, 255, ${alpha * (0.7 + tier * 0.1)})`;
-            this.ctx.lineWidth = innerWidth;
-            this.ctx.lineCap = 'round';
-            this.ctx.stroke();
-            
-            // Inner white pulses - moving FORWARD (energy expelled)
+            // === LAYER 3: PULSES ===
             const pulseCount = 4 + tier * 2;
             const pulseSpeed = 1400;  // pixels per second
             for (let p = 0; p < pulseCount; p++) {
@@ -781,11 +796,9 @@ const Combat = {
                 const pulseX = b.startX + b.dirX * pulseDist;
                 const pulseY = b.startY + b.dirY * pulseDist;
                 
-                // Pulse width - smaller, concentrated
                 const pulseWidth = baseWidth * 0.3 * (1 + Math.sin(time * 25 + p) * 0.2);
-                const pulseAlpha = alpha * 0.9 * (1 - pulsePos * 0.3);  // fade as it travels
+                const pulseAlpha = alpha * 0.9 * (1 - pulsePos * 0.3);
                 
-                // Draw pulse as bright core
                 const gradient = this.ctx.createRadialGradient(
                     pulseX, pulseY, 0,
                     pulseX, pulseY, pulseWidth
@@ -799,6 +812,90 @@ const Combat = {
                 this.ctx.fillStyle = gradient;
                 this.ctx.fill();
             }
+            
+            // Width falloff: sharp drop in last 25% of beam duration
+            const timeProgress = b.elapsed / b.duration;  // 0 to 1 over lifetime
+            const falloffStart = 0.75;
+            let widthFalloff = 1;
+            if (timeProgress > falloffStart) {
+                const falloffT = (timeProgress - falloffStart) / (1 - falloffStart);  // 0 to 1 in falloff zone
+                widthFalloff = 1 - falloffT * falloffT;  // quadratic dropoff
+            }
+            
+            // === LAYER 4: OUTER RED (cone + cylinder, drawn last = on top) ===
+            // Cone outer
+            for (let i = -1; i <= coneSegments; i++) {
+                const scrolledI = i - coneScrollPhase;
+                const t0 = scrolledI / coneSegments;
+                const t1 = (scrolledI + 1) / coneSegments;
+                
+                if (t1 < 0 || t0 > 1) continue;
+                
+                const clampedT0 = Math.max(0, t0);
+                const clampedT1 = Math.min(1, t1);
+                if (clampedT1 - clampedT0 < 0.01) continue;
+                
+                const dist0 = clampedT0 * coneLength;
+                const dist1 = clampedT1 * coneLength;
+                
+                const width0 = coneStartWidth + (fullBeamWidth - coneStartWidth) * clampedT0;
+                const width1 = coneStartWidth + (fullBeamWidth - coneStartWidth) * clampedT1;
+                // Apply falloff to cone width
+                const falloffWidth0 = innerWidth + (width0 - innerWidth) * widthFalloff;
+                const falloffWidth1 = innerWidth + (width1 - innerWidth) * widthFalloff;
+                const avgWidth = (falloffWidth0 + falloffWidth1) / 2 * (1 + outerDance);
+                
+                const x0 = b.startX + b.dirX * dist0;
+                const y0 = b.startY + b.dirY * dist0;
+                const x1 = b.startX + b.dirX * dist1;
+                const y1 = b.startY + b.dirY * dist1;
+                
+                this.ctx.beginPath();
+                this.ctx.moveTo(x0, y0);
+                this.ctx.lineTo(x1, y1);
+                this.ctx.strokeStyle = `rgba(255, 0, 0, ${alpha * 0.5})`;
+                this.ctx.lineWidth = avgWidth;
+                this.ctx.lineCap = 'round';
+                this.ctx.stroke();
+            }
+            
+            // Cylinder outer
+            for (let i = 0; i < segments; i++) {
+                const scrolledI = i - scrollPhase;
+                const t0 = scrolledI / segments;
+                const t1 = (scrolledI + 1) / segments;
+                
+                const dist0 = coneLength + t0 * (b.length - coneLength);
+                const dist1 = coneLength + t1 * (b.length - coneLength);
+                
+                if (dist1 < coneLength || dist0 > b.length) continue;
+                
+                const clampedDist0 = Math.max(coneLength, dist0);
+                const clampedDist1 = Math.min(b.length, dist1);
+                if (clampedDist1 - clampedDist0 < 1) continue;
+                
+                const baseBeamWidth = fullBeamWidth * (1 + clampedDist0 * spreadRate / 1000);
+                const targetWidth = innerWidth;  // fall off toward inner beam width
+                const beamWidth0 = targetWidth + (baseBeamWidth - targetWidth) * widthFalloff;
+                const beamWidth1 = targetWidth + (baseBeamWidth - targetWidth) * widthFalloff;
+                const avgWidth = (beamWidth0 + beamWidth1) / 2 * (1 + outerDance);
+                
+                const x0 = b.startX + b.dirX * clampedDist0;
+                const y0 = b.startY + b.dirY * clampedDist0;
+                const x1 = b.startX + b.dirX * clampedDist1;
+                const y1 = b.startY + b.dirY * clampedDist1;
+                
+                this.ctx.beginPath();
+                this.ctx.moveTo(x0, y0);
+                this.ctx.lineTo(x1, y1);
+                this.ctx.strokeStyle = `rgba(255, 0, 0, ${alpha * 0.5})`;
+                this.ctx.lineWidth = avgWidth;
+                this.ctx.lineCap = 'round';
+                this.ctx.stroke();
+            }
+            
+            // Reset blend mode
+            this.ctx.globalCompositeOperation = 'source-over';
         }
 
         // Charge circle on cursor (R-TYPE style: two circles)

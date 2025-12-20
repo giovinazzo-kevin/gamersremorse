@@ -166,7 +166,7 @@ const Items = {
             rarity: 'legendary',
             stackable: true,
             condition: { negativeRatio: { gt: 0.7 } },
-            effects: { demonic: true, tint: '#ff0000', laserCharge: true, laserWidth: 80, laserFillTime: 1.0, laserDuration: 10.5 },
+            effects: { demonic: true, tint: '#ff0000', laserCharge: true, laserWidth: 80, laserFillTime: 1.0, laserDuration: 1.5 },
             sound: 'zelda_secret'
         },
         
