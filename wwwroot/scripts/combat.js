@@ -19,12 +19,26 @@ const Combat = {
     hitstopFrames: 0,
     flashingEnemies: new Set(),
 
-    // Beam charge state
-    chargeTime: 0,
-    chargeThreshold: 0.5,  // seconds to minimum beam
-    maxCharge: 2.0,        // seconds to DEATH LAUSR
+    // Beam charge state (R-TYPE style: hold at each tier before next unlocks)
+    completedTier: 0,      // tier you GET if you release now
+    tierProgress: 0,       // 0-1 progress toward next tier
+    holdTime: 0,           // time spent at completed tier
+    tierFillTime: 1.0,     // seconds to fill one tier
+    baseHoldTime: 1.2,     // base seconds to hold before next tier unlocks
+    holdTimePerTier: 0.4,  // additional hold time per tier
     beams: [],
     isCharging: false,
+    beamLevel: 0,          // max tier (from brimstone stacks)
+    
+    // Flash rate scales with tier (hz)
+    getFlashRate(tier) {
+        return 2 + tier * 0.8;  // 2.8hz, 3.6hz, 4.4hz, etc.
+    },
+    
+    // Hold threshold scales with tier
+    getHoldThreshold(tier) {
+        return this.baseHoldTime + tier * this.holdTimePerTier;
+    },
 
     config: {
         tearStyle: 'fancy',
@@ -140,15 +154,17 @@ const Combat = {
         const beamLevel = this.frameEffects.laserCharge || 0;
         if (beamLevel > 0) {
             this.isCharging = true;
-            this.chargeTime = 0;
+            this.completedTier = 0;
+            this.tierProgress = 0;
+            this.holdTime = 0;
             this.beamLevel = beamLevel;
             BeamCharge.start(beamLevel);
         }
     },
 
     stopFiring() {
-        // Fire beam if charged enough
-        if (this.isCharging && this.chargeTime >= this.chargeThreshold && this.target) {
+        // Fire beam if at least tier 1 completed
+        if (this.isCharging && this.completedTier > 0 && this.target) {
             BeamCharge.stop(true);  // true = firing beam (BWAAAH)
             this.fireBeam(this.target.x, this.target.y);
         } else if (this.isCharging) {
@@ -156,18 +172,21 @@ const Combat = {
         }
         this.holding = false;
         this.isCharging = false;
-        this.chargeTime = 0;
+        this.completedTier = 0;
+        this.tierProgress = 0;
+        this.holdTime = 0;
         state.charging = false;
         state.chargePercent = 0;
     },
 
     get chargePercent() {
+        // For beam power scaling: completed tiers + partial progress
         if (!this.isCharging) return 0;
-        return Math.min(1, (this.chargeTime - this.chargeThreshold) / (this.maxCharge - this.chargeThreshold));
+        return this.completedTier / this.beamLevel;
     },
 
     get chargeReady() {
-        return this.chargeTime >= this.chargeThreshold;
+        return this.completedTier > 0;
     },
 
     fireBeam(targetX, targetY) {
@@ -178,10 +197,19 @@ const Combat = {
         const dirX = dx / dist;
         const dirY = dy / dist;
 
-        // Scale beam properties by charge
-        const chargePercent = this.chargePercent;
-        const width = 20 + chargePercent * 60;  // 20-80px
-        const damage = 3 + chargePercent * 7;   // 3-10 damage
+        const tier = this.completedTier;
+        
+        // Scale beam properties by tier
+        // Duration: +25% per tier (base 0.15s)
+        const duration = 0.15 * Math.pow(1.25, tier - 1);
+        // Damage: +50% per tier (base 3)
+        const damage = 3 * Math.pow(1.5, tier - 1);
+        // Width: from item (default 25px), doubles at tier 5 (capped)
+        const baseWidth = this.frameEffects.laserWidth || 25;
+        const widthMultiplier = 1 + Math.min(1, (tier - 1) / 4);  // 1 at tier 1, 2 at tier 5
+        const width = baseWidth * widthMultiplier;
+        // Hue: keep red, will use filter for saturation/contrast
+        
         const length = Math.max(window.innerWidth, window.innerHeight) * 1.5;
 
         this.beams.push({
@@ -193,8 +221,8 @@ const Combat = {
             damage,
             length,
             elapsed: 0,
-            duration: 0.15,  // beam visible duration
-            chargePercent,
+            duration,
+            tier,
         });
 
         // Hit all enemies in beam path
@@ -217,13 +245,26 @@ const Combat = {
         }
 
         Eye.blink();
-        sfx.beam?.() || sfx.pow();  // beam sound or fallback
-        ScreenShake.shake(20 + chargePercent * 40);
+        sfx.beam?.() || sfx.pow();
+        
+        // Initial screen shake
+        ScreenShake.shake(20 + tier * 15);
+        
+        // White flash on release
+        HitFlash.trigger(tier * 3);
+        
+        // Schedule periodic shakes during beam (2 per second)
+        const shakeInterval = 500;  // ms
+        const numShakes = Math.floor(duration * 1000 / shakeInterval);
+        for (let i = 1; i <= numShakes; i++) {
+            setTimeout(() => {
+                ScreenShake.shake(10 + tier * 5);
+            }, i * shakeInterval);
+        }
 
         // Achievement
         if (!getAchievementFlag('firedBeam')) {
             setAchievementFlag('firedBeam');
-            // IMMA FIRIN MAH LAZER achievement handled in achievements.js
         }
     },
 
@@ -276,17 +317,43 @@ const Combat = {
         // Charge beam or fire tears
         if (!frozen && this.holding && this.target) {
             if (this.isCharging) {
-                // Accumulate charge
-                this.chargeTime += dt;
                 state.charging = true;
-                state.chargePercent = Math.min(1, this.chargeTime / this.maxCharge);
                 
-                // Update charge sound
-                const ready = this.chargeTime >= this.chargeThreshold;
-                const chargeRatio = ready 
-                    ? (this.chargeTime - this.chargeThreshold) / (this.maxCharge - this.chargeThreshold)
-                    : this.chargeTime / this.chargeThreshold * 0.5;  // first half is pre-threshold
-                BeamCharge.update(Math.min(1, chargeRatio), ready);
+                // R-TYPE charge: fill tier, hold, then next tier unlocks
+                if (this.completedTier >= this.beamLevel) {
+                    // Max tier reached, just hold
+                    this.holdTime += dt;
+                } else if (this.tierProgress < 1) {
+                    // Filling current tier
+                    this.tierProgress += dt / this.tierFillTime;
+                    if (this.tierProgress >= 1) {
+                        this.tierProgress = 1;
+                        this.completedTier++;
+                        this.holdTime = 0;
+                    }
+                } else {
+                    // Tier complete, holding before next unlocks
+                    this.holdTime += dt;
+                    const threshold = this.getHoldThreshold(this.completedTier);
+                    if (this.holdTime >= threshold && this.completedTier < this.beamLevel) {
+                        // Unlock next tier
+                        this.tierProgress = 0;
+                        this.holdTime = 0;
+                    }
+                }
+                
+                state.chargePercent = this.completedTier / this.beamLevel;
+                
+                // Update charge sound with phase info
+                const isHolding = this.tierProgress >= 1 || this.completedTier >= this.beamLevel;
+                const flashRate = this.getFlashRate(this.completedTier);
+                BeamCharge.update({
+                    completedTier: this.completedTier,
+                    tierProgress: this.tierProgress,
+                    isHolding: isHolding,
+                    flashRate: flashRate,
+                    maxTier: this.beamLevel
+                });
             } else {
                 // Normal tear firing
                 const now = Date.now();
@@ -550,10 +617,22 @@ const Combat = {
         for (const b of this.beams) {
             const progress = b.elapsed / b.duration;
             const alpha = 1 - progress * 0.5;  // fade slightly
-            const width = b.width * (1 + progress * 0.5);  // expand slightly
-
-            // Main beam
+            const width = b.width * (1 + progress * 0.3);  // expand slightly
+            const tier = b.tier || 1;
+            
+            // Core ratio increases with tier (inner beam more prominent)
+            const coreRatio = 0.15 + tier * 0.08;  // 0.23, 0.31, 0.39...
+            const midRatio = 0.4 + tier * 0.05;    // 0.45, 0.50, 0.55...
+            
+            // Saturation and contrast scale with tier (0 to 2 at tier 5, capped)
+            const filterAmount = Math.min(2, (tier - 1) / 4 * 2);  // tier 1 = 0, tier 5 = 2
+            const saturation = 1 + filterAmount;  // 1 to 3
+            const contrast = 1 + filterAmount;    // 1 to 3
+            
             this.ctx.save();
+            this.ctx.filter = `saturate(${saturation}) contrast(${contrast})`;
+
+            // Outer beam (red)
             this.ctx.beginPath();
             this.ctx.moveTo(b.startX, b.startY);
             this.ctx.lineTo(b.startX + b.dirX * b.length, b.startY + b.dirY * b.length);
@@ -562,120 +641,94 @@ const Combat = {
             this.ctx.lineCap = 'round';
             this.ctx.stroke();
 
-            // Inner bright core
+            // Middle layer (orange)
             this.ctx.beginPath();
             this.ctx.moveTo(b.startX, b.startY);
             this.ctx.lineTo(b.startX + b.dirX * b.length, b.startY + b.dirY * b.length);
-            this.ctx.strokeStyle = `rgba(255, 200, 100, ${alpha})`;
-            this.ctx.lineWidth = width * 0.4;
+            this.ctx.strokeStyle = `rgba(255, 150, 50, ${alpha})`;
+            this.ctx.lineWidth = width * midRatio;
             this.ctx.stroke();
 
-            // White hot center
+            // White hot center (more prominent at higher tiers)
             this.ctx.beginPath();
             this.ctx.moveTo(b.startX, b.startY);
             this.ctx.lineTo(b.startX + b.dirX * b.length, b.startY + b.dirY * b.length);
-            this.ctx.strokeStyle = `rgba(255, 255, 255, ${alpha * 0.8})`;
-            this.ctx.lineWidth = width * 0.15;
+            this.ctx.strokeStyle = `rgba(255, 255, 255, ${alpha * (0.7 + tier * 0.1)})`;
+            this.ctx.lineWidth = width * coreRatio;
             this.ctx.stroke();
+            
             this.ctx.restore();
         }
 
-        // Charge circle on cursor
+        // Charge circle on cursor (R-TYPE style: two circles)
         if (this.isCharging && this.target) {
-            const beamLevel = this.beamLevel || 1;
-            const chargeRatio = this.chargeTime / this.maxCharge;
-            const ready = this.chargeTime >= this.chargeThreshold;
-            
             const cx = this.target.x;
             const cy = this.target.y;
             const radius = 30;
             
-            // Color: start red (0), rotate 15deg per level
-            const getTierColor = (tier) => `hsl(${tier * 15}, 100%, 50%)`;
+            // Tier colors: black → orange → red → magenta → purple → white
+            const tierColors = ['#333333', '#ff8800', '#ff2200', '#ff00aa', '#aa00ff', '#ffffff'];
+            const getTierColor = (tier) => tierColors[Math.min(tier, tierColors.length - 1)];
             
-            // Calculate current tier based on charge
-            const scaledProgress = chargeRatio * beamLevel;
-            const currentTier = Math.min(Math.floor(scaledProgress), beamLevel - 1);
-            const tierProgress = scaledProgress - currentTier;
+            const completedTier = this.completedTier;
+            const tierProgress = this.tierProgress;
+            const isHolding = tierProgress >= 1 || completedTier >= this.beamLevel;
+            const nextTier = Math.min(completedTier + 1, this.beamLevel);
             
-            // Background ring - segmented for multi-tier
+            // Background circle: completed tier color (full circle)
+            const bgColor = getTierColor(completedTier);
             this.ctx.beginPath();
             this.ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-            this.ctx.strokeStyle = 'rgba(100, 100, 100, 0.5)';
+            this.ctx.strokeStyle = bgColor;
             this.ctx.lineWidth = 4;
             this.ctx.stroke();
             
-            // Draw tier segments
-            const segmentAngle = (Math.PI * 2) / beamLevel;
-            const startAngle = -Math.PI / 2;
+            // Foreground circle: next tier color (filling arc)
+            if (completedTier < this.beamLevel && tierProgress > 0 && tierProgress < 1) {
+                const fgColor = getTierColor(nextTier);
+                const startAngle = -Math.PI / 2;
+                const endAngle = startAngle + (Math.PI * 2 * tierProgress);
+                
+                this.ctx.beginPath();
+                this.ctx.arc(cx, cy, radius, startAngle, endAngle);
+                this.ctx.strokeStyle = fgColor;
+                this.ctx.lineWidth = 4;
+                this.ctx.stroke();
+            }
             
-            for (let tier = 0; tier < beamLevel; tier++) {
-                const tierStart = startAngle + tier * segmentAngle;
-                const tierEnd = tierStart + segmentAngle;
-                const tierColor = getTierColor(tier);
+            // Flash when tier is complete and holding
+            if (completedTier > 0) {
+                const flashFreq = this.getFlashRate(completedTier);
+                const flash = Math.sin(Date.now() / 1000 * Math.PI * 2 * flashFreq) > 0;
                 
-                if (tier < currentTier) {
-                    // Completed tier - full arc
-                    this.ctx.beginPath();
-                    this.ctx.arc(cx, cy, radius, tierStart, tierEnd);
-                    this.ctx.strokeStyle = tierColor;
-                    this.ctx.lineWidth = 4;
-                    this.ctx.stroke();
-                } else if (tier === currentTier) {
-                    // Current tier - partial arc
-                    const fillEnd = tierStart + segmentAngle * tierProgress;
-                    this.ctx.beginPath();
-                    this.ctx.arc(cx, cy, radius, tierStart, fillEnd);
-                    this.ctx.strokeStyle = tierColor;
-                    this.ctx.lineWidth = 4;
-                    this.ctx.stroke();
-                }
+                // Pulse intensity scales with tier
+                const pulseFreq = 1 + completedTier * 0.3;
+                const pulse = (Math.sin(Date.now() / 1000 * Math.PI * 2 * pulseFreq) + 1) / 2;
+                const pulseIntensity = 0.1 + pulse * 0.2 * completedTier;
                 
-                // Tier notch/separator (except at start)
-                if (tier > 0) {
+                // Flash ring
+                if (isHolding && flash) {
                     this.ctx.beginPath();
-                    const notchX = cx + Math.cos(tierStart) * (radius - 6);
-                    const notchY = cy + Math.sin(tierStart) * (radius - 6);
-                    const notchX2 = cx + Math.cos(tierStart) * (radius + 6);
-                    const notchY2 = cy + Math.sin(tierStart) * (radius + 6);
-                    this.ctx.moveTo(notchX, notchY);
-                    this.ctx.lineTo(notchX2, notchY2);
-                    this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+                    this.ctx.arc(cx, cy, radius + 3, 0, Math.PI * 2);
+                    this.ctx.strokeStyle = '#ffffff';
                     this.ctx.lineWidth = 2;
                     this.ctx.stroke();
                 }
-            }
-            
-            // Flash when ready - alternates color/white
-            if (ready) {
-                const flashFreq = 3 + beamLevel;  // Faster flash for higher levels
-                const flash = Math.sin(Date.now() / 1000 * Math.PI * 2 * flashFreq) > 0;
-                const readyColor = getTierColor(beamLevel - 1);
-                
-                // Outer ring flashes color/white
-                this.ctx.beginPath();
-                this.ctx.arc(cx, cy, radius + 4 + beamLevel, 0, Math.PI * 2);
-                this.ctx.strokeStyle = flash ? '#ffffff' : readyColor;
-                this.ctx.lineWidth = 2;
-                this.ctx.stroke();
                 
                 // Pulse fill
-                const pulseFreq = 1.5;
-                const pulse = (Math.sin(Date.now() / 1000 * Math.PI * 2 * pulseFreq) + 1) / 2;
-                const pulseIntensity = pulse * 0.3 * (1 + beamLevel * 0.1);
                 this.ctx.beginPath();
-                this.ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+                this.ctx.arc(cx, cy, radius - 2, 0, Math.PI * 2);
                 this.ctx.fillStyle = `rgba(255, 255, 255, ${pulseIntensity})`;
                 this.ctx.fill();
             }
             
-            // Level indicator in center
-            if (beamLevel > 1) {
-                this.ctx.font = 'bold 14px monospace';
+            // Level indicator in center (shows completed tier)
+            if (completedTier > 0) {
+                this.ctx.font = 'bold 16px monospace';
                 this.ctx.textAlign = 'center';
                 this.ctx.textBaseline = 'middle';
-                this.ctx.fillStyle = getTierColor(currentTier);
-                this.ctx.fillText(beamLevel.toString(), cx, cy);
+                this.ctx.fillStyle = '#ffffff';
+                this.ctx.fillText(completedTier.toString(), cx, cy);
             }
         }
 

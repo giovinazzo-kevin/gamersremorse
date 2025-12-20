@@ -2,110 +2,212 @@
 // Routes through Audio manager
 
 // === BEAM CHARGE SOUND SYSTEM ===
+// R-TYPE style layered charge sound
+// Tier 1: Synth sweep (octave rise) → plateau with vibrato
+// Tier 2+: Noise layer with swish joins
+// Tier 3+: Brief synth on top of swish
 const BeamCharge = (() => {
     let ctx = null;
+    let active = false;
+    let maxTier = 1;
+    let lastCompletedTier = -1;
+    
+    // Synth layer
     let osc1 = null;
     let osc2 = null;
-    let gainNode = null;
-    let lfoGain = null;
+    let synthGain = null;
     let lfo = null;
-    let active = false;
-    let level = 1;
+    let lfoGain = null;
     
-    // Frequency bands per tier
-    const tierFreqs = [
-        { base: 220, max: 440 },   // Tier 1: A3 -> A4
-        { base: 440, max: 660 },   // Tier 2: A4 -> E5
-        { base: 660, max: 880 },   // Tier 3: E5 -> A5
-        { base: 880, max: 1100 },  // Tier 4: A5 -> C#6
-        { base: 1100, max: 1320 }, // Tier 5: C#6 -> E6
-    ];
+    // Noise layer (tier 2+)
+    let noiseNode = null;
+    let noiseFilter = null;
+    let noiseGain = null;
+    let noiseLfo = null;  // For swish AM
+    let noiseLfoGain = null;
     
-    const detuneAmount = 15;  // cents of detune for wobble
+    let masterGain = null;
+    
+    // Base frequency for synth (will rise one octave per tier)
+    const baseFreq = 110;  // A2
+    const maxDetune = 30;
+    
+    function createNoiseBuffer(ctx) {
+        const bufferSize = ctx.sampleRate * 2;
+        const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+            data[i] = Math.random() * 2 - 1;
+        }
+        return buffer;
+    }
     
     function start(beamLevel = 1) {
         if (active) return;
         
-        level = Math.min(beamLevel, tierFreqs.length);
+        maxTier = Math.min(beamLevel, 5);
+        lastCompletedTier = 0;
         
         ctx = Audio.getContext('sfx').ctx;
         if (!ctx) return;
         
-        // Two oscillators slightly detuned for beating/wobble
+        masterGain = ctx.createGain();
+        masterGain.gain.value = 0;
+        masterGain.connect(ctx.destination);
+        
+        // === SYNTH LAYER ===
         osc1 = ctx.createOscillator();
         osc2 = ctx.createOscillator();
         osc1.type = 'sawtooth';
         osc2.type = 'sawtooth';
-        osc1.frequency.value = tierFreqs[0].base;
-        osc2.frequency.value = tierFreqs[0].base;
-        osc2.detune.value = detuneAmount;
+        osc1.frequency.value = baseFreq;
+        osc2.frequency.value = baseFreq;
+        osc1.detune.value = -maxDetune;
+        osc2.detune.value = maxDetune;
         
-        // LFO for vibrato - starts slow, speeds up
+        // Vibrato LFO for plateau
         lfo = ctx.createOscillator();
         lfoGain = ctx.createGain();
         lfo.type = 'sine';
-        lfo.frequency.value = 4;  // 4hz vibrato
-        lfoGain.gain.value = 10;  // 10 cents of vibrato
+        lfo.frequency.value = 4;
+        lfoGain.gain.value = 0;  // Off until plateau
         lfo.connect(lfoGain);
         lfoGain.connect(osc1.detune);
         lfoGain.connect(osc2.detune);
         
-        // Main gain
-        gainNode = ctx.createGain();
-        gainNode.gain.value = 0;
+        synthGain = ctx.createGain();
+        synthGain.gain.value = 0.5;
+        osc1.connect(synthGain);
+        osc2.connect(synthGain);
+        synthGain.connect(masterGain);
         
-        // Connect
-        osc1.connect(gainNode);
-        osc2.connect(gainNode);
-        gainNode.connect(ctx.destination);
-        
-        // Start
         osc1.start();
         osc2.start();
         lfo.start();
         
-        // Fade in
-        gainNode.gain.setValueAtTime(0, ctx.currentTime);
-        gainNode.gain.linearRampToValueAtTime(0.08, ctx.currentTime + 0.1);
+        // === NOISE LAYER (created but silent until tier 2) ===
+        noiseNode = ctx.createBufferSource();
+        noiseNode.buffer = createNoiseBuffer(ctx);
+        noiseNode.loop = true;
+        
+        noiseFilter = ctx.createBiquadFilter();
+        noiseFilter.type = 'bandpass';
+        noiseFilter.frequency.value = 200;
+        noiseFilter.Q.value = 1;
+        
+        // Swish LFO (amplitude modulation)
+        noiseLfo = ctx.createOscillator();
+        noiseLfoGain = ctx.createGain();
+        noiseLfo.type = 'sine';
+        noiseLfo.frequency.value = 1.5;  // Swish rate
+        noiseLfoGain.gain.value = 0;
+        
+        noiseGain = ctx.createGain();
+        noiseGain.gain.value = 0;  // Silent until tier 2
+        
+        noiseNode.connect(noiseFilter);
+        noiseFilter.connect(noiseGain);
+        noiseLfo.connect(noiseLfoGain);
+        noiseLfoGain.connect(noiseGain.gain);  // AM on noise
+        noiseGain.connect(masterGain);
+        
+        noiseNode.start();
+        noiseLfo.start();
         
         active = true;
     }
     
-    function update(chargePercent, ready) {
+    function update({ completedTier, tierProgress, isHolding, flashRate, maxTier: max }) {
         if (!active || !ctx) return;
         
         const now = ctx.currentTime;
+        maxTier = max;
         
-        // Scale charge across all tiers
-        // chargePercent 0-1 maps across level tiers
-        const scaledProgress = chargePercent * level;
-        const currentTier = Math.min(Math.floor(scaledProgress), level - 1);
-        const tierProgress = scaledProgress - currentTier;  // 0-1 within current tier
+        // Which tier are we charging toward?
+        const chargingToward = completedTier + 1;
         
-        // Get frequency range for current tier
-        const tier = tierFreqs[currentTier] || tierFreqs[tierFreqs.length - 1];
-        const freq = tier.base + (tier.max - tier.base) * Math.min(1, tierProgress);
+        if (isHolding && completedTier > 0) {
+            // === PLATEAU ===
+            // Don't set frequency - we're already there from the sweep
+            // Just maintain vibrato and keep detune tight
+            
+            // Detune converges but not to zero - keep some movement
+            osc1.detune.setTargetAtTime(-5, now, 0.15);
+            osc2.detune.setTargetAtTime(5, now, 0.15);
+            
+            // Vibrato on (gradual)
+            lfo.frequency.setTargetAtTime(flashRate, now, 0.1);
+            lfoGain.gain.setTargetAtTime(15, now, 0.15);
+            
+            // Master volume steady
+            masterGain.gain.setTargetAtTime(0.12, now, 0.1);
+            
+            // Tier 2+: noise swish active
+            if (completedTier >= 2) {
+                synthGain.gain.setTargetAtTime(0, now, 0.1);  // Synth stays off
+                noiseGain.gain.setTargetAtTime(0.4, now, 0.1);  // Noise louder
+                noiseLfoGain.gain.setTargetAtTime(0.25, now, 0.1);  // AM depth
+                noiseFilter.frequency.setTargetAtTime(1000, now, 0.1);
+            }
+            
+        } else {
+            // === SWEEP ===
+            const fromFreq = baseFreq * Math.pow(2, completedTier);
+            const toFreq = baseFreq * Math.pow(2, chargingToward);
+            const freq = fromFreq + (toFreq - fromFreq) * tierProgress;
+            
+            // Tier 1: slow synth sweep
+            // Tier 2: fast noise sweep (synth fades)
+            // Tier 3+: brief synth on top of swish
+            
+            if (chargingToward === 1) {
+                // Tier 1: Pure synth sweep
+                osc1.frequency.setTargetAtTime(freq, now, 0.03);
+                osc2.frequency.setTargetAtTime(freq, now, 0.03);
+                
+                const detune = maxDetune * (1 - tierProgress);
+                osc1.detune.setTargetAtTime(-detune, now, 0.05);
+                osc2.detune.setTargetAtTime(detune, now, 0.05);
+                
+                lfoGain.gain.setTargetAtTime(0, now, 0.1);  // No vibrato during sweep
+                synthGain.gain.setTargetAtTime(0.5, now, 0.05);
+                masterGain.gain.setTargetAtTime(tierProgress * 0.12, now, 0.03);
+                
+            } else if (chargingToward === 2) {
+                // Tier 2: Noise sweep, synth fades OUT
+                synthGain.gain.setTargetAtTime(0, now, 0.2);  // Synth fades out
+                
+                // Noise filter sweep - louder
+                const filterFreq = 200 + tierProgress * 800;
+                noiseFilter.frequency.setTargetAtTime(filterFreq, now, 0.03);
+                noiseGain.gain.setTargetAtTime(0.1 + tierProgress * 0.4, now, 0.03);  // Much louder
+                noiseLfoGain.gain.setTargetAtTime(0, now, 0.05);  // No swish during sweep
+                
+                masterGain.gain.setTargetAtTime(0.14, now, 0.05);
+                
+            } else {
+                // Tier 3+: Brief synth sweep on top of swish
+                osc1.frequency.setTargetAtTime(freq, now, 0.02);
+                osc2.frequency.setTargetAtTime(freq, now, 0.02);
+                
+                const detune = maxDetune * (1 - tierProgress);
+                osc1.detune.setTargetAtTime(-detune, now, 0.03);
+                osc2.detune.setTargetAtTime(detune, now, 0.03);
+                
+                synthGain.gain.setTargetAtTime(0.3, now, 0.03);  // Synth back
+                
+                // Swish continues underneath
+                noiseGain.gain.setTargetAtTime(0.15, now, 0.05);
+                noiseLfoGain.gain.setTargetAtTime(0.1, now, 0.05);
+                
+                masterGain.gain.setTargetAtTime(0.14, now, 0.05);
+            }
+        }
         
-        osc1.frequency.setTargetAtTime(freq, now, 0.05);
-        osc2.frequency.setTargetAtTime(freq, now, 0.05);
-        
-        // Detune: wobbles during rise, locks at tier boundaries
-        const atTierBoundary = tierProgress > 0.85 || tierProgress < 0.15;
-        const detune = atTierBoundary ? 3 : detuneAmount * (1 - tierProgress * 0.5);
-        osc2.detune.setTargetAtTime(detune, now, 0.05);
-        
-        // LFO rate increases within each tier, resets at boundaries
-        const baseLfoRate = 4 + currentTier * 4;  // Higher tiers = faster base
-        const lfoRate = baseLfoRate + tierProgress * 8;
-        lfo.frequency.setTargetAtTime(lfoRate, now, 0.05);
-        
-        // Vibrato depth - intense during rise, calm at lock
-        const vibDepth = atTierBoundary ? 5 : 15 + tierProgress * 25;
-        lfoGain.gain.setTargetAtTime(vibDepth, now, 0.05);
-        
-        // Volume increases with tiers
-        const vol = 0.06 + currentTier * 0.02 + tierProgress * 0.04;
-        gainNode.gain.setTargetAtTime(Math.min(0.18, vol), now, 0.05);
+        // Tier completion - no audio snap, visual handles it
+        if (completedTier > lastCompletedTier) {
+            lastCompletedTier = completedTier;
+        }
     }
     
     function stop(fireBeam = false) {
@@ -114,35 +216,42 @@ const BeamCharge = (() => {
         const now = ctx.currentTime;
         
         if (fireBeam) {
-            // BWAAAH - pitch drops, volume spikes then cuts
-            // Drop is more dramatic with higher levels
-            const dropFreq = 55 - level * 10;  // Lower drop for higher levels
+            // BWAAAH
+            const dropFreq = 55;
             osc1.frequency.setValueAtTime(osc1.frequency.value, now);
-            osc1.frequency.exponentialRampToValueAtTime(Math.max(30, dropFreq), now + 0.15);
+            osc1.frequency.exponentialRampToValueAtTime(dropFreq, now + 0.12);
             osc2.frequency.setValueAtTime(osc2.frequency.value, now);
-            osc2.frequency.exponentialRampToValueAtTime(Math.max(30, dropFreq), now + 0.15);
+            osc2.frequency.exponentialRampToValueAtTime(dropFreq, now + 0.12);
             
-            // Volume spike scales with level
-            const spikeVol = 0.15 + level * 0.05;
-            gainNode.gain.setValueAtTime(Math.min(0.3, spikeVol), now);
-            gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+            // Noise drops too
+            noiseFilter.frequency.setValueAtTime(noiseFilter.frequency.value, now);
+            noiseFilter.frequency.exponentialRampToValueAtTime(100, now + 0.15);
             
-            // Stop after the BWAAAH
-            setTimeout(() => cleanup(), 250);
+            lfoGain.gain.setValueAtTime(0, now);
+            noiseLfoGain.gain.setValueAtTime(0, now);
+            
+            masterGain.gain.setValueAtTime(0.25, now);
+            masterGain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+            
+            setTimeout(() => cleanup(), 280);
         } else {
-            // Cancelled - quick fade out
-            gainNode.gain.setTargetAtTime(0, now, 0.05);
-            setTimeout(() => cleanup(), 100);
+            // Cancelled
+            osc1.frequency.exponentialRampToValueAtTime(60, now + 0.1);
+            osc2.frequency.exponentialRampToValueAtTime(60, now + 0.1);
+            masterGain.gain.setTargetAtTime(0, now, 0.06);
+            setTimeout(() => cleanup(), 180);
         }
     }
     
     function cleanup() {
-        if (osc1) { try { osc1.stop(); } catch(e) {} osc1 = null; }
-        if (osc2) { try { osc2.stop(); } catch(e) {} osc2 = null; }
-        if (lfo) { try { lfo.stop(); } catch(e) {} lfo = null; }
-        gainNode = null;
-        lfoGain = null;
+        [osc1, osc2, lfo, noiseNode, noiseLfo].forEach(node => {
+            if (node) try { node.stop(); } catch(e) {}
+        });
+        osc1 = osc2 = lfo = noiseNode = noiseLfo = null;
+        synthGain = noiseGain = noiseFilter = masterGain = null;
+        lfoGain = noiseLfoGain = null;
         active = false;
+        lastCompletedTier = 0;
     }
     
     return { start, update, stop, get active() { return active; } };

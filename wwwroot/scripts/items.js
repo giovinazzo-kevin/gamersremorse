@@ -166,7 +166,7 @@ const Items = {
             rarity: 'legendary',
             stackable: true,
             condition: { negativeRatio: { gt: 0.7 } },
-            effects: { demonic: true, tint: '#ff0000', laserCharge: true },
+            effects: { demonic: true, tint: '#ff0000', laserCharge: true, laserWidth: 80 },
             sound: 'zelda_secret'
         },
         
@@ -431,7 +431,8 @@ const Items = {
             stinky: false,
             infected: false,
             divine: false,
-            laserCharge: 0  // Now a number - beam level
+            laserCharge: 0,  // Now a number - beam level
+            laserWidth: 25,  // Base beam width in px (max of all items)
         };
         
         // Count items in inventory for stacking
@@ -449,6 +450,9 @@ const Items = {
                 if (key === 'laserCharge') {
                     // laserCharge stacks additively based on item count
                     merged.laserCharge += value ? count : 0;
+                } else if (key === 'laserWidth') {
+                    // laserWidth takes max
+                    merged.laserWidth = Math.max(merged.laserWidth, value);
                 } else if (typeof value === 'boolean') {
                     merged[key] = merged[key] || value;  // OR booleans
                 } else if (typeof value === 'number') {
