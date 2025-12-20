@@ -30,7 +30,14 @@ const Audio = (() => {
     }
     
     function getContext(name) {
-        return contexts.get(name) || createContext(name);
+        const context = contexts.get(name) || createContext(name);
+        
+        // Ensure context is running (browsers suspend until user interaction)
+        if (context.ctx.state === 'suspended') {
+            context.ctx.resume();
+        }
+        
+        return context;
     }
     
     // === LAYERS ===

@@ -11,6 +11,7 @@ const BeamCharge = (() => {
     let active = false;
     let maxTier = 1;
     let lastCompletedTier = -1;
+    let generation = 0;  // Tracks which "instance" is active
     
     // Synth layer
     let osc1 = null;
@@ -43,8 +44,12 @@ const BeamCharge = (() => {
     }
     
     function start(beamLevel = 1) {
-        if (active) return;
+        // If already active, force cleanup of old sound first
+        if (active) {
+            cleanupImmediate();
+        }
         
+        generation++;  // New instance
         maxTier = Math.min(beamLevel, 5);
         lastCompletedTier = 0;
         
@@ -213,6 +218,8 @@ const BeamCharge = (() => {
     function stop(fireBeam = false) {
         if (!active || !ctx) return;
         
+        const myGeneration = generation;  // Capture for closure
+        active = false;  // Immediately allow restart
         const now = ctx.currentTime;
         
         if (fireBeam) {
@@ -233,17 +240,23 @@ const BeamCharge = (() => {
             masterGain.gain.setValueAtTime(0.25, now);
             masterGain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
             
-            setTimeout(() => cleanup(), 280);
+            setTimeout(() => cleanupIfSameGeneration(myGeneration), 280);
         } else {
             // Cancelled
             osc1.frequency.exponentialRampToValueAtTime(60, now + 0.1);
             osc2.frequency.exponentialRampToValueAtTime(60, now + 0.1);
             masterGain.gain.setTargetAtTime(0, now, 0.06);
-            setTimeout(() => cleanup(), 180);
+            setTimeout(() => cleanupIfSameGeneration(myGeneration), 180);
         }
     }
     
-    function cleanup() {
+    function cleanupIfSameGeneration(gen) {
+        // Only cleanup if no new sound has started
+        if (generation !== gen) return;
+        cleanupImmediate();
+    }
+    
+    function cleanupImmediate() {
         [osc1, osc2, lfo, noiseNode, noiseLfo].forEach(node => {
             if (node) try { node.stop(); } catch(e) {}
         });
