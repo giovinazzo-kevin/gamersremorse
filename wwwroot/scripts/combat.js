@@ -7,6 +7,271 @@
  * - Eye.js calls update(dt) and render() in the shame loop
  */
 
+// Ray-AABB intersection, returns { dist, x, y, edge } or null
+function rayBoxIntersect(ox, oy, dx, dy, box) {
+    // box: { left, right, top, bottom }
+    let tmin = 0;
+    let tmax = Infinity;
+    let hitEdge = null;
+    let entryEdge = null;
+    
+    // X axis
+    if (dx !== 0) {
+        const t1 = (box.left - ox) / dx;
+        const t2 = (box.right - ox) / dx;
+        const tNear = Math.min(t1, t2);
+        const tFar = Math.max(t1, t2);
+        
+        if (tNear > tmin) {
+            tmin = tNear;
+            entryEdge = dx > 0 ? 'left' : 'right';
+        }
+        tmax = Math.min(tmax, tFar);
+    } else if (ox < box.left || ox > box.right) {
+        return null; // Parallel and outside
+    }
+    
+    // Y axis
+    if (dy !== 0) {
+        const t1 = (box.top - oy) / dy;
+        const t2 = (box.bottom - oy) / dy;
+        const tNear = Math.min(t1, t2);
+        const tFar = Math.max(t1, t2);
+        
+        if (tNear > tmin) {
+            tmin = tNear;
+            entryEdge = dy > 0 ? 'top' : 'bottom';
+        }
+        tmax = Math.min(tmax, tFar);
+    } else if (oy < box.top || oy > box.bottom) {
+        return null; // Parallel and outside
+    }
+    
+    // No intersection or behind ray
+    if (tmax < tmin || tmax < 0) return null;
+    
+    // If tmin < 0, ray starts inside box - use tmax (exit point)
+    const t = tmin > 0 ? tmin : tmax;
+    if (t < 0.001) return null; // Too close, skip
+    
+    return {
+        dist: t,
+        x: ox + dx * t,
+        y: oy + dy * t,
+        edge: entryEdge || 'inside'
+    };
+}
+
+// Ray-screen edge intersection
+function rayScreenIntersect(ox, oy, dx, dy) {
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    
+    let nearestDist = Infinity;
+    let nearestEdge = null;
+    let hitX, hitY;
+    
+    // Left edge (x = 0)
+    if (dx < 0) {
+        const t = -ox / dx;
+        if (t > 0.001 && t < nearestDist) {
+            const y = oy + dy * t;
+            if (y >= 0 && y <= h) {
+                nearestDist = t;
+                nearestEdge = 'left';
+                hitX = 0;
+                hitY = y;
+            }
+        }
+    }
+    
+    // Right edge (x = w)
+    if (dx > 0) {
+        const t = (w - ox) / dx;
+        if (t > 0.001 && t < nearestDist) {
+            const y = oy + dy * t;
+            if (y >= 0 && y <= h) {
+                nearestDist = t;
+                nearestEdge = 'right';
+                hitX = w;
+                hitY = y;
+            }
+        }
+    }
+    
+    // Top edge (y = 0)
+    if (dy < 0) {
+        const t = -oy / dy;
+        if (t > 0.001 && t < nearestDist) {
+            const x = ox + dx * t;
+            if (x >= 0 && x <= w) {
+                nearestDist = t;
+                nearestEdge = 'top';
+                hitX = x;
+                hitY = 0;
+            }
+        }
+    }
+    
+    // Bottom edge (y = h)
+    if (dy > 0) {
+        const t = (h - oy) / dy;
+        if (t > 0.001 && t < nearestDist) {
+            const x = ox + dx * t;
+            if (x >= 0 && x <= w) {
+                nearestDist = t;
+                nearestEdge = 'bottom';
+                hitX = x;
+                hitY = h;
+            }
+        }
+    }
+    
+    if (!nearestEdge) return null;
+    
+    return {
+        dist: nearestDist,
+        x: hitX,
+        y: hitY,
+        edge: nearestEdge
+    };
+}
+
+// Get point along a path polyline at given distance from start
+function getPointAlongPath(path, dist) {
+    if (!path || path.length < 2) return { x: 0, y: 0, dirX: 1, dirY: 0 };
+    
+    let accumulated = 0;
+    for (let i = 0; i < path.length - 1; i++) {
+        const p0 = path[i];
+        const p1 = path[i + 1];
+        const dx = p1.x - p0.x;
+        const dy = p1.y - p0.y;
+        const segLen = Math.sqrt(dx * dx + dy * dy);
+        
+        if (segLen < 0.001) continue;
+        
+        if (accumulated + segLen >= dist) {
+            // Point is on this segment
+            const t = (dist - accumulated) / segLen;
+            return {
+                x: p0.x + dx * t,
+                y: p0.y + dy * t,
+                dirX: dx / segLen,
+                dirY: dy / segLen
+            };
+        }
+        accumulated += segLen;
+    }
+    
+    // Past end of path - return last point with last direction
+    const last = path[path.length - 1];
+    const prev = path[path.length - 2];
+    const dx = last.x - prev.x;
+    const dy = last.y - prev.y;
+    const len = Math.sqrt(dx * dx + dy * dy);
+    return {
+        x: last.x,
+        y: last.y,
+        dirX: len > 0 ? dx / len : 1,
+        dirY: len > 0 ? dy / len : 0
+    };
+}
+
+// Get total length of a path
+function getPathLength(path) {
+    if (!path || path.length < 2) return 0;
+    let total = 0;
+    for (let i = 0; i < path.length - 1; i++) {
+        const dx = path[i + 1].x - path[i].x;
+        const dy = path[i + 1].y - path[i].y;
+        total += Math.sqrt(dx * dx + dy * dy);
+    }
+    return total;
+}
+
+// Calculate beam path with bounces
+// Returns: { path, hitEnemies, bounceHits }
+// - hitEnemies: Set of all enemies the beam passes through
+// - bounceHits: Map of enemy -> remainingLength at moment of bounce
+function calculateBeamPath(startX, startY, dirX, dirY, totalLength, bounces, enemies, beamWidth) {
+    const path = [{ x: startX, y: startY }];
+    let remaining = totalLength;
+    let currentX = startX;
+    let currentY = startY;
+    let currentDirX = dirX;
+    let currentDirY = dirY;
+    let bouncesLeft = bounces;
+    const hitEnemies = new Set(); // Track enemies hit this frame (for pierce damage)
+    const bounceHits = new Map(); // Track enemies hit BY bounce -> remaining length at impact
+    
+    while (remaining > 0 && path.length < 20) { // cap iterations
+        let nearestDist = remaining;
+        let nearestType = null;
+        let nearestEnemy = null;
+        let hitX = currentX + currentDirX * remaining;
+        let hitY = currentY + currentDirY * remaining;
+        
+        // Check enemies (exact hitbox, no expansion)
+        for (const e of enemies) {
+            const hit = rayBoxIntersect(currentX, currentY, currentDirX, currentDirY, e.hitbox);
+            if (hit && hit.dist < nearestDist && hit.dist > 0.001) {
+                nearestDist = hit.dist;
+                nearestType = hit.edge;
+                nearestEnemy = e;
+                hitX = hit.x;
+                hitY = hit.y;
+            }
+        }
+        
+        // Check screen edges
+        const edgeHit = rayScreenIntersect(currentX, currentY, currentDirX, currentDirY);
+        if (edgeHit && edgeHit.dist < nearestDist) {
+            nearestDist = edgeHit.dist;
+            nearestType = edgeHit.edge;
+            nearestEnemy = null;
+            hitX = edgeHit.x;
+            hitY = edgeHit.y;
+        }
+        
+        // Record enemy hit
+        if (nearestEnemy) {
+            if (bouncesLeft > 0 && nearestType) {
+                // This is a bounce hit - record remaining length at impact
+                bounceHits.set(nearestEnemy, remaining);
+            } else {
+                // This is a pierce hit
+                hitEnemies.add(nearestEnemy);
+            }
+        }
+        
+        if (nearestType && bouncesLeft > 0) {
+            // Add bounce point
+            path.push({ x: hitX, y: hitY, enemy: nearestEnemy });
+            remaining -= nearestDist;
+            currentX = hitX;
+            currentY = hitY;
+            bouncesLeft--;
+            
+            // Reflect direction based on edge hit
+            if (nearestType === 'left' || nearestType === 'right') {
+                currentDirX = -currentDirX;
+            } else if (nearestType === 'top' || nearestType === 'bottom') {
+                currentDirY = -currentDirY;
+            }
+        } else {
+            // No bounce or out of bounces - extend to end
+            path.push({
+                x: currentX + currentDirX * remaining,
+                y: currentY + currentDirY * remaining
+            });
+            remaining = 0;
+        }
+    }
+    
+    return { path, hitEnemies, bounceHits };
+}
+
 const Combat = {
     canvas: null,
     ctx: null,
@@ -230,6 +495,9 @@ const Combat = {
         // Hue: keep red, will use filter for saturation/contrast
         
         const length = Math.max(window.innerWidth, window.innerHeight) * 1.5;
+        
+        // Bounces from item effects
+        const bounces = this.frameEffects.bounces || 0;
 
         this.beams.push({
             startX: start.x,
@@ -242,6 +510,8 @@ const Combat = {
             elapsed: 0,
             duration,
             tier,
+            bounces,
+            path: null,  // Calculated each frame
             tickAccum: new Map(),  // enemy -> time since last damage tick
         });
 
@@ -384,48 +654,126 @@ const Combat = {
         for (const b of this.beams) {
             b.elapsed += dt;
             
-            // Damage tick: high frequency, low damage per tick
+            // Update beam origin to current iris position
+            const currentStart = this.getPupilPosition();
+            b.startX = currentStart.x;
+            b.startY = currentStart.y;
+            
+            // Calculate beam path with bounces
+            const { path, hitEnemies, bounceHits } = calculateBeamPath(
+                b.startX, b.startY, b.dirX, b.dirY,
+                b.length, b.bounces, this.enemies, b.width
+            );
+            b.path = path;
+            
+            // Time-based multiplier for burst damage
+            const timeRemaining = 1 - (b.elapsed / b.duration);
+            
+            // Process BOUNCE hits first (burst damage on reflection)
+            for (const [e, remainingLength] of bounceHits) {
+                // Only burst once per enemy per beam
+                if (!b.bouncedEnemies) b.bouncedEnemies = new Set();
+                if (b.bouncedEnemies.has(e)) continue;
+                b.bouncedEnemies.add(e);
+                
+                // Burst damage = (length remaining %) * (time remaining %) * DPS
+                const lengthRemaining = remainingLength / b.length;
+                const burstDamage = lengthRemaining * timeRemaining * b.damage;
+                
+                e.health -= burstDamage;
+                
+                // Track damage for power system
+                Atmosphere.addDamage(burstDamage);
+                
+                // Damage number (bigger for burst)
+                if (this.config.damageNumbers !== false) {
+                    const style = getComputedStyle(document.documentElement);
+                    const color = style.getPropertyValue('--color-negative').trim() || '#c80064';
+                    spawnDamageNumber(e.x, e.y - e.height / 2, Math.round(burstDamage * 10) / 10, color);
+                }
+                
+                // Big feedback for bounce hit
+                HitFlash.trigger(burstDamage);
+                ScreenShake.shake(burstDamage * 5);
+                sfx.pow();
+                
+                // Strong knockback in beam direction at point of impact
+                for (let i = 0; i < path.length - 1; i++) {
+                    if (path[i + 1].enemy === e) {
+                        const segDx = path[i + 1].x - path[i].x;
+                        const segDy = path[i + 1].y - path[i].y;
+                        const segLen = Math.sqrt(segDx * segDx + segDy * segDy);
+                        if (segLen > 0) {
+                            e.knockbackVX = (segDx / segLen) * 200;
+                            e.knockbackVY = (segDy / segLen) * 200;
+                        }
+                        break;
+                    }
+                }
+                
+                if (e.dead) {
+                    Atmosphere.spikeCarnage(0.4);
+                    ScreenShake.shake(burstDamage * 15);
+                    this.hitstop(6);
+                }
+            }
+            
+            // Damage tick for PIERCE hits (continuous damage)
             const tickRate = 20;  // hits per second
             const tickInterval = 1 / tickRate;
             const damagePerTick = b.damage / tickRate;
             
-            for (const e of this.enemies) {
-                if (this.beamHitsEnemy({ x: b.startX, y: b.startY }, b.dirX, b.dirY, b.length, b.width, e)) {
-                    const accum = (b.tickAccum.get(e) || 0) + dt;
+            // Process damage for all enemies the beam path intersects
+            for (const e of hitEnemies) {
+                const accum = (b.tickAccum.get(e) || 0) + dt;
+                
+                if (accum >= tickInterval) {
+                    const ticks = Math.floor(accum / tickInterval);
+                    e.health -= damagePerTick * ticks;
+                    b.tickAccum.set(e, accum - ticks * tickInterval);
                     
-                    if (accum >= tickInterval) {
-                        const ticks = Math.floor(accum / tickInterval);
-                        e.health -= damagePerTick * ticks;
-                        b.tickAccum.set(e, accum - ticks * tickInterval);
-                        
-                        // Track damage for power system
-                        Atmosphere.addDamage(damagePerTick * ticks);
-                        
-                        // Damage number
-                        if (this.config.damageNumbers !== false) {
-                            const style = getComputedStyle(document.documentElement);
-                            const color = style.getPropertyValue('--color-negative').trim() || '#c80064';
-                            spawnDamageNumber(e.x, e.y - e.height / 2, Math.round(damagePerTick * ticks * 10) / 10, color);
+                    // Track damage for power system
+                    Atmosphere.addDamage(damagePerTick * ticks);
+                    
+                    // Damage number
+                    if (this.config.damageNumbers !== false) {
+                        const style = getComputedStyle(document.documentElement);
+                        const color = style.getPropertyValue('--color-negative').trim() || '#c80064';
+                        spawnDamageNumber(e.x, e.y - e.height / 2, Math.round(damagePerTick * ticks * 10) / 10, color);
+                    }
+                    
+                    // Light feedback per tick
+                    HitFlash.trigger(damagePerTick * 0.5);
+                    sfx.pow();
+                    
+                    // Knockback in direction of beam segment that hit them
+                    // Find which segment hit this enemy
+                    for (let i = 0; i < path.length - 1; i++) {
+                        if (path[i + 1].enemy === e) {
+                            const segDx = path[i + 1].x - path[i].x;
+                            const segDy = path[i + 1].y - path[i].y;
+                            const segLen = Math.sqrt(segDx * segDx + segDy * segDy);
+                            if (segLen > 0) {
+                                e.knockbackVX = (segDx / segLen) * 80;
+                                e.knockbackVY = (segDy / segLen) * 80;
+                            }
+                            break;
                         }
-                        
-                        // Light feedback per tick
-                        HitFlash.trigger(damagePerTick * 0.5);
-                        sfx.pow();
-                        
-                        // Continuous knockback push
-                        e.knockbackVX = b.dirX * 80;
-                        e.knockbackVY = b.dirY * 80;
-                        
-                        if (e.dead) {
-                            Atmosphere.spikeCarnage(0.25);
-                            ScreenShake.shake(b.damage * 10);
-                            this.hitstop(4);
-                        }
-                    } else {
-                        b.tickAccum.set(e, accum);
+                    }
+                    
+                    if (e.dead) {
+                        Atmosphere.spikeCarnage(0.25);
+                        ScreenShake.shake(b.damage * 10);
+                        this.hitstop(4);
                     }
                 } else {
-                    // Enemy left beam, reset accumulator
+                    b.tickAccum.set(e, accum);
+                }
+            }
+            
+            // Clear accumulators for enemies no longer hit
+            for (const e of b.tickAccum.keys()) {
+                if (!hitEnemies.has(e)) {
                     b.tickAccum.delete(e);
                 }
             }
@@ -702,16 +1050,17 @@ const Combat = {
 
         // Beams
         for (const b of this.beams) {
-            // Update beam origin to current iris position
-            const currentStart = this.getPupilPosition();
-            b.startX = currentStart.x;
-            b.startY = currentStart.y;
+            // Skip if no path calculated yet
+            if (!b.path || b.path.length < 2) continue;
             
             const progress = b.elapsed / b.duration;
             const alpha = 1 - progress * 0.5;  // fade slightly
             const baseWidth = b.width * (1 + progress * 0.3);  // expand over lifetime
             const tier = b.tier || 1;
             const time = Date.now() / 1000;
+            
+            // Get actual path length (may be less than b.length due to bounces)
+            const pathLength = getPathLength(b.path);
             
             // Spread: beam widens along its length (cone factor)
             const spreadRate = 0.15 + tier * 0.05;  // how much it spreads per 100px
@@ -732,38 +1081,40 @@ const Combat = {
             const actualIrisRadius = baseIrisRadius + dilationBonus + state.attention * state.irisDilation;
             const irisDiameter = eyeSvg ? actualIrisRadius * eyeSvg.clientHeight * 2 * 0.60 : 60;
             
-            // Perpendicular vector for offset effects
-            const perpX = -b.dirY;
-            const perpY = b.dirX;
-            
             // Draw beam as segments to allow width variation along length
-            // OUTER BEAM: Segments scroll BACKWARD (aftershock rings)
-            // INNER BEAM: Fixed width = iris diameter (energy channel)
-            const segments = 25;
-            const segmentLength = b.length / segments;
+            // Segment density is constant per unit length, not per total path
+            const segmentsPerPx = 10 / 1000;  // 10 segments per 1000px
+            const segments = Math.max(5, Math.floor(pathLength * segmentsPerPx));
+            const segmentLength = pathLength / segments;
             const scrollSpeed = 400;  // pixels per second backward
             const scrollPhase = (time * scrollSpeed / segmentLength) % 1;
             
-            const coneLength = segmentLength * 1.5;  // cone zone before cylindrical beam
+            const coneLength = Math.min(segmentLength * 1.5, pathLength * 0.1);  // cone zone
             const fullBeamWidth = baseWidth * outerRatio;
-            const coneStartWidth = irisDiameter / 0.60 * 0.85;  // cone starts at 85% of actual iris
+            const coneStartWidth = irisDiameter / 0.60 * 0.85;
             
             // Shared variables for cone/cylinder loops
             const coneSegments = 8;
             const coneScrollPhase = (time * scrollSpeed / coneLength) % 1;
-            const innerWidthMult = 1 + (tier - 1) * 0.25;  // 1x at tier 1, 2x at tier 5
+            const innerWidthMult = 1 + (tier - 1) * 0.25;
             const innerWidth = irisDiameter * innerWidthMult * (1 + coreDance * 0.1);
             
             // Use additive blending for laser effect
             this.ctx.globalCompositeOperation = 'lighter';
             
-            // === LAYER 1: INNER WHITE (scrolling wave, center core) ===
-            const waveSpeed = 800;  // px/s forward
-            const waveLength = 80;  // px per cycle
-            const wavePhase = time * waveSpeed;
-            const stepSize = 8;  // px per segment
+            // Spatial taper: beam narrows along path length
+            const getSpatialTaper = (dist) => {
+                const t = dist / pathLength;  // 0 at start, 1 at end
+                return 1 - t * 0.5;  // 100% at start, 50% at end
+            };
             
-            for (let d = 0; d < b.length; d += stepSize) {
+            // === LAYER 1: INNER WHITE (scrolling wave, center core) ===
+            const waveSpeed = 800;
+            const waveLength = 80;
+            const wavePhase = time * waveSpeed;
+            const stepSize = 8;
+            
+            for (let d = 0; d < pathLength; d += stepSize) {
                 const wave = (d - wavePhase) / waveLength * Math.PI * 2;
                 const alphaMod = Math.sin(wave);
                 const colorMod = Math.cos(wave);
@@ -774,14 +1125,12 @@ const Combat = {
                 const g = Math.floor(230 + colorMod * 25);
                 const b_ = Math.floor(200 + colorMod * 55);
                 
-                const x0 = b.startX + b.dirX * d;
-                const y0 = b.startY + b.dirY * d;
-                const x1 = b.startX + b.dirX * Math.min(d + stepSize, b.length);
-                const y1 = b.startY + b.dirY * Math.min(d + stepSize, b.length);
+                const p0 = getPointAlongPath(b.path, d);
+                const p1 = getPointAlongPath(b.path, Math.min(d + stepSize, pathLength));
                 
                 this.ctx.beginPath();
-                this.ctx.moveTo(x0, y0);
-                this.ctx.lineTo(x1, y1);
+                this.ctx.moveTo(p0.x, p0.y);
+                this.ctx.lineTo(p1.x, p1.y);
                 this.ctx.strokeStyle = `rgba(${r}, ${g}, ${b_}, ${segAlpha})`;
                 this.ctx.lineWidth = innerWidth;
                 this.ctx.lineCap = 'round';
@@ -808,14 +1157,12 @@ const Combat = {
                 const width1 = coneStartWidth + (fullBeamWidth - coneStartWidth) * clampedT1;
                 const avgWidth = (width0 + width1) / 2 * (1 + outerDance);
                 
-                const x0 = b.startX + b.dirX * dist0;
-                const y0 = b.startY + b.dirY * dist0;
-                const x1 = b.startX + b.dirX * dist1;
-                const y1 = b.startY + b.dirY * dist1;
+                const p0 = getPointAlongPath(b.path, dist0);
+                const p1 = getPointAlongPath(b.path, dist1);
                 
                 this.ctx.beginPath();
-                this.ctx.moveTo(x0, y0);
-                this.ctx.lineTo(x1, y1);
+                this.ctx.moveTo(p0.x, p0.y);
+                this.ctx.lineTo(p1.x, p1.y);
                 this.ctx.strokeStyle = `rgba(255, 150, 50, ${alpha * 0.5})`;
                 this.ctx.lineWidth = avgWidth * midRatio;
                 this.ctx.stroke();
@@ -827,27 +1174,30 @@ const Combat = {
                 const t0 = scrolledI / segments;
                 const t1 = (scrolledI + 1) / segments;
                 
-                const dist0 = coneLength + t0 * (b.length - coneLength);
-                const dist1 = coneLength + t1 * (b.length - coneLength);
+                const dist0 = coneLength + t0 * (pathLength - coneLength);
+                const dist1 = coneLength + t1 * (pathLength - coneLength);
                 
-                if (dist1 < coneLength || dist0 > b.length) continue;
+                if (dist1 < coneLength || dist0 > pathLength) continue;
                 
                 const clampedDist0 = Math.max(coneLength, dist0);
-                const clampedDist1 = Math.min(b.length, dist1);
+                const clampedDist1 = Math.min(pathLength, dist1);
                 if (clampedDist1 - clampedDist0 < 1) continue;
+                
+                // Apply spatial taper
+                const taper0 = getSpatialTaper(clampedDist0);
+                const taper1 = getSpatialTaper(clampedDist1);
+                const avgTaper = (taper0 + taper1) / 2;
                 
                 const beamWidth0 = fullBeamWidth * (1 + clampedDist0 * spreadRate / 1000);
                 const beamWidth1 = fullBeamWidth * (1 + clampedDist1 * spreadRate / 1000);
-                const avgWidth = (beamWidth0 + beamWidth1) / 2 * (1 + outerDance);
+                const avgWidth = (beamWidth0 + beamWidth1) / 2 * (1 + outerDance) * avgTaper;
                 
-                const x0 = b.startX + b.dirX * clampedDist0;
-                const y0 = b.startY + b.dirY * clampedDist0;
-                const x1 = b.startX + b.dirX * clampedDist1;
-                const y1 = b.startY + b.dirY * clampedDist1;
+                const p0 = getPointAlongPath(b.path, clampedDist0);
+                const p1 = getPointAlongPath(b.path, clampedDist1);
                 
                 this.ctx.beginPath();
-                this.ctx.moveTo(x0, y0);
-                this.ctx.lineTo(x1, y1);
+                this.ctx.moveTo(p0.x, p0.y);
+                this.ctx.lineTo(p1.x, p1.y);
                 this.ctx.strokeStyle = `rgba(255, 150, 50, ${alpha * 0.5})`;
                 this.ctx.lineWidth = avgWidth * midRatio;
                 this.ctx.stroke();
@@ -855,39 +1205,38 @@ const Combat = {
             
             // === LAYER 3: PULSES ===
             const pulseCount = 4 + tier * 2;
-            const pulseSpeed = 1400;  // pixels per second
+            const pulseSpeed = 1400;
             for (let p = 0; p < pulseCount; p++) {
                 const pulseOffset = (p / pulseCount);
-                const pulsePos = ((time * pulseSpeed / b.length + pulseOffset) % 1);
-                const pulseDist = pulsePos * b.length;
+                const pulsePos = ((time * pulseSpeed / pathLength + pulseOffset) % 1);
+                const pulseDist = pulsePos * pathLength;
                 
-                const pulseX = b.startX + b.dirX * pulseDist;
-                const pulseY = b.startY + b.dirY * pulseDist;
+                const pulsePoint = getPointAlongPath(b.path, pulseDist);
                 
                 const pulseWidth = baseWidth * 0.3 * (1 + Math.sin(time * 25 + p) * 0.2);
                 const pulseAlpha = alpha * 0.9 * (1 - pulsePos * 0.3);
                 
                 const gradient = this.ctx.createRadialGradient(
-                    pulseX, pulseY, 0,
-                    pulseX, pulseY, pulseWidth
+                    pulsePoint.x, pulsePoint.y, 0,
+                    pulsePoint.x, pulsePoint.y, pulseWidth
                 );
                 gradient.addColorStop(0, `rgba(255, 255, 255, ${pulseAlpha})`);
                 gradient.addColorStop(0.6, `rgba(255, 230, 180, ${pulseAlpha * 0.6})`);
                 gradient.addColorStop(1, `rgba(255, 200, 100, 0)`);
                 
                 this.ctx.beginPath();
-                this.ctx.arc(pulseX, pulseY, pulseWidth, 0, Math.PI * 2);
+                this.ctx.arc(pulsePoint.x, pulsePoint.y, pulseWidth, 0, Math.PI * 2);
                 this.ctx.fillStyle = gradient;
                 this.ctx.fill();
             }
             
             // Width falloff: sharp drop in last 25% of beam duration
-            const timeProgress = b.elapsed / b.duration;  // 0 to 1 over lifetime
+            const timeProgress = b.elapsed / b.duration;
             const falloffStart = 0.75;
             let widthFalloff = 1;
             if (timeProgress > falloffStart) {
-                const falloffT = (timeProgress - falloffStart) / (1 - falloffStart);  // 0 to 1 in falloff zone
-                widthFalloff = 1 - falloffT * falloffT;  // quadratic dropoff
+                const falloffT = (timeProgress - falloffStart) / (1 - falloffStart);
+                widthFalloff = 1 - falloffT * falloffT;
             }
             
             // === LAYER 4: OUTER RED (cone + cylinder, drawn last = on top) ===
@@ -908,54 +1257,54 @@ const Combat = {
                 
                 const width0 = coneStartWidth + (fullBeamWidth - coneStartWidth) * clampedT0;
                 const width1 = coneStartWidth + (fullBeamWidth - coneStartWidth) * clampedT1;
-                // Apply falloff to cone width
                 const falloffWidth0 = innerWidth + (width0 - innerWidth) * widthFalloff;
                 const falloffWidth1 = innerWidth + (width1 - innerWidth) * widthFalloff;
                 const avgWidth = (falloffWidth0 + falloffWidth1) / 2 * (1 + outerDance);
                 
-                const x0 = b.startX + b.dirX * dist0;
-                const y0 = b.startY + b.dirY * dist0;
-                const x1 = b.startX + b.dirX * dist1;
-                const y1 = b.startY + b.dirY * dist1;
+                const p0 = getPointAlongPath(b.path, dist0);
+                const p1 = getPointAlongPath(b.path, dist1);
                 
                 this.ctx.beginPath();
-                this.ctx.moveTo(x0, y0);
-                this.ctx.lineTo(x1, y1);
+                this.ctx.moveTo(p0.x, p0.y);
+                this.ctx.lineTo(p1.x, p1.y);
                 this.ctx.strokeStyle = `rgba(255, 0, 0, ${alpha * 0.5})`;
                 this.ctx.lineWidth = avgWidth;
                 this.ctx.lineCap = 'round';
                 this.ctx.stroke();
             }
             
-            // Cylinder outer
-            for (let i = 0; i < segments; i++) {
+            // Cylinder outer (one extra segment to cap the tip)
+            for (let i = 0; i <= segments; i++) {
                 const scrolledI = i - scrollPhase;
                 const t0 = scrolledI / segments;
                 const t1 = (scrolledI + 1) / segments;
                 
-                const dist0 = coneLength + t0 * (b.length - coneLength);
-                const dist1 = coneLength + t1 * (b.length - coneLength);
+                const dist0 = coneLength + t0 * (pathLength - coneLength);
+                const dist1 = coneLength + t1 * (pathLength - coneLength);
                 
-                if (dist1 < coneLength || dist0 > b.length) continue;
+                if (dist1 < coneLength || dist0 > pathLength) continue;
                 
                 const clampedDist0 = Math.max(coneLength, dist0);
-                const clampedDist1 = Math.min(b.length, dist1);
+                const clampedDist1 = Math.min(pathLength, dist1);
                 if (clampedDist1 - clampedDist0 < 1) continue;
                 
+                // Apply spatial taper
+                const taper0 = getSpatialTaper(clampedDist0);
+                const taper1 = getSpatialTaper(clampedDist1);
+                const avgTaper = (taper0 + taper1) / 2;
+                
                 const baseBeamWidth = fullBeamWidth * (1 + clampedDist0 * spreadRate / 1000);
-                const targetWidth = innerWidth;  // fall off toward inner beam width
+                const targetWidth = innerWidth;
                 const beamWidth0 = targetWidth + (baseBeamWidth - targetWidth) * widthFalloff;
                 const beamWidth1 = targetWidth + (baseBeamWidth - targetWidth) * widthFalloff;
-                const avgWidth = (beamWidth0 + beamWidth1) / 2 * (1 + outerDance);
+                const avgWidth = (beamWidth0 + beamWidth1) / 2 * (1 + outerDance) * avgTaper;
                 
-                const x0 = b.startX + b.dirX * clampedDist0;
-                const y0 = b.startY + b.dirY * clampedDist0;
-                const x1 = b.startX + b.dirX * clampedDist1;
-                const y1 = b.startY + b.dirY * clampedDist1;
+                const p0 = getPointAlongPath(b.path, clampedDist0);
+                const p1 = getPointAlongPath(b.path, clampedDist1);
                 
                 this.ctx.beginPath();
-                this.ctx.moveTo(x0, y0);
-                this.ctx.lineTo(x1, y1);
+                this.ctx.moveTo(p0.x, p0.y);
+                this.ctx.lineTo(p1.x, p1.y);
                 this.ctx.strokeStyle = `rgba(255, 0, 0, ${alpha * 0.5})`;
                 this.ctx.lineWidth = avgWidth;
                 this.ctx.lineCap = 'round';

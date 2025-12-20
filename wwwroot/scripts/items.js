@@ -169,6 +169,18 @@ const Items = {
             effects: { demonic: true, tint: '#ff0000', laserCharge: true, laserWidth: 80, laserFillTime: 1.0, laserDuration: 1.5 },
             sound: 'zelda_secret'
         },
+        rubber_cement: {
+            id: 'rubber_cement',
+            name: 'Rubber Cement',
+            icon: '🔄',
+            flavor: '"Bounce bounce bounce"',
+            description: 'Projectiles and beams reflect off surfaces.',
+            tags: ['RICOCHET', 'SKILL'],
+            rarity: 'uncommon',
+            stackable: true,
+            effects: { bounces: 2 },
+            sound: 'fame'
+        },
         
         // === MEME ITEMS ===
         breakfast: {
@@ -250,17 +262,6 @@ const Items = {
             tags: ['HEALTHY'],
             rarity: 'uncommon',
             effects: { piercing: true },
-        },
-
-        rubber_cement: {
-            id: 'rubber_cement',
-            name: 'Rubber Cement',
-            icon: '🫧',
-            flavor: '"Boing"',
-            description: 'Tears bounce off walls.',
-            tags: ['DIVISIVE'],
-            rarity: 'uncommon',
-            effects: { bouncing: true },
         },
 
         spoon_bender: {
@@ -435,6 +436,7 @@ const Items = {
             laserWidth: 25,      // Base beam width in px (max of all items)
             laserFillTime: 1.0,  // Seconds to fill one tier (averaged)
             laserDuration: 0.5,  // Base beam duration (max of all items)
+            bounces: 0,          // Number of bounces for projectiles/beams
         };
         
         // Count items in inventory for stacking
@@ -459,6 +461,9 @@ const Items = {
                 } else if (key === 'laserWidth' || key === 'laserDuration') {
                     // laserWidth and laserDuration take max
                     merged[key] = Math.max(merged[key], value);
+                } else if (key === 'bounces') {
+                    // bounces stack additively
+                    merged.bounces += value * count;
                 } else if (key === 'laserFillTime') {
                     // laserFillTime averages (each item contributes count times)
                     fillTimeSum += value * count;
