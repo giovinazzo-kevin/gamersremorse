@@ -19,6 +19,13 @@ const Combat = {
     hitstopFrames: 0,
     flashingEnemies: new Set(),
 
+    // Beam charge state
+    chargeTime: 0,
+    chargeThreshold: 0.5,  // seconds to minimum beam
+    maxCharge: 2.0,        // seconds to DEATH LAUSR
+    beams: [],
+    isCharging: false,
+
     config: {
         tearStyle: 'fancy',
         shadows: 'high',
@@ -129,10 +136,107 @@ const Combat = {
     startFiring() {
         this.holding = true;
         state.attention = 1;
+        // Start charging if we have brimstone
+        if (this.frameEffects.laserCharge) {
+            this.isCharging = true;
+            this.chargeTime = 0;
+        }
     },
 
     stopFiring() {
+        // Fire beam if charged enough
+        if (this.isCharging && this.chargeTime >= this.chargeThreshold && this.target) {
+            this.fireBeam(this.target.x, this.target.y);
+        }
         this.holding = false;
+        this.isCharging = false;
+        this.chargeTime = 0;
+        state.charging = false;
+        state.chargePercent = 0;
+    },
+
+    get chargePercent() {
+        if (!this.isCharging) return 0;
+        return Math.min(1, (this.chargeTime - this.chargeThreshold) / (this.maxCharge - this.chargeThreshold));
+    },
+
+    get chargeReady() {
+        return this.chargeTime >= this.chargeThreshold;
+    },
+
+    fireBeam(targetX, targetY) {
+        const start = this.getPupilPosition();
+        const dx = targetX - start.x;
+        const dy = targetY - start.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        const dirX = dx / dist;
+        const dirY = dy / dist;
+
+        // Scale beam properties by charge
+        const chargePercent = this.chargePercent;
+        const width = 20 + chargePercent * 60;  // 20-80px
+        const damage = 3 + chargePercent * 7;   // 3-10 damage
+        const length = Math.max(window.innerWidth, window.innerHeight) * 1.5;
+
+        this.beams.push({
+            startX: start.x,
+            startY: start.y,
+            dirX,
+            dirY,
+            width,
+            damage,
+            length,
+            elapsed: 0,
+            duration: 0.15,  // beam visible duration
+            chargePercent,
+        });
+
+        // Hit all enemies in beam path
+        for (const e of this.enemies) {
+            if (this.beamHitsEnemy(start, dirX, dirY, length, width, e)) {
+                e.health -= damage;
+                ScreenShake.shake(damage * 6);
+                HitFlash.trigger(damage);
+                this.hitstop(3, e);
+                sfx.pow();
+
+                e.knockbackVX = dirX * 300;
+                e.knockbackVY = dirY * 300;
+
+                if (e.dead) {
+                    ScreenShake.shake(damage * 20);
+                    this.hitstop(6);
+                }
+            }
+        }
+
+        Eye.blink();
+        sfx.beam?.() || sfx.pow();  // beam sound or fallback
+        ScreenShake.shake(20 + chargePercent * 40);
+
+        // Achievement
+        if (!getAchievementFlag('firedBeam')) {
+            setAchievementFlag('firedBeam');
+            // IMMA FIRIN MAH LAZER achievement handled in achievements.js
+        }
+    },
+
+    beamHitsEnemy(start, dirX, dirY, length, width, enemy) {
+        // Project enemy center onto beam line
+        const ex = enemy.x - start.x;
+        const ey = enemy.y - start.y;
+        const projection = ex * dirX + ey * dirY;
+
+        // Behind or beyond beam
+        if (projection < 0 || projection > length) return false;
+
+        // Perpendicular distance from beam
+        const perpX = ex - projection * dirX;
+        const perpY = ey - projection * dirY;
+        const perpDist = Math.sqrt(perpX * perpX + perpY * perpY);
+
+        // Hit if within beam width + enemy size
+        return perpDist < (width / 2 + enemy.width / 2);
     },
 
     splash(pos, size, color) {
@@ -163,13 +267,28 @@ const Combat = {
             }
         }
 
+        // Charge beam or fire tears
         if (!frozen && this.holding && this.target) {
-            const now = Date.now();
-            if (now - this.lastFire >= this.fireInterval) {
-                this.fire(this.target.x, this.target.y);
-                this.lastFire = now;
+            if (this.isCharging) {
+                // Accumulate charge
+                this.chargeTime += dt;
+                state.charging = true;
+                state.chargePercent = Math.min(1, this.chargeTime / this.maxCharge);
+            } else {
+                // Normal tear firing
+                const now = Date.now();
+                if (now - this.lastFire >= this.fireInterval) {
+                    this.fire(this.target.x, this.target.y);
+                    this.lastFire = now;
+                }
             }
         }
+
+        // Update beams
+        for (const b of this.beams) {
+            b.elapsed += dt;
+        }
+        this.beams = this.beams.filter(b => b.elapsed < b.duration);
 
         if (!frozen) {
             for (const t of this.tears) {
@@ -413,6 +532,89 @@ const Combat = {
         }
 
         this.ctx.filter = 'none';
+
+        // Beams
+        for (const b of this.beams) {
+            const progress = b.elapsed / b.duration;
+            const alpha = 1 - progress * 0.5;  // fade slightly
+            const width = b.width * (1 + progress * 0.5);  // expand slightly
+
+            // Main beam
+            this.ctx.save();
+            this.ctx.beginPath();
+            this.ctx.moveTo(b.startX, b.startY);
+            this.ctx.lineTo(b.startX + b.dirX * b.length, b.startY + b.dirY * b.length);
+            this.ctx.strokeStyle = `rgba(255, 0, 0, ${alpha})`;
+            this.ctx.lineWidth = width;
+            this.ctx.lineCap = 'round';
+            this.ctx.stroke();
+
+            // Inner bright core
+            this.ctx.beginPath();
+            this.ctx.moveTo(b.startX, b.startY);
+            this.ctx.lineTo(b.startX + b.dirX * b.length, b.startY + b.dirY * b.length);
+            this.ctx.strokeStyle = `rgba(255, 200, 100, ${alpha})`;
+            this.ctx.lineWidth = width * 0.4;
+            this.ctx.stroke();
+
+            // White hot center
+            this.ctx.beginPath();
+            this.ctx.moveTo(b.startX, b.startY);
+            this.ctx.lineTo(b.startX + b.dirX * b.length, b.startY + b.dirY * b.length);
+            this.ctx.strokeStyle = `rgba(255, 255, 255, ${alpha * 0.8})`;
+            this.ctx.lineWidth = width * 0.15;
+            this.ctx.stroke();
+            this.ctx.restore();
+        }
+
+        // Charge circle on cursor
+        if (this.isCharging && this.target) {
+            const chargeRatio = this.chargeTime / this.maxCharge;
+            const ready = this.chargeTime >= this.chargeThreshold;
+            const readyRatio = ready ? (this.chargeTime - this.chargeThreshold) / (this.maxCharge - this.chargeThreshold) : 0;
+
+            const cx = this.target.x;
+            const cy = this.target.y;
+            const radius = 30;
+
+            // Background ring
+            this.ctx.beginPath();
+            this.ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+            this.ctx.strokeStyle = 'rgba(100, 100, 100, 0.5)';
+            this.ctx.lineWidth = 4;
+            this.ctx.stroke();
+
+            // Charge arc
+            const startAngle = -Math.PI / 2;
+            const endAngle = startAngle + (Math.PI * 2 * chargeRatio);
+            this.ctx.beginPath();
+            this.ctx.arc(cx, cy, radius, startAngle, endAngle);
+            this.ctx.strokeStyle = ready ? '#ff4444' : '#ffaa00';
+            this.ctx.lineWidth = 4;
+            this.ctx.stroke();
+
+            // Flash when ready (2-4hz)
+            if (ready) {
+                const flashFreq = 3;  // hz
+                const flash = Math.sin(Date.now() / 1000 * Math.PI * 2 * flashFreq) > 0;
+                if (flash) {
+                    this.ctx.beginPath();
+                    this.ctx.arc(cx, cy, radius + 4, 0, Math.PI * 2);
+                    this.ctx.strokeStyle = 'rgba(255, 68, 68, 0.8)';
+                    this.ctx.lineWidth = 2;
+                    this.ctx.stroke();
+                }
+
+                // Pulse (1-2hz) - intensity scales with readyRatio
+                const pulseFreq = 1.5;
+                const pulse = (Math.sin(Date.now() / 1000 * Math.PI * 2 * pulseFreq) + 1) / 2;
+                const pulseIntensity = pulse * readyRatio * 0.4;
+                this.ctx.beginPath();
+                this.ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+                this.ctx.fillStyle = `rgba(255, 68, 68, ${pulseIntensity})`;
+                this.ctx.fill();
+            }
+        }
 
         // Hit flash - white overlay
         const flashIntensity = HitFlash.getIntensity() * this.config.hitFlash;

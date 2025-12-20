@@ -121,6 +121,14 @@ const ACHIEVEMENTS = {
         hidden: true,
         check: (state) => state.yasd
     },
+    imma_firin: {
+        id: 'imma_firin',
+        title: 'IMMA FIRIN MAH LAZER',
+        description: 'BWAAAAAAH',
+        icon: '😈',
+        hidden: true,
+        check: (state) => state.firedBeam
+    },
     // TODO: Stoatal Misplay
     gaming_journalist: {
         id: 'gaming_journalist',

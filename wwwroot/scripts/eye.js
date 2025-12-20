@@ -106,6 +106,10 @@ const state = {
     lookingAtGraph: false,
     beingCornered: false,
 
+    // Beam charging
+    charging: false,
+    chargePercent: 0,
+
     // Visual params
     barCount: 20,
     gapRatio: 0.2,
@@ -864,7 +868,9 @@ function draw() {
 
     const baseIrisRadius = state.irisRadius;
     const dilationBonus = state.dilation * 0.08;
-    const irisRadius = baseIrisRadius + dilationBonus;
+    // Charging contracts the pupil
+    const chargeContraction = state.charging ? state.chargePercent * 0.06 : 0;
+    const irisRadius = baseIrisRadius + dilationBonus - chargeContraction;
     const irisXOffset = state.irisXOffset;
     const irisYOffset = state.irisYOffset;
     const lashMultiplier = state.lashMultiplier;
@@ -898,8 +904,19 @@ function draw() {
 
     const blushColor = '#ff6b9d';
     const blushAmount = state.blush * 0.4;
-    const tintedPositive = lerpColor(colorPositive, blushColor, blushAmount);
-    const tintedNegative = lerpColor(colorNegative, blushColor, blushAmount);
+    let tintedPositive = lerpColor(colorPositive, blushColor, blushAmount);
+    let tintedNegative = lerpColor(colorNegative, blushColor, blushAmount);
+
+    // Demonic red tint when charging
+    if (state.charging) {
+        const demonicColor = '#ff2200';
+        const demonicAmount = state.chargePercent * 0.6;
+        tintedPositive = lerpColor(tintedPositive, demonicColor, demonicAmount);
+        tintedNegative = lerpColor(tintedNegative, demonicColor, demonicAmount);
+    }
+
+    // Charge tremor effect
+    const chargeTremor = state.charging ? state.chargePercent * 2 : 0;
 
     for (let i = 0; i < barCount; i++) {
         const topBarPosition = (i - (barCount - 1) / 2) + state.topSampleOffset;
@@ -908,8 +925,11 @@ function draw() {
         const wrappedTopPosition = ((topBarPosition % barCount) + barCount) % barCount - (barCount - 1) / 2;
         const wrappedBottomPosition = ((bottomBarPosition % barCount) + barCount) % barCount - (barCount - 1) / 2;
 
-        const topX = startX + (wrappedTopPosition + barCount / 2) * spacing + spacing / 2;
-        const bottomX = startX + (wrappedBottomPosition + barCount / 2) * spacing + spacing / 2;
+        // Add tremor when charging
+        const tremor = chargeTremor * (Math.random() - 0.5);
+
+        const topX = startX + (wrappedTopPosition + barCount / 2) * spacing + spacing / 2 + tremor;
+        const bottomX = startX + (wrappedBottomPosition + barCount / 2) * spacing + spacing / 2 + tremor;
 
         const topNormalizedX = wrappedTopPosition / (barCount / 2);
         const bottomNormalizedX = wrappedBottomPosition / (barCount / 2);
