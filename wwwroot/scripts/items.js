@@ -258,10 +258,11 @@ const Items = {
             name: "Cupid's Arrow",
             icon: '💘',
             flavor: '"Piercing shots"',
-            description: 'Tears pass through enemies.',
+            description: 'Tears and beams pass through enemies.',
             tags: ['HEALTHY'],
             rarity: 'uncommon',
-            effects: { piercing: true },
+            stackable: true,
+            effects: { piercing: true, pierce: 2 },
         },
 
         spoon_bender: {
@@ -437,6 +438,7 @@ const Items = {
             laserFillTime: 1.0,  // Seconds to fill one tier (averaged)
             laserDuration: 0.5,  // Base beam duration (max of all items)
             bounces: 0,          // Number of bounces for projectiles/beams
+            pierce: 0,           // Number of enemies to pierce through
         };
         
         // Count items in inventory for stacking
@@ -464,6 +466,9 @@ const Items = {
                 } else if (key === 'bounces') {
                     // bounces stack additively
                     merged.bounces += value * count;
+                } else if (key === 'pierce') {
+                    // pierce stacks additively
+                    merged.pierce += value * count;
                 } else if (key === 'laserFillTime') {
                     // laserFillTime averages (each item contributes count times)
                     fillTimeSum += value * count;

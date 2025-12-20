@@ -190,11 +190,11 @@ function getPathLength(path) {
     return total;
 }
 
-// Calculate beam path with bounces
+// Calculate beam path with piercing and bounces
 // Returns: { path, hitEnemies, bounceHits }
-// - hitEnemies: Set of all enemies the beam passes through
-// - bounceHits: Map of enemy -> remainingLength at moment of bounce
-function calculateBeamPath(startX, startY, dirX, dirY, totalLength, bounces, enemies, beamWidth) {
+// - hitEnemies: Set of all enemies the beam passes through (tick damage)
+// - bounceHits: Map of enemy -> remainingLength at moment of bounce (burst damage)
+function calculateBeamPath(startX, startY, dirX, dirY, totalLength, bounces, pierce, enemies, beamWidth) {
     const path = [{ x: startX, y: startY }];
     let remaining = totalLength;
     let currentX = startX;
@@ -202,8 +202,10 @@ function calculateBeamPath(startX, startY, dirX, dirY, totalLength, bounces, ene
     let currentDirX = dirX;
     let currentDirY = dirY;
     let bouncesLeft = bounces;
-    const hitEnemies = new Set(); // Track enemies hit this frame (for pierce damage)
+    let piercesLeft = pierce;
+    const hitEnemies = new Set(); // Track enemies hit this frame (for pierce/tick damage)
     const bounceHits = new Map(); // Track enemies hit BY bounce -> remaining length at impact
+    const piercedThisPath = new Set(); // Don't hit same enemy twice while piercing
     
     while (remaining > 0 && path.length < 20) { // cap iterations
         let nearestDist = remaining;
@@ -213,7 +215,9 @@ function calculateBeamPath(startX, startY, dirX, dirY, totalLength, bounces, ene
         let hitY = currentY + currentDirY * remaining;
         
         // Check enemies (exact hitbox, no expansion)
+        // Skip enemies we've already pierced through
         for (const e of enemies) {
+            if (piercedThisPath.has(e)) continue;
             const hit = rayBoxIntersect(currentX, currentY, currentDirX, currentDirY, e.hitbox);
             if (hit && hit.dist < nearestDist && hit.dist > 0.001) {
                 nearestDist = hit.dist;
@@ -234,20 +238,50 @@ function calculateBeamPath(startX, startY, dirX, dirY, totalLength, bounces, ene
             hitY = edgeHit.y;
         }
         
-        // Record enemy hit
+        // Record enemy hit and decide pierce vs bounce
         if (nearestEnemy) {
-            if (bouncesLeft > 0 && nearestType) {
-                // This is a bounce hit - record remaining length at impact
+            if (piercesLeft > 0) {
+                // Pierce through - add to tick damage, continue same direction
+                hitEnemies.add(nearestEnemy);
+                piercedThisPath.add(nearestEnemy);
+                piercesLeft--;
+                
+                // Add path point at entry, continue through
+                path.push({ x: hitX, y: hitY });
+                remaining -= nearestDist;
+                currentX = hitX + currentDirX * 0.1; // nudge past hitbox
+                currentY = hitY + currentDirY * 0.1;
+                continue; // next iteration, same direction
+            } else if (bouncesLeft > 0 && nearestType) {
+                // Bounce off enemy - burst damage
                 bounceHits.set(nearestEnemy, remaining);
             } else {
-                // This is a pierce hit
+                // No pierce, no bounce - beam stops but still does tick damage
                 hitEnemies.add(nearestEnemy);
             }
         }
         
-        if (nearestType && bouncesLeft > 0) {
-            // Add bounce point
+        // Bounce off wall or enemy (if not pierced)
+        const shouldBounce = bouncesLeft > 0 && nearestType && 
+            (!nearestEnemy || piercesLeft <= 0); // only bounce off enemy if can't pierce
+        
+        if (shouldBounce && nearestEnemy) {
+            // Bouncing off enemy
             path.push({ x: hitX, y: hitY, enemy: nearestEnemy });
+            remaining -= nearestDist;
+            currentX = hitX;
+            currentY = hitY;
+            bouncesLeft--;
+            
+            // Reflect direction based on edge hit
+            if (nearestType === 'left' || nearestType === 'right') {
+                currentDirX = -currentDirX;
+            } else if (nearestType === 'top' || nearestType === 'bottom') {
+                currentDirY = -currentDirY;
+            }
+        } else if (shouldBounce && !nearestEnemy) {
+            // Bouncing off wall
+            path.push({ x: hitX, y: hitY });
             remaining -= nearestDist;
             currentX = hitX;
             currentY = hitY;
@@ -496,8 +530,9 @@ const Combat = {
         
         const length = Math.max(window.innerWidth, window.innerHeight) * 1.5;
         
-        // Bounces from item effects
+        // Bounces and pierce from item effects
         const bounces = this.frameEffects.bounces || 0;
+        const pierce = this.frameEffects.pierce || 0;
 
         this.beams.push({
             startX: start.x,
@@ -511,6 +546,7 @@ const Combat = {
             duration,
             tier,
             bounces,
+            pierce,
             path: null,  // Calculated each frame
             tickAccum: new Map(),  // enemy -> time since last damage tick
         });
@@ -659,10 +695,10 @@ const Combat = {
             b.startX = currentStart.x;
             b.startY = currentStart.y;
             
-            // Calculate beam path with bounces
+            // Calculate beam path with piercing and bounces
             const { path, hitEnemies, bounceHits } = calculateBeamPath(
                 b.startX, b.startY, b.dirX, b.dirY,
-                b.length, b.bounces, this.enemies, b.width
+                b.length, b.bounces, b.pierce, this.enemies, b.width
             );
             b.path = path;
             
@@ -1066,7 +1102,7 @@ const Combat = {
             const spreadRate = 0.15 + tier * 0.05;  // how much it spreads per 100px
             
             // Dancing frequencies for each layer (different speeds)
-            const outerDance = Math.sin(time * 8) * 0.05;
+            const outerDance = Math.sin(time * 8) * 0.15;
             const midDance = Math.sin(time * 12 + 1);  // -1 to 1 for wobble range
             const coreDance = Math.sin(time * 18 + 2) * 0.1;
             
@@ -1241,6 +1277,10 @@ const Combat = {
             
             // === LAYER 4: OUTER RED (cone + cylinder, drawn last = on top) ===
             // Cone outer
+            // Use same shockwave params as cylinder for continuity
+            const coneWaveCount = 3;
+            const coneWaveAmplitude = 0.5;
+            
             for (let i = -1; i <= coneSegments; i++) {
                 const scrolledI = i - coneScrollPhase;
                 const t0 = scrolledI / coneSegments;
@@ -1255,11 +1295,15 @@ const Combat = {
                 const dist0 = clampedT0 * coneLength;
                 const dist1 = clampedT1 * coneLength;
                 
+                // Shockwave wobble for cone
+                const coneSegmentPhase = (scrolledI / coneSegments) * coneWaveCount * Math.PI * 2;
+                const coneWobble = 1 + Math.sin(coneSegmentPhase) * coneWaveAmplitude;
+                
                 const width0 = coneStartWidth + (fullBeamWidth - coneStartWidth) * clampedT0;
                 const width1 = coneStartWidth + (fullBeamWidth - coneStartWidth) * clampedT1;
                 const falloffWidth0 = innerWidth + (width0 - innerWidth) * widthFalloff;
                 const falloffWidth1 = innerWidth + (width1 - innerWidth) * widthFalloff;
-                const avgWidth = (falloffWidth0 + falloffWidth1) / 2 * (1 + outerDance);
+                const avgWidth = (falloffWidth0 + falloffWidth1) / 2 * coneWobble;
                 
                 const p0 = getPointAlongPath(b.path, dist0);
                 const p1 = getPointAlongPath(b.path, dist1);
@@ -1296,8 +1340,8 @@ const Combat = {
                 const baseBeamWidth = fullBeamWidth * (1 + clampedDist0 * spreadRate / 1000);
                 const targetWidth = innerWidth;
                 const beamWidth0 = targetWidth + (baseBeamWidth - targetWidth) * widthFalloff;
-                const beamWidth1 = targetWidth + (baseBeamWidth - targetWidth) * widthFalloff;
-                const avgWidth = (beamWidth0 + beamWidth1) / 2 * (1 + outerDance) * avgTaper;
+                const beamWidth1 = targetWidth + (baseBeamWidth - targetWidth) * widthFalloff * 2;
+                const avgWidth = (beamWidth0 + beamWidth1) / 2 * avgTaper;
                 
                 const p0 = getPointAlongPath(b.path, clampedDist0);
                 const p1 = getPointAlongPath(b.path, clampedDist1);
