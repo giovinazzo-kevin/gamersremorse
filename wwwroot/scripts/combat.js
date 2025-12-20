@@ -23,7 +23,6 @@ const Combat = {
     completedTier: 0,      // tier you GET if you release now
     tierProgress: 0,       // 0-1 progress toward next tier
     holdTime: 0,           // time spent at completed tier
-    tierFillTime: 1.0,     // seconds to fill one tier
     baseHoldTime: 1.2,     // base seconds to hold before next tier unlocks
     holdTimePerTier: 0.4,  // additional hold time per tier
     beams: [],
@@ -55,7 +54,7 @@ const Combat = {
     init() {
         this.canvas = document.createElement('canvas');
         this.canvas.id = 'combat-canvas';
-        this.canvas.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:999;';
+        this.canvas.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:1001;';
         document.body.appendChild(this.canvas);
         this.ctx = this.canvas.getContext('2d');
         this.resize();
@@ -149,7 +148,6 @@ const Combat = {
 
     startFiring() {
         this.holding = true;
-        state.attention = 1;
         // Start charging if we have brimstone (level > 0)
         const beamLevel = this.frameEffects.laserCharge || 0;
         if (beamLevel > 0) {
@@ -159,6 +157,7 @@ const Combat = {
             this.holdTime = 0;
             this.beamLevel = beamLevel;
             BeamCharge.start(beamLevel);
+            setExpression('charging');
         }
     },
 
@@ -167,16 +166,16 @@ const Combat = {
         if (this.isCharging && this.completedTier > 0 && this.target) {
             BeamCharge.stop(true);  // true = firing beam (BWAAAH)
             this.fireBeam(this.target.x, this.target.y);
+            // Don't reset expression yet - beam is still firing
         } else if (this.isCharging) {
             BeamCharge.stop(false);  // cancelled
+            setExpression('neutral');
         }
         this.holding = false;
         this.isCharging = false;
         this.completedTier = 0;
         this.tierProgress = 0;
         this.holdTime = 0;
-        state.charging = false;
-        state.chargePercent = 0;
     },
 
     get chargePercent() {
@@ -200,8 +199,9 @@ const Combat = {
         const tier = this.completedTier;
         
         // Scale beam properties by tier
-        // Duration: +25% per tier (base 0.5s)
-        const duration = 0.5 * Math.pow(1.25, tier - 1);
+        // Duration: +25% per tier (base from item, default 0.5s)
+        const baseDuration = this.frameEffects.laserDuration || 0.5;
+        const duration = baseDuration * Math.pow(1.25, tier - 1);
         // Damage: +50% per tier (base 3)
         const damage = 3 * Math.pow(1.5, tier - 1);
         // Width: from item (default 25px), doubles at tier 5 (capped)
@@ -246,6 +246,9 @@ const Combat = {
 
         Eye.blink();
         sfx.beam?.() || sfx.pow();
+        
+        // Lock gaze while firing
+        setExpression('firing');
         
         // Initial screen shake
         ScreenShake.shake(20 + tier * 15);
@@ -317,15 +320,15 @@ const Combat = {
         // Charge beam or fire tears
         if (!frozen && this.holding && this.target) {
             if (this.isCharging) {
-                state.charging = true;
-                
                 // R-TYPE charge: fill tier, hold, then next tier unlocks
+                const tierFillTime = this.frameEffects.laserFillTime || 1.0;
+                
                 if (this.completedTier >= this.beamLevel) {
                     // Max tier reached, just hold
                     this.holdTime += dt;
                 } else if (this.tierProgress < 1) {
                     // Filling current tier
-                    this.tierProgress += dt / this.tierFillTime;
+                    this.tierProgress += dt / tierFillTime;
                     if (this.tierProgress >= 1) {
                         this.tierProgress = 1;
                         this.completedTier++;
@@ -341,8 +344,6 @@ const Combat = {
                         this.holdTime = 0;
                     }
                 }
-                
-                state.chargePercent = this.completedTier / this.beamLevel;
                 
                 // Update charge sound with phase info
                 const isHolding = this.tierProgress >= 1 || this.completedTier >= this.beamLevel;
@@ -365,10 +366,16 @@ const Combat = {
         }
 
         // Update beams
+        const hadBeams = this.beams.length > 0;
         for (const b of this.beams) {
             b.elapsed += dt;
         }
         this.beams = this.beams.filter(b => b.elapsed < b.duration);
+        
+        // Reset expression when all beams finish
+        if (hadBeams && this.beams.length === 0) {
+            setExpression('neutral');
+        }
 
         if (!frozen) {
             for (const t of this.tears) {
@@ -626,55 +633,67 @@ const Combat = {
             
             // Dancing frequencies for each layer (different speeds)
             const outerDance = Math.sin(time * 8) * 0.05;
-            const midDance = Math.sin(time * 12 + 1) * 0.08;
+            const midDance = Math.sin(time * 12 + 1);  // -1 to 1 for wobble range
             const coreDance = Math.sin(time * 18 + 2) * 0.1;
             
-            // Core ratio increases with tier (inner beam more prominent)
-            const coreRatio = (0.15 + tier * 0.08) * (1 + coreDance);
-            const midRatio = (0.4 + tier * 0.05) * (1 + midDance);
+            // Mid ratio wobbles between 0.25 and 0.75 of outer beam
+            const midRatio = 0.5 + midDance * 0.25;  // 0.25 to 0.75
             const outerRatio = 1 + outerDance;
             
-            // Draw beam as segments to allow width variation along length
-            // Segments scroll BACKWARD to create moving ring effect
-            const segments = 25;
-            const segmentLength = b.length / segments;
-            const scrollSpeed = 400;  // pixels per second backward
-            const scrollPhase = (time * scrollSpeed / segmentLength) % 1;  // 0-1 phase within one segment cycle
+            // Get actual iris diameter from eye state
+            const eyeSvg = document.getElementById('eye');
+            const baseIrisRadius = state.irisRadius;
+            const dilationBonus = state.dilation * 0.08;
+            const actualIrisRadius = baseIrisRadius + dilationBonus + state.attention * state.irisDilation;
+            const irisDiameter = eyeSvg ? actualIrisRadius * eyeSvg.clientHeight * 2 : 60;
             
             // Perpendicular vector for offset effects
             const perpX = -b.dirY;
             const perpY = b.dirX;
             
-            for (let i = -1; i <= segments; i++) {
-                // Offset each segment's position by scroll phase (BACKWARD = subtract)
-                const scrolledI = i - scrollPhase;
-                const t0 = scrolledI / segments;
-                const t1 = (scrolledI + 1) / segments;
-                const dist0 = t0 * b.length;
-                const dist1 = t1 * b.length;
+            // Draw beam as segments to allow width variation along length
+            // OUTER BEAM: Segments scroll BACKWARD (aftershock rings)
+            // INNER BEAM: Fixed width = iris diameter (energy channel)
+            const segments = 25;
+            const segmentLength = b.length / segments;
+            const scrollSpeed = 400;  // pixels per second backward
+            const scrollPhase = (time * scrollSpeed / segmentLength) % 1;
+            
+            const coneLength = segmentLength * 1.5;  // cone zone before cylindrical beam
+            const fullBeamWidth = baseWidth * outerRatio;
+            
+            // === OUTER BEAM: CONE (scrolling, same phase as cylinder) ===
+            // Draws from iris outward, expanding from irisDiameter to fullBeamWidth
+            const coneSegments = 8;
+            const coneScrollPhase = (time * scrollSpeed / coneLength) % 1;
+            
+            for (let i = -1; i <= coneSegments; i++) {
+                const scrolledI = i - coneScrollPhase;
+                const t0 = scrolledI / coneSegments;
+                const t1 = (scrolledI + 1) / coneSegments;
                 
-                // Skip if entirely outside beam
-                if (dist1 < 0 || dist0 > b.length) continue;
+                // Skip if outside cone
+                if (t1 < 0 || t0 > 1) continue;
                 
-                // Clamp to beam bounds
-                const clampedDist0 = Math.max(0, dist0);
-                const clampedDist1 = Math.min(b.length, dist1);
+                // Clamp to cone bounds
+                const clampedT0 = Math.max(0, t0);
+                const clampedT1 = Math.min(1, t1);
+                if (clampedT1 - clampedT0 < 0.01) continue;
                 
-                // Skip tiny segments
-                if (clampedDist1 - clampedDist0 < 1) continue;
+                const dist0 = clampedT0 * coneLength;
+                const dist1 = clampedT1 * coneLength;
                 
-                // Width grows along beam length (use unclamped for consistent sizing)
-                const width0 = baseWidth * outerRatio * (1 + clampedDist0 * spreadRate / 1000);
-                const width1 = baseWidth * outerRatio * (1 + clampedDist1 * spreadRate / 1000);
-                const avgWidth = (width0 + width1) / 2;
+                // Width lerps from iris diameter to full beam width
+                const width0 = irisDiameter + (fullBeamWidth - irisDiameter) * clampedT0;
+                const width1 = irisDiameter + (fullBeamWidth - irisDiameter) * clampedT1;
+                const avgWidth = (width0 + width1) / 2 * (1 + outerDance);
                 
-                // Segment positions (use clamped)
-                const x0 = b.startX + b.dirX * clampedDist0;
-                const y0 = b.startY + b.dirY * clampedDist0;
-                const x1 = b.startX + b.dirX * clampedDist1;
-                const y1 = b.startY + b.dirY * clampedDist1;
+                const x0 = b.startX + b.dirX * dist0;
+                const y0 = b.startY + b.dirY * dist0;
+                const x1 = b.startX + b.dirX * dist1;
+                const y1 = b.startY + b.dirY * dist1;
                 
-                // Outer beam (red)
+                // Outer (red)
                 this.ctx.beginPath();
                 this.ctx.moveTo(x0, y0);
                 this.ctx.lineTo(x1, y1);
@@ -683,25 +702,73 @@ const Combat = {
                 this.ctx.lineCap = 'round';
                 this.ctx.stroke();
                 
-                // Middle layer (orange)
+                // Middle (orange)
                 this.ctx.beginPath();
                 this.ctx.moveTo(x0, y0);
                 this.ctx.lineTo(x1, y1);
                 this.ctx.strokeStyle = `rgba(255, 150, 50, ${alpha})`;
                 this.ctx.lineWidth = avgWidth * midRatio;
                 this.ctx.stroke();
+            }
+            
+            // === OUTER BEAM: CYLINDER (scrolling segments) ===
+            // Starts after cone, scrolls backward
+            for (let i = 0; i < segments; i++) {
+                // Scroll phase offsets segment positions backward
+                const scrolledI = i - scrollPhase;
+                const t0 = scrolledI / segments;
+                const t1 = (scrolledI + 1) / segments;
                 
-                // White hot center
+                // Map to distance AFTER the cone
+                const dist0 = coneLength + t0 * (b.length - coneLength);
+                const dist1 = coneLength + t1 * (b.length - coneLength);
+                
+                // Skip if outside beam
+                if (dist1 < coneLength || dist0 > b.length) continue;
+                
+                // Clamp to valid range
+                const clampedDist0 = Math.max(coneLength, dist0);
+                const clampedDist1 = Math.min(b.length, dist1);
+                if (clampedDist1 - clampedDist0 < 1) continue;
+                
+                // Cylindrical: constant width with spread
+                const beamWidth0 = fullBeamWidth * (1 + clampedDist0 * spreadRate / 1000);
+                const beamWidth1 = fullBeamWidth * (1 + clampedDist1 * spreadRate / 1000);
+                const avgWidth = (beamWidth0 + beamWidth1) / 2 * (1 + outerDance);
+                
+                const x0 = b.startX + b.dirX * clampedDist0;
+                const y0 = b.startY + b.dirY * clampedDist0;
+                const x1 = b.startX + b.dirX * clampedDist1;
+                const y1 = b.startY + b.dirY * clampedDist1;
+                
+                // Outer (red)
                 this.ctx.beginPath();
                 this.ctx.moveTo(x0, y0);
                 this.ctx.lineTo(x1, y1);
-                this.ctx.strokeStyle = `rgba(255, 255, 255, ${alpha * (0.7 + tier * 0.1)})`;
-                this.ctx.lineWidth = avgWidth * coreRatio;
+                this.ctx.strokeStyle = `rgba(255, 0, 0, ${alpha})`;
+                this.ctx.lineWidth = avgWidth;
+                this.ctx.lineCap = 'round';
+                this.ctx.stroke();
+                
+                // Middle (orange)
+                this.ctx.beginPath();
+                this.ctx.moveTo(x0, y0);
+                this.ctx.lineTo(x1, y1);
+                this.ctx.strokeStyle = `rgba(255, 150, 50, ${alpha})`;
+                this.ctx.lineWidth = avgWidth * midRatio;
                 this.ctx.stroke();
             }
             
-            // Outer red rings - moving BACKWARD (recoil/structure)
-            // REMOVED - segments themselves will create the ring effect
+            // === INNER BEAM: Fixed width = iris diameter ===
+            // The white-hot energy channel, constant width throughout
+            const innerWidth = irisDiameter * (1 + coreDance * 0.1);  // slight wobble
+            this.ctx.beginPath();
+            this.ctx.moveTo(b.startX, b.startY);
+            this.ctx.lineTo(b.startX + b.dirX * b.length, b.startY + b.dirY * b.length);
+            this.ctx.strokeStyle = `rgba(255, 255, 255, ${alpha * (0.7 + tier * 0.1)})`;
+            this.ctx.lineWidth = innerWidth;
+            this.ctx.lineCap = 'round';
+            this.ctx.stroke();
             
             // Inner white pulses - moving FORWARD (energy expelled)
             const pulseCount = 4 + tier * 2;

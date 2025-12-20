@@ -166,7 +166,7 @@ const Items = {
             rarity: 'legendary',
             stackable: true,
             condition: { negativeRatio: { gt: 0.7 } },
-            effects: { demonic: true, tint: '#ff0000', laserCharge: true, laserWidth: 80 },
+            effects: { demonic: true, tint: '#ff0000', laserCharge: true, laserWidth: 80, laserFillTime: 1.0, laserDuration: 10.5 },
             sound: 'zelda_secret'
         },
         
@@ -431,8 +431,10 @@ const Items = {
             stinky: false,
             infected: false,
             divine: false,
-            laserCharge: 0,  // Now a number - beam level
-            laserWidth: 25,  // Base beam width in px (max of all items)
+            laserCharge: 0,      // Now a number - beam level
+            laserWidth: 25,      // Base beam width in px (max of all items)
+            laserFillTime: 1.0,  // Seconds to fill one tier (averaged)
+            laserDuration: 0.5,  // Base beam duration (max of all items)
         };
         
         // Count items in inventory for stacking
@@ -440,6 +442,10 @@ const Items = {
         for (const id of this.inventory) {
             itemCounts[id] = (itemCounts[id] || 0) + 1;
         }
+        
+        // Track laserFillTime for averaging
+        let fillTimeSum = 0;
+        let fillTimeCount = 0;
         
         // Stack effects from all items (using counts for stackable items)
         for (const [id, count] of Object.entries(itemCounts)) {
@@ -450,9 +456,13 @@ const Items = {
                 if (key === 'laserCharge') {
                     // laserCharge stacks additively based on item count
                     merged.laserCharge += value ? count : 0;
-                } else if (key === 'laserWidth') {
-                    // laserWidth takes max
-                    merged.laserWidth = Math.max(merged.laserWidth, value);
+                } else if (key === 'laserWidth' || key === 'laserDuration') {
+                    // laserWidth and laserDuration take max
+                    merged[key] = Math.max(merged[key], value);
+                } else if (key === 'laserFillTime') {
+                    // laserFillTime averages (each item contributes count times)
+                    fillTimeSum += value * count;
+                    fillTimeCount += count;
                 } else if (typeof value === 'boolean') {
                     merged[key] = merged[key] || value;  // OR booleans
                 } else if (typeof value === 'number') {
@@ -462,6 +472,11 @@ const Items = {
                     merged[key] = value;  // Last wins for strings/colors
                 }
             }
+        }
+        
+        // Apply averaged laserFillTime
+        if (fillTimeCount > 0) {
+            merged.laserFillTime = fillTimeSum / fillTimeCount;
         }
         
         return merged;

@@ -106,10 +106,6 @@ const state = {
     lookingAtGraph: false,
     beingCornered: false,
 
-    // Beam charging
-    charging: false,
-    chargePercent: 0,
-
     // Visual params
     barCount: 20,
     gapRatio: 0.2,
@@ -553,6 +549,71 @@ const expressions = {
             }
         },
     },
+    charging: {
+        lerp: {
+            top: { shapes: [{ type: 'gaussian', params: { width: 2 }, offset: 0, amplitude: 1 }], maxHeight: 0.35 },
+            bottom: { shapes: [{ type: 'gaussian', params: { width: 2 }, offset: 0, amplitude: 1 }], maxHeight: 0.35 },
+            irisRadius: 0.15,
+            irisYOffset: 0,
+            irisXOffset: 0,
+            lashMultiplier: 1.5,
+            driftStrength: 0,
+            topSampleSpeed: 0,
+            bottomSampleSpeed: 0,
+        },
+        snap: {
+            // NOT peeved - iris follows cursor while charging
+        },
+        onEnter: () => {
+            disallowBlinking();
+        },
+        onExit: () => {
+            allowBlinking();
+        },
+        update: (dt) => {
+            // Get charge info from Combat
+            const completedTier = Combat.completedTier || 0;
+            const tierProgress = Combat.tierProgress || 0;
+            const beamLevel = Combat.beamLevel || 1;
+            
+            // Force attention to 1 and fast gaze tracking while charging
+            state.attention = 1;
+            state.attentionThreshold = 0;
+            state.gazeSpeed = 10;  // instant tracking
+            
+            // Iris GROWS with charge (more energy = bigger), caps at first tier complete
+            const chargeForIris = Math.min(1, completedTier + tierProgress);  // 0-1, caps at tier 1
+            state.irisRadius = 0.12 + chargeForIris * 0.12;  // 0.12 to 0.24
+            
+            // Tremor increases with charge
+            state.driftStrength = (completedTier / beamLevel) * 0.02;
+        },
+    },
+    firing: {
+        lerp: {
+            top: { shapes: [{ type: 'gaussian', params: { width: 2 }, offset: 0, amplitude: 1 }], maxHeight: 0.35 },
+            bottom: { shapes: [{ type: 'gaussian', params: { width: 2 }, offset: 0, amplitude: 1 }], maxHeight: 0.35 },
+            irisRadius: 0.24,
+            irisYOffset: 0,
+            irisXOffset: 0,
+            lashMultiplier: 1.5,
+            driftStrength: 0.01,
+            topSampleSpeed: 0,
+            bottomSampleSpeed: 0,
+        },
+        snap: {
+            peeved: true,  // locks gaze while beam is active
+        },
+        onEnter: () => {
+            disallowBlinking();
+        },
+        onExit: () => {
+            allowBlinking();
+        },
+        update: (dt) => {
+            state.attention = 1;
+        },
+    },
 };
 
 function deepCopy(obj) {
@@ -868,9 +929,8 @@ function draw() {
 
     const baseIrisRadius = state.irisRadius;
     const dilationBonus = state.dilation * 0.08;
-    // Charging contracts the pupil
-    const chargeContraction = state.charging ? state.chargePercent * 0.06 : 0;
-    const irisRadius = baseIrisRadius + dilationBonus - chargeContraction;
+    const irisRadius = baseIrisRadius + dilationBonus;
+    
     const irisXOffset = state.irisXOffset;
     const irisYOffset = state.irisYOffset;
     const lashMultiplier = state.lashMultiplier;
@@ -907,17 +967,6 @@ function draw() {
     let tintedPositive = lerpColor(colorPositive, blushColor, blushAmount);
     let tintedNegative = lerpColor(colorNegative, blushColor, blushAmount);
 
-    // Demonic red tint when charging
-    if (state.charging) {
-        const demonicColor = '#ff2200';
-        const demonicAmount = state.chargePercent * 0.6;
-        tintedPositive = lerpColor(tintedPositive, demonicColor, demonicAmount);
-        tintedNegative = lerpColor(tintedNegative, demonicColor, demonicAmount);
-    }
-
-    // Charge tremor effect
-    const chargeTremor = state.charging ? state.chargePercent * 2 : 0;
-
     for (let i = 0; i < barCount; i++) {
         const topBarPosition = (i - (barCount - 1) / 2) + state.topSampleOffset;
         const bottomBarPosition = (i - (barCount - 1) / 2) + state.bottomSampleOffset;
@@ -925,11 +974,8 @@ function draw() {
         const wrappedTopPosition = ((topBarPosition % barCount) + barCount) % barCount - (barCount - 1) / 2;
         const wrappedBottomPosition = ((bottomBarPosition % barCount) + barCount) % barCount - (barCount - 1) / 2;
 
-        // Add tremor when charging
-        const tremor = chargeTremor * (Math.random() - 0.5);
-
-        const topX = startX + (wrappedTopPosition + barCount / 2) * spacing + spacing / 2 + tremor;
-        const bottomX = startX + (wrappedBottomPosition + barCount / 2) * spacing + spacing / 2 + tremor;
+        const topX = startX + (wrappedTopPosition + barCount / 2) * spacing + spacing / 2;
+        const bottomX = startX + (wrappedBottomPosition + barCount / 2) * spacing + spacing / 2;
 
         const topNormalizedX = wrappedTopPosition / (barCount / 2);
         const bottomNormalizedX = wrappedBottomPosition / (barCount / 2);
