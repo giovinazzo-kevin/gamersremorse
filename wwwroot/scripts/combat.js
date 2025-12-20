@@ -131,7 +131,7 @@ const Combat = {
     },
 
     hitstop(frames, enemy = null) {
-        const scaled = frames * this.config.hitstop * Atmosphere.getHitstopMultiplier();
+        const scaled = frames * this.config.hitstop;
         this.hitstopFrames = Math.max(this.hitstopFrames, scaled);
         if (enemy && this.config.hitflash) {
             this.flashingEnemies.add(enemy);
@@ -233,14 +233,14 @@ const Combat = {
         // Lock gaze while firing
         setExpression('firing');
         
-        // Spike power on beam fire
-        Atmosphere.spikePower(tier);
+        // Track beam DPS for power system
+        // (actual damage tracked per-tick in update)
         
         // Initial screen shake
         ScreenShake.shake(20 + tier * 15);
         
-        // White flash on release (scaled by power)
-        HitFlash.trigger(tier * 3 * Atmosphere.getHitflashMultiplier());
+        // White flash on release
+        HitFlash.trigger(tier * 3);
         
         // Schedule periodic shakes during beam (2 per second)
         const shakeInterval = 500;  // ms
@@ -292,6 +292,9 @@ const Combat = {
         
         // Update atmosphere (carnage/power decay, page filter)
         Atmosphere.update(dt);
+        
+        // Update particles
+        Particles.update(dt);
 
         if (this.holding) {
             state.attention = 1;
@@ -372,6 +375,12 @@ const Combat = {
                         const ticks = Math.floor(accum / tickInterval);
                         e.health -= damagePerTick * ticks;
                         b.tickAccum.set(e, accum - ticks * tickInterval);
+                        
+                        // Track damage for power system
+                        Atmosphere.addDamage(damagePerTick * ticks);
+                        
+                        // Damage number
+                        spawnDamageNumber(e.x, e.y - e.height / 2, Math.round(damagePerTick * ticks * 10) / 10, '#ff6600');
                         
                         // Light feedback per tick
                         HitFlash.trigger(damagePerTick * 0.5);
@@ -473,8 +482,14 @@ const Combat = {
                         t.elapsed = t.duration;
 
                         this.splash(pos, t.size, t.color);
-                        ScreenShake.shake(t.damage * 4);
-                        HitFlash.trigger(t.damage * Atmosphere.getHitflashMultiplier());
+                        // Track damage for power system
+                        Atmosphere.addDamage(t.damage);
+                        
+                        // Damage number
+                        spawnDamageNumber(pos.x, pos.y, t.damage, '#88ccff');
+                        
+                        ScreenShake.shake(t.damage * 4 * Atmosphere.getShakeMultiplier());
+                        HitFlash.trigger(t.damage);
                         this.hitstop(1, e);
                         sfx.pow();
 
@@ -979,6 +994,9 @@ const Combat = {
             }
         }
 
+        // Particles
+        Particles.render(this.ctx);
+        
         // Hit flash - white overlay
         const flashIntensity = HitFlash.getIntensity() * this.config.hitFlash;
         if (flashIntensity > 0) {

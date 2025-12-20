@@ -124,9 +124,11 @@ const HitFlash = {
 
 const Atmosphere = {
     carnage: 0,           // 0-1, spikes on kills, decays
-    power: 0,             // 0-1, spikes on beam fire, decays
     carnageDecay: 0.4,    // per second (~2.5 sec to fully decay)
-    powerDecay: 0.5,      // per second
+    
+    // Power: rolling DPS window
+    damageHistory: [],    // [{time, amount}, ...]
+    POWER_WINDOW: 1.0,    // 1 second rolling window
     
     // Page elements to desaturate (cached on init)
     pageWrapper: null,
@@ -175,20 +177,23 @@ const Atmosphere = {
         this.carnage = Math.min(1, this.carnage + amount);
     },
     
-    spikePower(tier) {
-        const amount = 0.2 + tier * 0.15;  // tier 1 = 0.35, tier 5 = 0.95
-        this.power = Math.min(1, this.power + amount);
+    addDamage(amount) {
+        this.damageHistory.push({
+            time: performance.now() / 1000,
+            amount
+        });
+    },
+    
+    getDPS() {
+        const now = performance.now() / 1000;
+        this.damageHistory = this.damageHistory.filter(d => now - d.time < this.POWER_WINDOW);
+        return this.damageHistory.reduce((sum, d) => sum + d.amount, 0) / this.POWER_WINDOW;
     },
     
     update(dt) {
         // Decay carnage
         if (this.carnage > 0) {
             this.carnage = Math.max(0, this.carnage - this.carnageDecay * dt);
-        }
-        
-        // Decay power
-        if (this.power > 0) {
-            this.power = Math.max(0, this.power - this.powerDecay * dt);
         }
         
         // Apply page desaturation
@@ -218,13 +223,17 @@ const Atmosphere = {
     // Removed - now inline in updatePageFilter
     // updateCarnageMatrix() { ... }
     
-    // Multipliers for combat effects
-    getHitstopMultiplier() {
-        return 1 + this.power * 2;  // up to 3x hitstop at max power
+    // Multipliers for combat effects based on DPS
+    getShakeMultiplier() {
+        const dps = this.getDPS();
+        if (dps < 10) return 1;
+        return 1 + Math.log10(dps);  // DPS 10 = 2x, DPS 100 = 3x, DPS 1000 = 4x
     },
     
-    getHitflashMultiplier() {
-        return 1 + this.power * 1.5;  // up to 2.5x flash at max power
+    getParticleMultiplier() {
+        const dps = this.getDPS();
+        if (dps < 10) return 1;
+        return 1 + Math.log10(dps) * 0.5;  // DPS 10 = 1.5x, DPS 100 = 2x, DPS 1000 = 2.5x
     },
 };
 
