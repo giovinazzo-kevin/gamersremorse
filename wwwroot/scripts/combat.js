@@ -61,6 +61,7 @@ const Combat = {
         window.addEventListener('resize', () => this.resize());
         this.loadConfig();
         this.frameEffects = Items.getMergedEffects();
+        Atmosphere.init();
     },
 
     loadConfig() {
@@ -130,7 +131,7 @@ const Combat = {
     },
 
     hitstop(frames, enemy = null) {
-        const scaled = frames * this.config.hitstop;
+        const scaled = frames * this.config.hitstop * Atmosphere.getHitstopMultiplier();
         this.hitstopFrames = Math.max(this.hitstopFrames, scaled);
         if (enemy && this.config.hitflash) {
             this.flashingEnemies.add(enemy);
@@ -232,11 +233,14 @@ const Combat = {
         // Lock gaze while firing
         setExpression('firing');
         
+        // Spike power on beam fire
+        Atmosphere.spikePower(tier);
+        
         // Initial screen shake
         ScreenShake.shake(20 + tier * 15);
         
-        // White flash on release
-        HitFlash.trigger(tier * 3);
+        // White flash on release (scaled by power)
+        HitFlash.trigger(tier * 3 * Atmosphere.getHitflashMultiplier());
         
         // Schedule periodic shakes during beam (2 per second)
         const shakeInterval = 500;  // ms
@@ -285,6 +289,9 @@ const Combat = {
 
     update(dt) {
         this.frameEffects = Items.getMergedEffects();
+        
+        // Update atmosphere (carnage/power decay, page filter)
+        Atmosphere.update(dt);
 
         if (this.holding) {
             state.attention = 1;
@@ -375,6 +382,7 @@ const Combat = {
                         e.knockbackVY = b.dirY * 80;
                         
                         if (e.dead) {
+                            Atmosphere.spikeCarnage(0.25);
                             ScreenShake.shake(b.damage * 10);
                             this.hitstop(4);
                         }
@@ -466,7 +474,7 @@ const Combat = {
 
                         this.splash(pos, t.size, t.color);
                         ScreenShake.shake(t.damage * 4);
-                        HitFlash.trigger(t.damage);
+                        HitFlash.trigger(t.damage * Atmosphere.getHitflashMultiplier());
                         this.hitstop(1, e);
                         sfx.pow();
 
@@ -483,6 +491,7 @@ const Combat = {
                         e.knockbackVY = dirY * 150;
 
                         if (e.dead) {
+                            Atmosphere.spikeCarnage(0.3);
                             ScreenShake.shake(t.damage * 40);
                             this.hitstop(4);
                         }

@@ -122,6 +122,112 @@ const HitFlash = {
     }
 }
 
+const Atmosphere = {
+    carnage: 0,           // 0-1, spikes on kills, decays
+    power: 0,             // 0-1, spikes on beam fire, decays
+    carnageDecay: 0.4,    // per second (~2.5 sec to fully decay)
+    powerDecay: 0.5,      // per second
+    
+    // Page elements to desaturate (cached on init)
+    pageWrapper: null,
+    
+    init() {
+        // Create wrapper for page content that gets desaturated
+        // Combat canvas is z-index 1001, outside this filter
+        this.pageWrapper = document.getElementById('main-content') || document.body;
+        
+        // Create SVG filter for red-preserving desaturation
+        this.createCarnageFilter();
+    },
+    
+    createCarnageFilter() {
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.style.cssText = 'position:absolute;width:0;height:0;pointer-events:none;';
+        svg.innerHTML = `
+            <defs>
+                <filter id="carnage-filter" color-interpolation-filters="sRGB">
+                    <!-- Pass 1: Greyscale version -->
+                    <feColorMatrix type="saturate" in="SourceGraphic" values="0" result="grey"/>
+                    
+                    <!-- Pass 2: Red dominance -> alpha channel -->
+                    <feColorMatrix type="matrix" in="SourceGraphic" result="redMask"
+                        values="0 0 0 0 0
+                                0 0 0 0 0
+                                0 0 0 0 0
+                                2 -1 -1 0 0"/>
+                    
+                    <!-- Pass 3: Use red mask alpha to blend original over grey -->
+                    <feComposite in="SourceGraphic" in2="redMask" operator="in" result="redParts"/>
+                    <feComposite in="redParts" in2="grey" operator="over" result="carnageResult"/>
+                    
+                    <!-- Pass 4: Blend between original and carnage result -->
+                    <feComposite id="carnage-mix" in="carnageResult" in2="SourceGraphic" operator="arithmetic"
+                        k1="0" k2="1" k3="0" k4="0"/>
+                </filter>
+            </defs>
+        `;
+        document.body.appendChild(svg);
+        this.filterSvg = svg;
+        this.carnageMix = document.getElementById('carnage-mix');
+    },
+    
+    spikeCarnage(amount = 0.3) {
+        this.carnage = Math.min(1, this.carnage + amount);
+    },
+    
+    spikePower(tier) {
+        const amount = 0.2 + tier * 0.15;  // tier 1 = 0.35, tier 5 = 0.95
+        this.power = Math.min(1, this.power + amount);
+    },
+    
+    update(dt) {
+        // Decay carnage
+        if (this.carnage > 0) {
+            this.carnage = Math.max(0, this.carnage - this.carnageDecay * dt);
+        }
+        
+        // Decay power
+        if (this.power > 0) {
+            this.power = Math.max(0, this.power - this.powerDecay * dt);
+        }
+        
+        // Apply page desaturation
+        this.updatePageFilter();
+    },
+    
+    updatePageFilter() {
+        if (!this.pageWrapper) return;
+        
+        const c = this.carnage;
+        
+        if (c > 0.01) {
+            // Update SVG filter blend
+            // Color stays full desat until carnage drops below threshold, then snaps back
+            const colorBlend = c > 0.15 ? 1 : c / 0.15;  // full grey until last 15%, then fade
+            if (this.carnageMix) {
+                this.carnageMix.setAttribute('k2', colorBlend);
+                this.carnageMix.setAttribute('k3', 1 - colorBlend);
+            }
+            // Contrast fades normally
+            this.pageWrapper.style.filter = `url(#carnage-filter) contrast(${1 + c * 0.5})`;
+        } else {
+            this.pageWrapper.style.filter = '';
+        }
+    },
+    
+    // Removed - now inline in updatePageFilter
+    // updateCarnageMatrix() { ... }
+    
+    // Multipliers for combat effects
+    getHitstopMultiplier() {
+        return 1 + this.power * 2;  // up to 3x hitstop at max power
+    },
+    
+    getHitflashMultiplier() {
+        return 1 + this.power * 1.5;  // up to 2.5x flash at max power
+    },
+};
+
 const LowHPOverlay = {
     currentHP: 6,
     maxHP: 6,
@@ -156,3 +262,6 @@ const LowHPOverlay = {
         return base * 0.3 + pulse * 0.2;  // subtle base + pulse
     }
 }
+
+// Export to global scope
+window.Atmosphere = Atmosphere;
