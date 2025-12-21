@@ -111,7 +111,7 @@ public record SteamReviewRepository(
         };
 
         var filters = totalReviews switch {
-            > 100000 => ["all", "updated", "recent"],
+            > 100000 => ["all", "updated"],
             > 10000 => ["all", "updated"],
             _ => new[] { "all" }
         };
@@ -131,14 +131,20 @@ public record SteamReviewRepository(
             FullMode = BoundedChannelFullMode.Wait
         });
 
-        // Fire off parallel cursors (don't await - runs in background)
+        // Fire off adaptive cursor pool (prioritizes whichever sentiment needs more samples)
         using var poolCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        var allCursors = positiveCursors.Concat(negativeCursors).ToList();
-        var poolTask = CursorPool.RunCursors(allCursors, merged.Writer, poolCts.Token);
-
+        
         // Track sampling progress
         var sampledPositive = 0;
         var sampledNegative = 0;
+        
+        var poolTask = CursorPool.RunCursorsAdaptive(
+            positiveCursors,
+            negativeCursors,
+            () => new SamplingProgress(sampledPositive, sampledNegative, meta.TotalPositive, meta.TotalNegative),
+            merged.Writer,
+            poolCts.Token
+        );
         
         // Mark as streaming
         meta = meta with { IsStreaming = true };

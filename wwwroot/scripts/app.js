@@ -83,8 +83,11 @@ function getLoadingMessage() {
     return pool[Math.floor(Math.random() * pool.length)];
 }
 
-document.getElementById('hideAnomalies')?.addEventListener('change', () => {
-    if (currentSnapshot) updateChart(currentSnapshot);
+document.getElementById('hidePrediction')?.addEventListener('change', () => {
+    if (currentSnapshot) {
+        updateChart(currentSnapshot);
+        drawTimeline();
+    }
 });
 document.getElementById('hideSpikes')?.addEventListener('change', () => {
     if (currentSnapshot) {
@@ -92,6 +95,7 @@ document.getElementById('hideSpikes')?.addEventListener('change', () => {
         updateVelocityChart(currentSnapshot);
         updateLanguageChart(currentSnapshot);
         updateStats(currentSnapshot);
+        drawTimeline();
     }
 });
 document.getElementById('hideAnnotations')?.addEventListener('change', () => {
@@ -281,41 +285,59 @@ function updateChart(snapshot) {
     const buckets = showTotal ? snapshot.bucketsByTotalTime : snapshot.bucketsByReviewTime;
 
     const labels = buckets.map(() => '');
-    const hideAnomalies = document.getElementById('hideAnomalies').checked;
+    const hidePrediction = document.getElementById('hidePrediction')?.checked ?? false;
     const hideAnnotations = document.getElementById('hideAnnotations').checked;
-    const anomalySet = new Set(snapshot.anomalyIndices);
 
-    const positive = buckets.map((b, i) => {
+    // Calculate projection multipliers from sample rates
+    const posRate = snapshot.positiveSampleRate ?? 1;
+    const negRate = snapshot.negativeSampleRate ?? 1;
+    const posMultiplier = posRate > 0 ? 1 / posRate : 1;
+    const negMultiplier = negRate > 0 ? 1 / negRate : 1;
+    
+    // Check exhaustion
+    const posExhausted = snapshot.positiveExhausted ?? false;
+    const negExhausted = snapshot.negativeExhausted ?? false;
+
+    // Build 8 datasets: 4 sampled (solid) + 4 projected (faded)
+    const sampledPos = [];
+    const sampledUncPos = [];
+    const sampledNeg = [];
+    const sampledUncNeg = [];
+    const projectedPos = [];
+    const projectedUncPos = [];
+    const projectedNeg = [];
+    const projectedUncNeg = [];
+    
+    for (let i = 0; i < buckets.length; i++) {
+        const b = buckets[i];
         const filtered = filterBucketByTime(b);
-        return hideAnomalies && anomalySet.has(i) ? 0 : filtered.pos;
-    });
-    const uncertainPos = buckets.map((b, i) => {
-        const filtered = filterBucketByTime(b);
-        return hideAnomalies && anomalySet.has(i) ? 0 : filtered.uncPos;
-    });
-    const negative = buckets.map((b, i) => {
-        const filtered = filterBucketByTime(b);
-        return hideAnomalies && anomalySet.has(i) ? 0 : -filtered.neg;
-    });
-    const uncertainNeg = buckets.map((b, i) => {
-        const filtered = filterBucketByTime(b);
-        return hideAnomalies && anomalySet.has(i) ? 0 : -filtered.uncNeg;
-    });
+        
+        // Sampled values
+        sampledPos.push(filtered.pos);
+        sampledUncPos.push(filtered.uncPos);
+        sampledNeg.push(-filtered.neg);
+        sampledUncNeg.push(-filtered.uncNeg);
+        
+        // Projected extra (only if not exhausted and not hidden)
+        if (hidePrediction) {
+            projectedPos.push(0);
+            projectedUncPos.push(0);
+            projectedNeg.push(0);
+            projectedUncNeg.push(0);
+        } else {
+            const extraPos = posExhausted ? 0 : filtered.pos * (posMultiplier - 1);
+            const extraUncPos = posExhausted ? 0 : filtered.uncPos * (posMultiplier - 1);
+            const extraNeg = negExhausted ? 0 : filtered.neg * (negMultiplier - 1);
+            const extraUncNeg = negExhausted ? 0 : filtered.uncNeg * (negMultiplier - 1);
+            
+            projectedPos.push(extraPos);
+            projectedUncPos.push(extraUncPos);
+            projectedNeg.push(-extraNeg);
+            projectedUncNeg.push(-extraUncNeg);
+        }
+    }
 
     const colors = getColors();
-
-    const positiveColors = buckets.map((_, i) =>
-        hexToRgba(colors.positive, anomalySet.has(i) ? 0.3 : 0.7)
-    );
-    const uncertainPosColors = buckets.map((_, i) =>
-        hexToRgba(colors.uncertain, anomalySet.has(i) ? 0.3 : 0.7)
-    );
-    const negativeColors = buckets.map((_, i) =>
-        hexToRgba(colors.negative, anomalySet.has(i) ? 0.3 : 0.7)
-    );
-    const uncertainNegColors = buckets.map((_, i) =>
-        hexToRgba(colors.uncertain, anomalySet.has(i) ? 0.3 : 0.7)
-    );
 
     const posMedian = computeMedian(buckets, 'positive');
     const negMedian = computeMedian(buckets, 'negative');
@@ -343,10 +365,16 @@ function updateChart(snapshot) {
             data: {
                 labels,
                 datasets: [
-                    { label: '👍', data: positive, backgroundColor: positiveColors, stack: 'stack' },
-                    { label: '👍*', data: uncertainPos, backgroundColor: uncertainPosColors, stack: 'stack' },
-                    { label: '👎', data: negative, backgroundColor: negativeColors, stack: 'stack' },
-                    { label: '👎*', data: uncertainNeg, backgroundColor: uncertainNegColors, stack: 'stack' }
+                    // Sampled (solid)
+                    { label: '👍', data: sampledPos, backgroundColor: hexToRgba(colors.positive, 0.8), stack: 'stack' },
+                    { label: '👍*', data: sampledUncPos, backgroundColor: hexToRgba(colors.uncertain, 0.8), stack: 'stack' },
+                    { label: '👎', data: sampledNeg, backgroundColor: hexToRgba(colors.negative, 0.8), stack: 'stack' },
+                    { label: '👎*', data: sampledUncNeg, backgroundColor: hexToRgba(colors.uncertain, 0.8), stack: 'stack' },
+                    // Projected (faded) - hidden from legend
+                    { label: '👍 (proj)', data: projectedPos, backgroundColor: hexToRgba(colors.positive, 0.35), stack: 'stack', hidden: false },
+                    { label: '👍* (proj)', data: projectedUncPos, backgroundColor: hexToRgba(colors.uncertain, 0.35), stack: 'stack', hidden: false },
+                    { label: '👎 (proj)', data: projectedNeg, backgroundColor: hexToRgba(colors.negative, 0.35), stack: 'stack', hidden: false },
+                    { label: '👎* (proj)', data: projectedUncNeg, backgroundColor: hexToRgba(colors.uncertain, 0.35), stack: 'stack', hidden: false },
                 ]
             },
             options: {
@@ -361,6 +389,11 @@ function updateChart(snapshot) {
                     y: { stacked: true }
                 },
                 plugins: {
+                    legend: {
+                        labels: {
+                            filter: (item) => !item.text.includes('(proj)')
+                        }
+                    },
                     tooltip: {
                         callbacks: {
                             title: function (context) {
@@ -373,7 +406,11 @@ function updateChart(snapshot) {
                             label: function (context) {
                                 const value = Math.abs(context.raw);
                                 const label = context.dataset.label;
-                                return `${label}: ${value} reviews`;
+                                if (value === 0) return null;
+                                if (label.includes('(proj)')) {
+                                    return `${label.replace(' (proj)', '')} projected: +${Math.round(value)}`;
+                                }
+                                return `${label}: ${Math.round(value)} sampled`;
                             }
                         }
                     }
@@ -382,14 +419,22 @@ function updateChart(snapshot) {
         });
     } else {
         chart.data.labels = labels;
-        chart.data.datasets[0].data = positive;
-        chart.data.datasets[0].backgroundColor = positiveColors;
-        chart.data.datasets[1].data = uncertainPos;
-        chart.data.datasets[1].backgroundColor = uncertainPosColors;
-        chart.data.datasets[2].data = negative;
-        chart.data.datasets[2].backgroundColor = negativeColors;
-        chart.data.datasets[3].data = uncertainNeg;
-        chart.data.datasets[3].backgroundColor = uncertainNegColors;
+        chart.data.datasets[0].data = sampledPos;
+        chart.data.datasets[0].backgroundColor = hexToRgba(colors.positive, 0.8);
+        chart.data.datasets[1].data = sampledUncPos;
+        chart.data.datasets[1].backgroundColor = hexToRgba(colors.uncertain, 0.8);
+        chart.data.datasets[2].data = sampledNeg;
+        chart.data.datasets[2].backgroundColor = hexToRgba(colors.negative, 0.8);
+        chart.data.datasets[3].data = sampledUncNeg;
+        chart.data.datasets[3].backgroundColor = hexToRgba(colors.uncertain, 0.8);
+        chart.data.datasets[4].data = projectedPos;
+        chart.data.datasets[4].backgroundColor = hexToRgba(colors.positive, 0.35);
+        chart.data.datasets[5].data = projectedUncPos;
+        chart.data.datasets[5].backgroundColor = hexToRgba(colors.uncertain, 0.35);
+        chart.data.datasets[6].data = projectedNeg;
+        chart.data.datasets[6].backgroundColor = hexToRgba(colors.negative, 0.35);
+        chart.data.datasets[7].data = projectedUncNeg;
+        chart.data.datasets[7].backgroundColor = hexToRgba(colors.uncertain, 0.35);
         chart.update();
     }
     addCustomLabels(snapshot, buckets);
@@ -457,82 +502,125 @@ function updateLanguageChart(snapshot) {
     if (!stats) return;
 
     const range = getSelectedMonths();
+    const hideSpikes = document.getElementById('hideSpikes')?.checked;
+    const excludeMonths = hideSpikes && currentMetrics?.excludedMonths ? new Set(currentMetrics.excludedMonths) : new Set();
     
-    // Sum monthly dictionaries, respecting timeline filter
-    const sumByMonth = (dict) => {
-        if (!dict) return 0;
-        let total = 0;
-        for (const [month, count] of Object.entries(dict)) {
-            if (!range || (month >= range.from && month <= range.to)) {
-                total += count;
-            }
+    // Get all months in range
+    const allMonths = new Set();
+    for (const bucket of snapshot.bucketsByReviewTime) {
+        for (const month of Object.keys(bucket.positiveByMonth || {})) allMonths.add(month);
+        for (const month of Object.keys(bucket.negativeByMonth || {})) allMonths.add(month);
+    }
+    
+    const months = [...allMonths]
+        .filter(m => !excludeMonths.has(m))
+        .filter(m => !range || (m >= range.from && m <= range.to))
+        .sort();
+    
+    if (months.length < 2) return;
+    
+    // Count reviews per month for rate calculation
+    const reviewsByMonth = {};
+    for (const bucket of snapshot.bucketsByReviewTime) {
+        for (const month of months) {
+            const count = (bucket.positiveByMonth?.[month] || 0) +
+                         (bucket.negativeByMonth?.[month] || 0) +
+                         (bucket.uncertainPositiveByMonth?.[month] || 0) +
+                         (bucket.uncertainNegativeByMonth?.[month] || 0);
+            reviewsByMonth[month] = (reviewsByMonth[month] || 0) + count;
         }
-        return total;
+    }
+    
+    // Build time series for each language metric (as % of reviews that month)
+    const series = {
+        slurs: months.map(m => {
+            const reviews = reviewsByMonth[m] || 1;
+            return ((stats.slursByMonth?.[m] || 0) / reviews) * 100;
+        }),
+        profanity: months.map(m => {
+            const reviews = reviewsByMonth[m] || 1;
+            return ((stats.profanityByMonth?.[m] || 0) / reviews) * 100;
+        }),
+        insults: months.map(m => {
+            const reviews = reviewsByMonth[m] || 1;
+            return ((stats.insultsByMonth?.[m] || 0) / reviews) * 100;
+        }),
+        complaints: months.map(m => {
+            const reviews = reviewsByMonth[m] || 1;
+            return ((stats.complaintsByMonth?.[m] || 0) / reviews) * 100;
+        }),
+        banter: months.map(m => {
+            const reviews = reviewsByMonth[m] || 1;
+            return ((stats.banterByMonth?.[m] || 0) / reviews) * 100;
+        }),
     };
     
-    // Count reviews in selected range for rate calculation
-    let reviewsInRange = 0;
-    for (const bucket of snapshot.bucketsByReviewTime) {
-        const filtered = filterBucketByTime(bucket);
-        reviewsInRange += filtered.pos + filtered.neg + filtered.uncPos + filtered.uncNeg;
-    }
-    if (reviewsInRange === 0) return;
-
-    const profanity = sumByMonth(stats.profanityByMonth);
-    const insults = sumByMonth(stats.insultsByMonth);
-    const slurs = sumByMonth(stats.slursByMonth);
-    const banter = sumByMonth(stats.banterByMonth);
-    const complaints = sumByMonth(stats.complaintsByMonth);
-
-    // calculate rate per review in range, show as percentage
-    const profanityRate = (profanity / reviewsInRange * 100).toFixed(1);
-    const insultsRate = (insults / reviewsInRange * 100).toFixed(1);
-    const slursRate = (slurs / reviewsInRange * 100).toFixed(1);
-    const banterRate = (banter / reviewsInRange * 100).toFixed(1);
-    const complaintsRate = (complaints / reviewsInRange * 100).toFixed(1);
-
-    const labels = [
-        `Slurs (${slursRate}%)`,
-        `Profanity (${profanityRate}%)`,
-        `Insults (${insultsRate}%)`,
-        `Complaints (${complaintsRate}%)`,
-        `Banter (${banterRate}%)`,
-    ];
-    const data = [slurs, profanity, insults, complaints, banter];
     const colors = getColors();
-    const barColors = [
-        colors.negative,  // Slurs
-        colors.positive,  // Profanity
-        colors.negative,  // Insults
-        colors.positive,  // Complaints
-        colors.negative,  // Banter
-    ];
+    
+    // Generate distinct line colors by hue-rotating from base colors
+    // Negative family: slurs (base), profanity, insults
+    // Positive family: banter (base), complaints
+    const lineColors = {
+        slurs: colors.negative,                          // base negative (worst)
+        profanity: rotateHue(colors.negative, -40),      // negative shifted
+        insults: rotateHue(colors.negative, -80),        // negative shifted more
+        complaints: rotateHue(colors.positive, 50),      // positive shifted
+        banter: colors.positive,                         // base positive (most benign)
+    };
 
     if (!languageChart) {
         languageChart = new Chart(document.getElementById('language-chart'), {
-            type: 'bar',
+            type: 'line',
             data: {
-                labels,
-                datasets: [{
-                    data,
-                    backgroundColor: barColors
-                }]
+                labels: months,
+                datasets: [
+                    { label: 'Slurs', data: series.slurs, borderColor: lineColors.slurs, backgroundColor: 'transparent', tension: 0.3, pointRadius: 0 },
+                    { label: 'Profanity', data: series.profanity, borderColor: lineColors.profanity, backgroundColor: 'transparent', tension: 0.3, pointRadius: 0 },
+                    { label: 'Insults', data: series.insults, borderColor: lineColors.insults, backgroundColor: 'transparent', tension: 0.3, pointRadius: 0 },
+                    { label: 'Complaints', data: series.complaints, borderColor: lineColors.complaints, backgroundColor: 'transparent', tension: 0.3, pointRadius: 0 },
+                    { label: 'Banter', data: series.banter, borderColor: lineColors.banter, backgroundColor: 'transparent', tension: 0.3, pointRadius: 0 },
+                ]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
+                interaction: {
+                    intersect: false,
+                    mode: 'index'
+                },
                 plugins: {
-                    legend: { display: false }
+                    legend: { position: 'bottom' },
+                    tooltip: {
+                        callbacks: {
+                            label: ctx => `${ctx.dataset.label}: ${ctx.raw.toFixed(1)}%`
+                        }
+                    }
                 },
                 scales: {
-                    y: { beginAtZero: true }
+                    x: { 
+                        ticks: { maxTicksLimit: 8 }
+                    },
+                    y: { 
+                        beginAtZero: true,
+                        ticks: {
+                            callback: v => v + '%'
+                        }
+                    }
                 }
             }
         });
     } else {
-        languageChart.data.labels = labels;
-        languageChart.data.datasets[0].data = data;
-        languageChart.data.datasets[0].backgroundColor = barColors;
+        languageChart.data.labels = months;
+        languageChart.data.datasets[0].data = series.slurs;
+        languageChart.data.datasets[0].borderColor = lineColors.slurs;
+        languageChart.data.datasets[1].data = series.profanity;
+        languageChart.data.datasets[1].borderColor = lineColors.profanity;
+        languageChart.data.datasets[2].data = series.insults;
+        languageChart.data.datasets[2].borderColor = lineColors.insults;
+        languageChart.data.datasets[3].data = series.complaints;
+        languageChart.data.datasets[3].borderColor = lineColors.complaints;
+        languageChart.data.datasets[4].data = series.banter;
+        languageChart.data.datasets[4].borderColor = lineColors.banter;
         languageChart.update();
     }
 }
@@ -768,47 +856,200 @@ function drawTimeline() {
     timelineCtx.clearRect(0, 0, w, h);
 
     if (timelineData.months.length === 0) return;
+    if (!currentSnapshot) return;
+
+    // Get display options
+    const posExhausted = currentSnapshot?.positiveExhausted ?? false;
+    const negExhausted = currentSnapshot?.negativeExhausted ?? false;
+    const hidePrediction = document.getElementById('hidePrediction')?.checked ?? false;
+    const hideSpikes = document.getElementById('hideSpikes')?.checked ?? false;
+    const excludeMonths = hideSpikes && currentMetrics?.excludedMonths
+        ? new Set(currentMetrics.excludedMonths)
+        : new Set();
+    
+    // Ground truth from Steam
+    const gameTotalPos = currentSnapshot?.gameTotalPositive ?? 0;
+    const gameTotalNeg = currentSnapshot?.gameTotalNegative ?? 0;
+    const gameTotal = gameTotalPos + gameTotalNeg;
+    const trueRatio = gameTotal > 0 ? gameTotalPos / gameTotal : 0.5;
+    
+    // Build per-month sampled data, excluding spikes
+    const monthData = [];
+    let totalSampled = 0;
+    
+    for (const month of timelineData.months) {
+        if (excludeMonths.has(month)) continue;
+        
+        const pos = (timelineData.positive[month] || 0);
+        const neg = (timelineData.negative[month] || 0);
+        const uncPos = (timelineData.uncertainPos[month] || 0);
+        const uncNeg = (timelineData.uncertainNeg[month] || 0);
+        const sampledPos = pos + uncPos;
+        const sampledNeg = neg + uncNeg;
+        const sampledTotal = sampledPos + sampledNeg;
+        
+        totalSampled += sampledTotal;
+        monthData.push({ month, pos, neg, uncPos, uncNeg, sampledPos, sampledNeg, sampledTotal });
+    }
+    
+    if (monthData.length === 0 || totalSampled === 0) return;
+    
+    // PROJECTION LOGIC:
+    // Our sampling is frontloaded (recent months overrepresented).
+    // The "missing" reviews (gameTotal - totalSampled) are disproportionately OLD.
+    // 
+    // Approach: distribute missing volume BOTTOM-FIRST.
+    // Older months get filled up before newer months get extras.
+    // This counteracts the frontloading bias.
+    
+    const missingTotal = Math.max(0, gameTotal - totalSampled);
+    
+    // First pass: estimate each month's "fair share" of total volume.
+    // Use sampled distribution as a starting point, but we'll redistribute.
+    // For now, assume uniform-ish distribution as baseline, then adjust.
+    
+    // Calculate how much each month is "owed" vs what we sampled.
+    // If we sampled 10% of gameTotal, each month should have ~10% of its true volume.
+    // Months with LESS than that proportion are undersampled (older months).
+    
+    const sampleRate = totalSampled / gameTotal; // e.g., 0.14 for 20k of 145k
+    
+    // For each month, estimate its TRUE volume.
+    // If sampling were uniform, true volume = sampled / sampleRate.
+    // But sampling ISN'T uniform - it's frontloaded.
+    // So we use a position-based correction: older months get scaled up more.
+    
+    const n = monthData.length;
+    for (let i = 0; i < n; i++) {
+        const m = monthData[i];
+        
+        // Position 0 = oldest, position n-1 = newest
+        // Recent months are OVERSAMPLED (cursor is frontloaded), so we may have nearly all of them.
+        // Old months are UNDERSAMPLED, so we need to extrapolate more.
+        //
+        // Use exponential decay: newest months get almost no extrapolation,
+        // oldest months get full extrapolation.
+        const positionRatio = i / Math.max(1, n - 1); // 0 (oldest) to 1 (newest)
+        
+        // For newest months (positionRatio=1): multiplier → 1 (no extrapolation beyond sampled)
+        // For oldest months (positionRatio=0): multiplier → 1/sampleRate (full extrapolation)
+        // Use exponential interpolation between these
+        const maxMultiplier = sampleRate > 0 ? 1 / sampleRate : 1;
+        const multiplier = Math.pow(maxMultiplier, 1 - positionRatio);
+        
+        m.estimatedTrue = m.sampledTotal * multiplier;
+    }
+    
+    // Normalize so estimates sum to gameTotal
+    const estimateSum = monthData.reduce((sum, m) => sum + m.estimatedTrue, 0);
+    const normalizeFactor = estimateSum > 0 ? gameTotal / estimateSum : 1;
+    
+    for (const m of monthData) {
+        m.projectedTotal = m.estimatedTrue * normalizeFactor;
+        
+        // Key insight: spikes are ADDITIONAL angry/happy people on top of baseline.
+        // If this month is more negative than usual, only project the negatives.
+        // If this month is more positive than usual, only project the positives.
+        // The non-spiking side stays at what we sampled.
+        
+        const localRatio = m.sampledTotal > 0 ? m.sampledPos / m.sampledTotal : trueRatio;
+        const ratioDiff = localRatio - trueRatio; // positive = more positive than usual
+        
+        if (ratioDiff >= 0) {
+            // More positive than usual - only project positives, negatives stay as sampled
+            m.projectedNeg = m.sampledNeg;
+            m.projectedPos = Math.max(m.sampledPos, m.projectedTotal - m.projectedNeg);
+        } else {
+            // More negative than usual - only project negatives, positives stay as sampled
+            m.projectedPos = m.sampledPos;
+            m.projectedNeg = Math.max(m.sampledNeg, m.projectedTotal - m.projectedPos);
+        }
+        
+        // Extra is what we project minus what we sampled
+        // But respect exhaustion flags
+        m.extraPos = posExhausted ? 0 : Math.max(0, m.projectedPos - m.sampledPos);
+        m.extraNeg = negExhausted ? 0 : Math.max(0, m.projectedNeg - m.sampledNeg);
+    }
 
     const tagStripH = tagTimelineData.length > 0 ? 8 : 0;
     const chartH = h - 20 - tagStripH;
-    const barW = w / timelineData.months.length;
+    const barW = w / monthData.length;
+    
+    // Calculate max volume for scaling
+    let maxVolume = 1;
+    for (const m of monthData) {
+        if (hidePrediction) {
+            maxVolume = Math.max(maxVolume, m.sampledTotal);
+        } else {
+            maxVolume = Math.max(maxVolume, m.sampledTotal + m.extraPos + m.extraNeg);
+        }
+    }
 
-    for (let i = 0; i < timelineData.months.length; i++) {
-        const month = timelineData.months[i];
-        const pos = timelineData.positive[month] || 0;
-        const neg = timelineData.negative[month] || 0;
-        const uncPos = timelineData.uncertainPos[month] || 0;
-        const uncNeg = timelineData.uncertainNeg[month] || 0;
-        const total = pos + neg + uncPos + uncNeg;
-
-        if (total === 0) continue;
-
-        const totalH = (total / timelineData.maxVolume) * chartH;
-        const posH = (pos / total) * totalH;
-        const uncPosH = (uncPos / total) * totalH;
-        const negH = (neg / total) * totalH;
-        const uncNegH = (uncNeg / total) * totalH;
+    // Draw bars
+    for (let i = 0; i < monthData.length; i++) {
+        const m = monthData[i];
+        
+        const displayTotal = hidePrediction 
+            ? m.sampledTotal 
+            : (m.sampledTotal + m.extraPos + m.extraNeg);
+        
+        if (displayTotal === 0) continue;
+        
+        const totalH = (displayTotal / maxVolume) * chartH;
+        
+        // Heights for sampled portions
+        const sampledPosH = (m.pos / displayTotal) * totalH;
+        const sampledUncPosH = (m.uncPos / displayTotal) * totalH;
+        const sampledNegH = (m.neg / displayTotal) * totalH;
+        const sampledUncNegH = (m.uncNeg / displayTotal) * totalH;
+        
+        // Heights for projected extra
+        const projectedPosH = hidePrediction ? 0 : (m.extraPos / displayTotal) * totalH;
+        const projectedNegH = hidePrediction ? 0 : (m.extraNeg / displayTotal) * totalH;
 
         let y = chartH;
 
+        // === SAMPLED PORTION (bottom, solid) ===
+        timelineCtx.globalAlpha = 1;
+        
         // negative on bottom
         timelineCtx.fillStyle = colors.negative;
-        timelineCtx.fillRect(i * barW, y - negH, barW - 1, negH);
-        y -= negH;
+        timelineCtx.fillRect(i * barW, y - sampledNegH, barW - 1, sampledNegH);
+        y -= sampledNegH;
 
         // uncertain negative
         timelineCtx.fillStyle = colors.uncertain;
-        timelineCtx.fillRect(i * barW, y - uncNegH, barW - 1, uncNegH);
-        y -= uncNegH;
+        timelineCtx.fillRect(i * barW, y - sampledUncNegH, barW - 1, sampledUncNegH);
+        y -= sampledUncNegH;
 
         // uncertain positive
         timelineCtx.fillStyle = colors.uncertain;
-        timelineCtx.fillRect(i * barW, y - uncPosH, barW - 1, uncPosH);
-        y -= uncPosH;
+        timelineCtx.fillRect(i * barW, y - sampledUncPosH, barW - 1, sampledUncPosH);
+        y -= sampledUncPosH;
 
-        // positive on top
+        // positive
         timelineCtx.fillStyle = colors.positive;
-        timelineCtx.fillRect(i * barW, y - posH, barW - 1, posH);
+        timelineCtx.fillRect(i * barW, y - sampledPosH, barW - 1, sampledPosH);
+        y -= sampledPosH;
+
+        // === PROJECTED PORTION (top, faded) ===
+        if (!hidePrediction && (projectedPosH > 0 || projectedNegH > 0)) {
+            timelineCtx.globalAlpha = 0.5;
+            
+            if (projectedNegH > 0) {
+                timelineCtx.fillStyle = colors.negative;
+                timelineCtx.fillRect(i * barW, y - projectedNegH, barW - 1, projectedNegH);
+                y -= projectedNegH;
+            }
+
+            if (projectedPosH > 0) {
+                timelineCtx.fillStyle = colors.positive;
+                timelineCtx.fillRect(i * barW, y - projectedPosH, barW - 1, projectedPosH);
+                y -= projectedPosH;
+            }
+            
+            timelineCtx.globalAlpha = 1;
+        }
     }
 
     // Draw tag strip below chart
@@ -816,12 +1057,11 @@ function drawTimeline() {
         const stripY = chartH + 2;
 
         for (const entry of tagTimelineData) {
-            const monthIdx = timelineData.months.indexOf(entry.month);
+            const monthIdx = monthData.findIndex(m => m.month === entry.month);
             if (monthIdx < 0) continue;
 
-            const x = (monthIdx / timelineData.months.length) * w;
+            const x = (monthIdx / monthData.length) * w;
 
-            // Draw primary tag color (first non-data-quality tag)
             const significantTags = entry.tags.filter(t =>
                 !['LOW_DATA', 'CORRUPTED', 'HORNY'].includes(t)
             );
@@ -833,7 +1073,7 @@ function drawTimeline() {
         }
     }
 
-    // selection outline
+    // Selection outline
     const selX = timelineSelection.start * w;
     const selW = (timelineSelection.end - timelineSelection.start) * w;
 
@@ -841,21 +1081,22 @@ function drawTimeline() {
     timelineCtx.lineWidth = 2;
     timelineCtx.strokeRect(selX, 0, selW, chartH + tagStripH);
 
-    // handles
+    // Handles
     timelineCtx.fillStyle = '#8b0000';
     timelineCtx.fillRect(selX - 4, 0, 8, chartH + tagStripH);
     timelineCtx.fillRect(selX + selW - 4, 0, 8, chartH + tagStripH);
 
-    // year labels
+    // Year labels
     timelineCtx.fillStyle = isDarkMode() ? '#888' : '#666';
     timelineCtx.font = '10px Verdana';
     timelineCtx.textAlign = 'center';
 
-    const years = [...new Set(timelineData.months.map(m => m.split('-')[0]))];
+    const years = [...new Set(monthData.map(m => m.month.split('-')[0]))];
     for (const year of years) {
-        const juneIdx = timelineData.months.indexOf(`${year}-06`);
+        const juneMonth = `${year}-06`;
+        const juneIdx = monthData.findIndex(m => m.month === juneMonth);
         if (juneIdx < 0) continue;
-        const x = (juneIdx / timelineData.months.length) * w;
+        const x = (juneIdx / monthData.length) * w;
         timelineCtx.fillText(year, x, h - 5);
     }
 
@@ -932,6 +1173,7 @@ function applyTimelineFilter() {
         updateChart(currentSnapshot);
         updateVelocityChart(currentSnapshot);
         updateLanguageChart(currentSnapshot);
+        updateEditHeatmap(currentSnapshot);
         updateStats(currentSnapshot);
         updateMetrics(currentSnapshot);
         if (currentMetrics) {
@@ -1280,6 +1522,24 @@ function updateEditHeatmap(snapshot) {
     const heatmap = snapshot.editHeatmap;
     let months = heatmap.months || [];
     let cells = heatmap.cells || {};
+    
+    // Apply timeline filter
+    const range = getSelectedMonths();
+    if (range) {
+        // Filter months to only those in range
+        months = months.filter(m => m >= range.from && m <= range.to);
+        
+        // Filter cells to only those where both posted and edited are in range
+        const filteredCells = {};
+        for (const [key, cell] of Object.entries(cells)) {
+            const [postedMonth, editedMonth] = key.split('|');
+            if (postedMonth >= range.from && postedMonth <= range.to &&
+                editedMonth >= range.from && editedMonth <= range.to) {
+                filteredCells[key] = cell;
+            }
+        }
+        cells = filteredCells;
+    }
     
     // If too many months, aggregate to quarters or years
     if (months.length > 96) {
@@ -1635,13 +1895,16 @@ function detectNotableEvents(metrics, snapshot) {
     // Review bombs
     if (tags.includes('REVIEW_BOMBED') && metrics.negativeSpikes) {
         for (const spike of metrics.negativeSpikes) {
-            if (spike.z >= 3 && spike.count >= 50) {
+            const hasVolume = spike.isVolumeSpike && spike.count >= 50;
+            const hasSentiment = spike.isSentimentSpike && spike.sentimentZ >= 2;
+            if (hasVolume || hasSentiment) {
                 const year = spike.month.split('-')[0];
+                const severity = Math.max(spike.volumeZ || 0, spike.sentimentZ || 0);
                 events.push({
                     type: 'review_bomb',
                     year,
                     month: spike.month,
-                    severity: spike.z,
+                    severity,
                     count: spike.count,
                     tag: 'REVIEW_BOMBED'
                 });

@@ -33,11 +33,14 @@ function setDarkMode(enabled, saveToStorage = true) {
     Chart.defaults.scale.grid.color = gridColor;
     Chart.defaults.scale.ticks.color = textColor;
     
+    // Clear pattern cache on theme change
+    if (typeof clearPatternCache === 'function') clearPatternCache();
+    
     if (chart) chart.update();
     if (velocityChart) velocityChart.update();
     if (languageChart) languageChart.update();
     
-     drawTimeline();
+    drawTimeline();
     
     if (saveToStorage) {
         const saved = localStorage.getItem('eyeSettings');

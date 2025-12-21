@@ -236,21 +236,45 @@ const Metrics = {
         },
         {
             id: 'REVIEW_BOMBED',
-            condition: (m) => m.negativeSpikes?.length > 0 && m.negativeSpikes.some(s => s.z >= 3 && s.count >= 50),
+            condition: (m) => m.negativeSpikes?.length > 0 && m.negativeSpikes.some(s => {
+                // Volume spike with high neg ratio, OR sentiment spike
+                const hasVolume = s.isVolumeSpike && s.count >= 50;
+                const hasSentiment = s.isSentimentSpike && s.sentimentZ >= 2;
+                return hasVolume || hasSentiment;
+            }),
             reason: (m) => {
-                const significant = m.negativeSpikes.filter(s => s.z >= 3 && s.count >= 50);
+                const significant = m.negativeSpikes.filter(s => {
+                    const hasVolume = s.isVolumeSpike && s.count >= 50;
+                    const hasSentiment = s.isSentimentSpike && s.sentimentZ >= 2;
+                    return hasVolume || hasSentiment;
+                });
                 const totalCount = significant.reduce((sum, s) => sum + s.count, 0);
                 const months = significant.map(s => s.month).join(', ');
-                return `${significant.length} negative surge${significant.length > 1 ? 's' : ''} (${months}): ${totalCount} reviews excluded`;
+                const types = significant.map(s => {
+                    if (s.isVolumeSpike && s.isSentimentSpike) return 'both';
+                    if (s.isVolumeSpike) return 'volume';
+                    return 'sentiment';
+                });
+                const hasSentimentOnly = types.some(t => t === 'sentiment');
+                const suffix = hasSentimentOnly ? ' (sentiment spike)' : '';
+                return `${significant.length} negative surge${significant.length > 1 ? 's' : ''} (${months})${suffix}: ${totalCount} reviews excluded`;
             },
             severity: 0,
             color: 'var(--color-tag-review-bombed)'
         },
         {
             id: 'SURGE',
-            condition: (m) => m.positiveSpikes?.length > 0 && m.positiveSpikes.some(s => s.z >= 4 && s.count >= 100 && s.multiple >= 3),
+            condition: (m) => m.positiveSpikes?.length > 0 && m.positiveSpikes.some(s => {
+                const hasVolume = s.isVolumeSpike && s.count >= 100 && s.multiple >= 3;
+                const hasSentiment = s.isSentimentSpike && s.sentimentZ <= -2;
+                return hasVolume || hasSentiment;
+            }),
             reason: (m) => {
-                const significant = m.positiveSpikes.filter(s => s.z >= 4 && s.count >= 100 && s.multiple >= 3);
+                const significant = m.positiveSpikes.filter(s => {
+                    const hasVolume = s.isVolumeSpike && s.count >= 100 && s.multiple >= 3;
+                    const hasSentiment = s.isSentimentSpike && s.sentimentZ <= -2;
+                    return hasVolume || hasSentiment;
+                });
                 const months = significant.map(s => s.month).join(', ');
                 return `Viral moment in ${months} (excluded from stats)`;
             },
@@ -307,10 +331,15 @@ const Metrics = {
         
         const excludeMonths = [];
         for (const spike of windowNegativeSpikes) {
-            if (spike.z >= 3 && spike.count >= 50) excludeMonths.push(spike.month);
+            // Exclude if volume spike with enough count, OR sentiment spike
+            const hasVolume = spike.isVolumeSpike && spike.count >= 50;
+            const hasSentiment = spike.isSentimentSpike && spike.sentimentZ >= 2;
+            if (hasVolume || hasSentiment) excludeMonths.push(spike.month);
         }
         for (const spike of windowPositiveSpikes) {
-            if (spike.z >= 4 && spike.count >= 100 && spike.multiple >= 3) excludeMonths.push(spike.month);
+            const hasVolume = spike.isVolumeSpike && spike.count >= 100 && spike.multiple >= 3;
+            const hasSentiment = spike.isSentimentSpike && spike.sentimentZ <= -2;
+            if (hasVolume || hasSentiment) excludeMonths.push(spike.month);
         }
         
         const organicFilter = excludeMonths.length > 0 ? { ...filter, excludeMonths } : filter;
@@ -407,14 +436,20 @@ const Metrics = {
             isStillAlive: revivalData.isStillAlive,
             negativeSpikes: windowNegativeSpikes,
             positiveSpikes: windowPositiveSpikes,
-            negativeBombZ: windowNegativeSpikes[0]?.z || 0,
+            negativeBombVolumeZ: windowNegativeSpikes[0]?.volumeZ || 0,
+            negativeBombSentimentZ: windowNegativeSpikes[0]?.sentimentZ || 0,
             negativeBombMonth: windowNegativeSpikes[0]?.month || null,
             negativeBombMultiple: windowNegativeSpikes[0]?.multiple || 0,
             negativeBombCount: windowNegativeSpikes[0]?.count || 0,
-            positiveBombZ: windowPositiveSpikes[0]?.z || 0,
+            negativeBombIsVolume: windowNegativeSpikes[0]?.isVolumeSpike || false,
+            negativeBombIsSentiment: windowNegativeSpikes[0]?.isSentimentSpike || false,
+            positiveBombVolumeZ: windowPositiveSpikes[0]?.volumeZ || 0,
+            positiveBombSentimentZ: windowPositiveSpikes[0]?.sentimentZ || 0,
             positiveBombMonth: windowPositiveSpikes[0]?.month || null,
             positiveBombMultiple: windowPositiveSpikes[0]?.multiple || 0,
             positiveBombCount: windowPositiveSpikes[0]?.count || 0,
+            positiveBombIsVolume: windowPositiveSpikes[0]?.isVolumeSpike || false,
+            positiveBombIsSentiment: windowPositiveSpikes[0]?.isSentimentSpike || false,
             excludedMonths: excludeMonths,
             recentNegativeEditRatio: editAnalysis.recentNegativeEditRatio,
             oldReviewsEditedRatio: editAnalysis.oldReviewsEditedRatio,
@@ -730,7 +765,7 @@ const Metrics = {
         if (filter) sortedMonths = sortedMonths.filter(m => m >= filter.from && m <= filter.to);
         
         if (sortedMonths.length < 3) {
-            return { negativeSpikes: [], positiveSpikes: [] };
+            return { negativeSpikes: [], positiveSpikes: [], allSpikes: [] };
         }
         
         const monthlyData = [];
@@ -743,49 +778,104 @@ const Metrics = {
             monthlyData.push({ month, pos, neg, total: pos + neg });
         }
         
+        // Compute baseline sentiment ratio across ALL months
+        const totalPos = monthlyData.reduce((sum, m) => sum + m.pos, 0);
+        const totalNeg = monthlyData.reduce((sum, m) => sum + m.neg, 0);
+        const baselineNegRatio = (totalPos + totalNeg) > 0 ? totalNeg / (totalPos + totalNeg) : 0.5;
+        
+        // Compute per-month neg ratios for sentiment stddev
+        const monthlyNegRatios = monthlyData
+            .filter(m => m.total >= 10) // need minimum data for meaningful ratio
+            .map(m => m.neg / m.total);
+        const sentimentStats = this.computeStats(monthlyNegRatios);
+        
         const windowSize = 3;
-        const spikeThreshold = 2.5;
-        const negativeSpikes = [];
-        const positiveSpikes = [];
+        const volumeThreshold = 2.5;
+        const sentimentThreshold = 2.0;
+        
+        const allSpikes = [];
         
         for (let i = 0; i < monthlyData.length; i++) {
             const m = monthlyData[i];
+            if (m.total < 10) continue; // skip months with too little data
+            
+            // === VOLUME Z-SCORE (existing logic) ===
             const neighbors = [];
             for (let j = Math.max(0, i - windowSize); j <= Math.min(monthlyData.length - 1, i + windowSize); j++) {
                 if (j !== i) neighbors.push(monthlyData[j].total);
             }
-            if (neighbors.length < 2) continue;
             
-            const localStats = this.computeStats(neighbors);
-            if (localStats.stddev === 0) continue;
+            let volumeZ = 0;
+            let volumeMultiple = 1;
+            if (neighbors.length >= 2) {
+                const localStats = this.computeStats(neighbors);
+                if (localStats.stddev > 0) {
+                    volumeZ = (m.total - localStats.mean) / localStats.stddev;
+                    volumeMultiple = localStats.mean > 0 ? m.total / localStats.mean : m.total;
+                }
+            }
             
-            const z = (m.total - localStats.mean) / localStats.stddev;
+            // === SENTIMENT Z-SCORE (new) ===
+            const negRatio = m.neg / m.total;
+            let sentimentZ = 0;
+            if (sentimentStats.stddev > 0) {
+                // Positive sentimentZ = more negative than baseline
+                // Negative sentimentZ = more positive than baseline  
+                sentimentZ = (negRatio - baselineNegRatio) / sentimentStats.stddev;
+            }
+            
+            // Launch dampening - don't flag early months as anomalies
             const launchWeight = 1 - Math.exp(-i / 6);
-            const effectiveZ = z * launchWeight;
+            const effectiveVolumeZ = volumeZ * launchWeight;
+            const effectiveSentimentZ = sentimentZ * launchWeight;
             
-            if (effectiveZ >= spikeThreshold) {
-                const negRatio = m.total > 0 ? m.neg / m.total : 0;
-                const spikeData = {
+            const isVolumeSpike = effectiveVolumeZ >= volumeThreshold;
+            const isSentimentSpike = Math.abs(effectiveSentimentZ) >= sentimentThreshold;
+            
+            if (isVolumeSpike || isSentimentSpike) {
+                // Determine if this is a negative or positive spike
+                // - If sentiment spiked negative (sentimentZ > 0), it's negative
+                // - If sentiment spiked positive (sentimentZ < 0), it's positive  
+                // - If only volume spiked, use the ratio vs baseline
+                let isNegative;
+                if (isSentimentSpike) {
+                    isNegative = effectiveSentimentZ > 0;
+                } else {
+                    isNegative = negRatio > baselineNegRatio;
+                }
+                
+                allSpikes.push({
                     month: m.month,
-                    z: effectiveZ,
-                    rawZ: z,
-                    multiple: localStats.mean > 0 ? m.total / localStats.mean : m.total,
+                    volumeZ: effectiveVolumeZ,
+                    sentimentZ: effectiveSentimentZ,
+                    rawVolumeZ: volumeZ,
+                    rawSentimentZ: sentimentZ,
+                    isVolumeSpike,
+                    isSentimentSpike,
+                    multiple: volumeMultiple,
                     count: m.total,
                     negCount: m.neg,
                     posCount: m.pos,
                     negRatio,
+                    baselineNegRatio,
+                    isNegative,
                     launchWeight
-                };
-                
-                if (negRatio > 2/3) negativeSpikes.push(spikeData);
-                else if (negRatio < 1/3) positiveSpikes.push(spikeData);
+                });
             }
         }
         
-        negativeSpikes.sort((a, b) => b.z - a.z);
-        positiveSpikes.sort((a, b) => b.z - a.z);
+        // Sort by combined magnitude (volume + sentiment)
+        allSpikes.sort((a, b) => {
+            const aMag = Math.max(a.volumeZ, Math.abs(a.sentimentZ));
+            const bMag = Math.max(b.volumeZ, Math.abs(b.sentimentZ));
+            return bMag - aMag;
+        });
         
-        return { negativeSpikes, positiveSpikes };
+        // Split into negative and positive for backwards compatibility
+        const negativeSpikes = allSpikes.filter(s => s.isNegative);
+        const positiveSpikes = allSpikes.filter(s => !s.isNegative);
+        
+        return { negativeSpikes, positiveSpikes, allSpikes };
     },
 
     deriveVerdict(m) {
