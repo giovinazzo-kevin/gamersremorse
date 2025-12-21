@@ -227,9 +227,7 @@ body {
         font-size: 11px;
         color: #555;
         text-transform: uppercase;
-        margin: 15px 0 8px 0;
-        padding-top: 10px;
-        border-top: 1px solid #eee;
+        margin: 8px 0 8px 0;
     }
 
         .box-body h3:first-child {
@@ -534,6 +532,13 @@ button {
     font-size: 11px;
     color: #555;
     margin: 15px 0 8px 0;
+}
+.psychometric-analysis {
+    text-align: center;
+    margin-top: 8px;
+    margin-bottom: 8px;
+    border: 1px solid rgb(0, 255, 255);
+    background: rgba(0, 0, 255, 0.5);
 }
 
 .x-label {

@@ -19,6 +19,7 @@ let loadingMessageCount = 0;
 let tagTimelineData = [];
 let numReactions = 0;
 let currentBanner = '';
+let hasReactedToGame = false; // Only trigger eye reaction once per analysis
 
 function quitToDesktop() {
     const msg = exitMessages[Math.floor(Math.random() * exitMessages.length)];
@@ -86,6 +87,7 @@ function getLoadingMessage() {
 document.getElementById('hidePrediction')?.addEventListener('change', () => {
     if (currentSnapshot) {
         updateChart(currentSnapshot);
+        updateMetrics(currentSnapshot);
         drawTimeline();
     }
 });
@@ -123,6 +125,7 @@ async function analyze() {
     loadingMessageCount = 0;
     isFirstSnapshot = true;
     snapshotCount = 0;
+    hasReactedToGame = false;
     timelineData = { months: [], positive: {}, negative: {}, uncertainPos: {}, uncertainNeg: {}, volume: [], maxVolume: 0 };
     timelineSelection = { start: 0, end: 1 };
     tagTimelineData = [];
@@ -211,8 +214,9 @@ async function analyze() {
         }
 
         if (setLoading) setLoading(false);
-        // Final metrics update triggers eye emotion
-        if (currentMetrics) {
+        // Final metrics update triggers eye emotion (only once per analysis)
+        if (currentMetrics && !hasReactedToGame) {
+            hasReactedToGame = true;
             updateEyeFromMetrics(currentMetrics);
             
             const tags = currentMetrics.verdict?.tags?.map(t => t.id) || [];
@@ -224,13 +228,6 @@ async function analyze() {
                     setTimeout(() => Items.showPedestal(item), 1500);
                 }
             }
-            
-            // Drop consumables - more snapshots = more chances
-            const maxDrops = snapshotCount > 1 ? 4 : 1;
-            const dropChance = Math.min(1, snapshotCount / 10);
-            setTimeout(() => {
-                Items.dropConsumables(tags, document.getElementById('metrics-detail'), maxDrops, dropChance);
-            }, 2000);
         }
     };
 }
@@ -1262,7 +1259,8 @@ function updateMetrics(snapshot) {
     convergenceScore = updateConvergence(currentMetrics, lastMetrics, currentSnapshot);
     lastMetrics = currentMetrics;
 
-    currentMetrics = Metrics.compute(snapshot, { timelineFilter: filter, isFree, isSexual, convergenceScore });
+    const hidePrediction = document.getElementById('hidePrediction')?.checked ?? false;
+    currentMetrics = Metrics.compute(snapshot, { timelineFilter: filter, isFree, isSexual, convergenceScore, hidePrediction });
 
     const metricsEl = document.getElementById('metrics-detail');
     if (metricsEl && currentMetrics) {

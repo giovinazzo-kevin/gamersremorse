@@ -230,7 +230,7 @@ const Metrics = {
         {
             id: 'LOW_DATA',
             condition: (m) => m.confidence < 0.3,
-            reason: (m) => `Only ${Math.round(m.total)} reviews - interpret with caution`,
+            reason: (m) => `Only ${Math.round(m.sampledTotal)} reviews - interpret with caution`,
             severity: 0,
             color: 'var(--color-tag-low-data)'
         },
@@ -314,12 +314,16 @@ const Metrics = {
         // Convergence score
         const convergenceScore = Math.min(positiveSampleRate, negativeSampleRate);
         
-        // True ratio from Steam
+        // True ratio from Steam (global)
         const actualNegRatio = gameTotal > 0 ? snapshot.gameTotalNegative / gameTotal : 0.5;
         const actualPosRatio = 1 - actualNegRatio;
 
-        // Detect spikes
-        const spikeData = this.detectSpikes(buckets, null);
+        // Use prediction unless explicitly hidden
+        const usePrediction = !options.hidePrediction;
+        const predictionSnapshot = usePrediction ? snapshot : null;
+
+        // Detect spikes (using predicted data if enabled)
+        const spikeData = this.detectSpikes(buckets, null, predictionSnapshot);
         
         const filterSpikesToWindow = (spikes) => {
             if (!filter || !filter.from) return spikes;
@@ -344,13 +348,39 @@ const Metrics = {
         
         const organicFilter = excludeMonths.length > 0 ? { ...filter, excludeMonths } : filter;
 
-        // Get PROJECTED counts
+        // Get PROJECTED counts (for overall metrics)
         const projected = this.projectCounts(buckets, organicFilter, snapshot);
         const projectedTotal = Math.max(1, projected.total);
         
-        // Mass ratios use TRUE game totals
-        const positiveRatio = actualPosRatio;
-        const negativeRatio = actualNegRatio;
+        // Ratios: use WINDOW data if filtered, otherwise global Steam totals
+        // This allows tags like FLOP to trigger when viewing launch window
+        let positiveRatio, negativeRatio;
+        if (filter && filter.from) {
+            if (usePrediction) {
+                // Use predicted monthly data for the window
+                const predictedMonthly = this.getPredictedMonthlyData(buckets, organicFilter, snapshot);
+                let windowPos = 0, windowNeg = 0;
+                for (const m of predictedMonthly) {
+                    windowPos += m.projectedPos || m.pos || 0;
+                    windowNeg += m.projectedNeg || m.neg || 0;
+                }
+                const windowTotal = windowPos + windowNeg;
+                positiveRatio = windowTotal > 0 ? windowPos / windowTotal : 0.5;
+                negativeRatio = windowTotal > 0 ? windowNeg / windowTotal : 0.5;
+            } else {
+                // Use raw sampled counts for the window
+                const sampled = this.computeSampledCounts(buckets, organicFilter);
+                const windowPos = sampled.positive + sampled.uncertainPositive;
+                const windowNeg = sampled.negative + sampled.uncertainNegative;
+                const windowTotal = windowPos + windowNeg;
+                positiveRatio = windowTotal > 0 ? windowPos / windowTotal : 0.5;
+                negativeRatio = windowTotal > 0 ? windowNeg / windowTotal : 0.5;
+            }
+        } else {
+            // Use global Steam ground truth
+            positiveRatio = actualPosRatio;
+            negativeRatio = actualNegRatio;
+        }
 
         // Playtime distributions
         const posPlaytimes = this.getPlaytimeArray(buckets, 'positive', organicFilter);
@@ -387,9 +417,9 @@ const Metrics = {
         const temporalDriftZ = temporalData.stddev > 0 
             ? (temporalData.secondHalfNegRatio - temporalData.firstHalfNegRatio) / temporalData.stddev : 0;
         
-        const activityData = this.computeWindowEndActivity(buckets, filter);
+        const activityData = this.computeWindowEndActivity(buckets, filter, predictionSnapshot);
         const isEndDead = activityData.isInBottomQuartile;
-        const revivalData = this.detectRevival(buckets, filter);
+        const revivalData = this.detectRevival(buckets, filter, predictionSnapshot);
 
         const confidence = this.computeConfidence(sampledTotal) * Math.sqrt(Math.max(0.1, convergenceScore));
         const editAnalysis = this.analyzeEditHeatmap(snapshot.editHeatmap);
@@ -397,6 +427,7 @@ const Metrics = {
         const metricsBundle = {
             counts: projected,
             total: projectedTotal,
+            sampledTotal,
             positiveRatio,
             negativeRatio,
             posMedianReview,
@@ -563,6 +594,124 @@ const Metrics = {
         return values;
     },
 
+    /**
+     * Get predicted monthly data with position-based extrapolation.
+     * This corrects for Steam's recency bias in the cursor.
+     * 
+     * Older months are undersampled (cursor is frontloaded toward recent).
+     * We extrapolate older months more aggressively to reconstruct the true timeline.
+     * 
+     * @param {Array} buckets - The bucket data
+     * @param {Object} filter - Optional time filter
+     * @param {Object} snapshot - Snapshot with game totals
+     * @returns {Array} Array of { month, pos, neg, total, projectedPos, projectedNeg, projectedTotal }
+     */
+    getPredictedMonthlyData(buckets, filter, snapshot) {
+        // Collect all months
+        const allMonths = new Set();
+        for (const bucket of buckets) {
+            for (const month of Object.keys(bucket.positiveByMonth || {})) allMonths.add(month);
+            for (const month of Object.keys(bucket.negativeByMonth || {})) allMonths.add(month);
+            for (const month of Object.keys(bucket.uncertainPositiveByMonth || {})) allMonths.add(month);
+            for (const month of Object.keys(bucket.uncertainNegativeByMonth || {})) allMonths.add(month);
+        }
+        
+        let sortedMonths = [...allMonths].sort();
+        
+        // Apply filter
+        if (filter) {
+            sortedMonths = sortedMonths.filter(m => {
+                if (filter.from && m < filter.from) return false;
+                if (filter.to && m > filter.to) return false;
+                if (filter.excludeMonths && filter.excludeMonths.includes(m)) return false;
+                return true;
+            });
+        }
+        
+        if (sortedMonths.length === 0) return [];
+        
+        // Build raw sampled data per month
+        const monthData = [];
+        let totalSampled = 0;
+        
+        for (const month of sortedMonths) {
+            let pos = 0, neg = 0, uncPos = 0, uncNeg = 0;
+            for (const bucket of buckets) {
+                pos += bucket.positiveByMonth?.[month] || 0;
+                neg += bucket.negativeByMonth?.[month] || 0;
+                uncPos += bucket.uncertainPositiveByMonth?.[month] || 0;
+                uncNeg += bucket.uncertainNegativeByMonth?.[month] || 0;
+            }
+            const sampledPos = pos + uncPos;
+            const sampledNeg = neg + uncNeg;
+            const sampledTotal = sampledPos + sampledNeg;
+            totalSampled += sampledTotal;
+            monthData.push({ month, pos, neg, uncPos, uncNeg, sampledPos, sampledNeg, sampledTotal });
+        }
+        
+        if (totalSampled === 0) return monthData;
+        
+        // Game totals from Steam (ground truth)
+        const gameTotalPos = snapshot.gameTotalPositive || 0;
+        const gameTotalNeg = snapshot.gameTotalNegative || 0;
+        const gameTotal = gameTotalPos + gameTotalNeg;
+        const trueRatio = gameTotal > 0 ? gameTotalPos / gameTotal : 0.5;
+        
+        if (gameTotal === 0) return monthData;
+        
+        // Sample rate
+        const sampleRate = totalSampled / gameTotal;
+        
+        // Position-based extrapolation:
+        // Recent months (position close to end) are oversampled - less extrapolation needed
+        // Old months (position close to start) are undersampled - more extrapolation needed
+        const n = monthData.length;
+        for (let i = 0; i < n; i++) {
+            const m = monthData[i];
+            
+            // Position 0 = oldest, position n-1 = newest
+            const positionRatio = i / Math.max(1, n - 1); // 0 (oldest) to 1 (newest)
+            
+            // For newest months (positionRatio=1): multiplier → 1 (no extrapolation)
+            // For oldest months (positionRatio=0): multiplier → 1/sampleRate (full extrapolation)
+            const maxMultiplier = sampleRate > 0 ? 1 / sampleRate : 1;
+            const multiplier = Math.pow(maxMultiplier, 1 - positionRatio);
+            
+            m.estimatedTrue = m.sampledTotal * multiplier;
+        }
+        
+        // Normalize so estimates sum to gameTotal
+        const estimateSum = monthData.reduce((sum, m) => sum + m.estimatedTrue, 0);
+        const normalizeFactor = estimateSum > 0 ? gameTotal / estimateSum : 1;
+        
+        for (const m of monthData) {
+            m.projectedTotal = m.estimatedTrue * normalizeFactor;
+            
+            // Spike-aware projection:
+            // If this month is more negative than baseline, only project the negatives
+            // If this month is more positive than baseline, only project the positives
+            const localRatio = m.sampledTotal > 0 ? m.sampledPos / m.sampledTotal : trueRatio;
+            const ratioDiff = localRatio - trueRatio;
+            
+            if (ratioDiff >= 0) {
+                // More positive than usual - project positives, negatives stay sampled
+                m.projectedNeg = m.sampledNeg;
+                m.projectedPos = Math.max(m.sampledPos, m.projectedTotal - m.projectedNeg);
+            } else {
+                // More negative than usual - project negatives, positives stay sampled
+                m.projectedPos = m.sampledPos;
+                m.projectedNeg = Math.max(m.sampledNeg, m.projectedTotal - m.projectedPos);
+            }
+            
+            // Final totals
+            m.total = m.projectedTotal;
+            m.pos = m.projectedPos;
+            m.neg = m.projectedNeg;
+        }
+        
+        return monthData;
+    },
+
     computeStats(values) {
         if (values.length === 0) return { mean: 0, median: 0, stddev: 0, p95: 0 };
         const sorted = [...values].sort((a, b) => a - b);
@@ -648,7 +797,28 @@ const Metrics = {
         return { firstHalfNegRatio, secondHalfNegRatio, stddev: ratioStats.stddev || 0.1 };
     },
 
-    getMonthlyActivityData(buckets, filter = null) {
+    getMonthlyActivityData(buckets, filter = null, snapshot = null) {
+        // Use predicted data if snapshot available
+        if (snapshot) {
+            const monthlyData = this.getPredictedMonthlyData(buckets, filter, snapshot);
+            if (monthlyData.length === 0) return { months: [], activity: [], p25: 0, p75: 0 };
+            
+            const activity = monthlyData.map(m => ({
+                month: m.month,
+                pos: m.pos,
+                neg: m.neg,
+                count: m.total
+            }));
+            
+            const sortedByCount = [...activity].sort((a, b) => a.count - b.count);
+            const p10 = sortedByCount[Math.floor(sortedByCount.length * 0.10)]?.count || 0;
+            const p25 = sortedByCount[Math.floor(sortedByCount.length * 0.25)]?.count || 0;
+            const p75 = sortedByCount[Math.floor(sortedByCount.length * 0.75)]?.count || 0;
+            
+            return { months: monthlyData.map(m => m.month), activity, p10, p25, p75 };
+        }
+        
+        // Fallback to raw data
         const allMonths = new Set();
         for (const bucket of buckets) {
             for (const month of Object.keys(bucket.positiveByMonth || {})) allMonths.add(month);
@@ -672,15 +842,15 @@ const Metrics = {
         if (activity.length === 0) return { months: [], activity: [], p25: 0, p75: 0 };
         
         const sortedByCount = [...activity].sort((a, b) => a.count - b.count);
-        const p10 = sortedByCount[Math.floor(sortedByCount.length * 0.10)].count;
-        const p25 = sortedByCount[Math.floor(sortedByCount.length * 0.25)].count;
-        const p75 = sortedByCount[Math.floor(sortedByCount.length * 0.75)].count;
+        const p10 = sortedByCount[Math.floor(sortedByCount.length * 0.10)]?.count || 0;
+        const p25 = sortedByCount[Math.floor(sortedByCount.length * 0.25)]?.count || 0;
+        const p75 = sortedByCount[Math.floor(sortedByCount.length * 0.75)]?.count || 0;
         
         return { months: sortedMonths, activity, p10, p25, p75 };
     },
 
-    computeWindowEndActivity(buckets, filter) {
-        const windowData = this.getMonthlyActivityData(buckets, filter);
+    computeWindowEndActivity(buckets, filter, snapshot = null) {
+        const windowData = this.getMonthlyActivityData(buckets, filter, snapshot);
         if (windowData.activity.length < 6) return { endActivity: 1, startActivity: 1, isInBottomQuartile: false };
         
         const activity = windowData.activity;
@@ -694,8 +864,8 @@ const Metrics = {
         return { endActivity, startActivity, isInBottomQuartile };
     },
 
-    detectRevival(buckets, filter) {
-        const windowData = this.getMonthlyActivityData(buckets, filter);
+    detectRevival(buckets, filter, snapshot = null) {
+        const windowData = this.getMonthlyActivityData(buckets, filter, snapshot);
         if (windowData.activity.length < 6) return { hasRevival: false };
         
         const activity = windowData.activity;
@@ -754,28 +924,31 @@ const Metrics = {
         return { hasRevival: true, firstWaveNegRatio, lastWaveNegRatio, revivalSentimentChange: lastWaveNegRatio - firstWaveNegRatio, isStillAlive };
     },
 
-    detectSpikes(buckets, filter) {
-        const allMonths = new Set();
-        for (const bucket of buckets) {
-            for (const month of Object.keys(bucket.positiveByMonth || {})) allMonths.add(month);
-            for (const month of Object.keys(bucket.negativeByMonth || {})) allMonths.add(month);
-        }
-        
-        let sortedMonths = [...allMonths].sort();
-        if (filter) sortedMonths = sortedMonths.filter(m => m >= filter.from && m <= filter.to);
-        
-        if (sortedMonths.length < 3) {
-            return { negativeSpikes: [], positiveSpikes: [], allSpikes: [] };
-        }
-        
-        const monthlyData = [];
-        for (const month of sortedMonths) {
-            let pos = 0, neg = 0;
+    detectSpikes(buckets, filter, snapshot = null) {
+        // Use predicted data if snapshot available, otherwise fall back to raw
+        let monthlyData;
+        if (snapshot) {
+            monthlyData = this.getPredictedMonthlyData(buckets, filter, snapshot);
+        } else {
+            // Fallback to raw data (backwards compatibility)
+            const allMonths = new Set();
             for (const bucket of buckets) {
-                pos += (bucket.positiveByMonth?.[month] || 0) + (bucket.uncertainPositiveByMonth?.[month] || 0);
-                neg += (bucket.negativeByMonth?.[month] || 0) + (bucket.uncertainNegativeByMonth?.[month] || 0);
+                for (const month of Object.keys(bucket.positiveByMonth || {})) allMonths.add(month);
+                for (const month of Object.keys(bucket.negativeByMonth || {})) allMonths.add(month);
             }
-            monthlyData.push({ month, pos, neg, total: pos + neg });
+            
+            let sortedMonths = [...allMonths].sort();
+            if (filter) sortedMonths = sortedMonths.filter(m => m >= filter.from && m <= filter.to);
+            
+            monthlyData = [];
+            for (const month of sortedMonths) {
+                let pos = 0, neg = 0;
+                for (const bucket of buckets) {
+                    pos += (bucket.positiveByMonth?.[month] || 0) + (bucket.uncertainPositiveByMonth?.[month] || 0);
+                    neg += (bucket.negativeByMonth?.[month] || 0) + (bucket.uncertainNegativeByMonth?.[month] || 0);
+                }
+                monthlyData.push({ month, pos, neg, total: pos + neg });
+            }
         }
         
         // Compute baseline sentiment ratio across ALL months

@@ -78,6 +78,23 @@
                         Dashed lines show median playtime for each sentiment.
                         When negative median sits <em>right</em> of positive, that's extraction.
                     </p>
+
+                    <h3>Predictions &amp; Uncertainty</h3>
+                    <p>
+                        The API that <strong style="color: var(--color-uncertain)">Valve</strong> uses to serve reviews has a recency bias, as it
+                        is not possible to query for historical data without enumerating all recent items first.
+                    </p>
+                    <p>
+                        The prediction accounts for this bias by tilting the timeline back until the expected volume of reviews per month is reached.
+                        Conceptually, it's because games peak at launch and decline as time goes on, so you expect more reviews near launch than a decade after it.
+                    </p>
+                    <p>
+                        That is not to say that the prediction smooths informative spikes; those are represented fairly well in the dataset, but that's hard to see until you turn off the tilt shift.
+                    </p>
+                    <p>
+                        Since it is not possible to know the original verdict of an <strong style="color: var(--color-uncertain)">edited</strong> review,
+                        its claim to the verdict is considered lesser than that of an unedited review.
+                    </p>
                 </div>
             </div>
 
@@ -123,7 +140,7 @@
         <!-- CHARTS -->
         <div class="col-charts">
             <div class="box">
-                <div class="box-header light">Playtime Distribution</div>
+                <div class="box-header light">How empty is their life?</div>
                 <div class="box-body">
                     <div class="chart-controls">
                         <label><input type="checkbox" id="hidePrediction"> Hide prediction</label>
@@ -141,19 +158,19 @@
                     </div>
                     <div class="chart-row">
                         <div class="chart-half">
-                            <h3 class="chart-title">How long do people keep playing after reviewing?</h3>
+                            <div class="box-header light">How weak is their WILL?</div>
                             <div class="chart-container velocity">
                                 <canvas id="velocity-chart"></canvas>
                             </div>
                         </div>
                         <div class="chart-half">
-                            <h3 class="chart-title">How Creative Is Their Language?</h3>
+                            <div class="box-header light">How pure is their SOUL?</div>
                             <div class="chart-container language">
                                 <canvas id="language-chart"></canvas>
                             </div>
                         </div>
                     </div>
-                    <h3 class="chart-title">Who Changed Their Mind When?</h3>
+                    <div class="box-header light">How cheap is their LOYALTY?</div>
                     <div class="chart-container heatmap">
                         <canvas id="edit-heatmap"></canvas>
                         <div id="heatmap-tooltip" class="heatmap-tooltip"></div>
