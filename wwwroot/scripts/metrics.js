@@ -38,12 +38,17 @@ const Metrics = {
         },
         {
             id: 'EXTRACTIVE',
-            condition: (m) => m.medianRatio > 1.3
-                && m.negativeRatio > 0.20
-                && m.temporalDriftZ <= 1,
+            condition: (m) => m.medianRatio > 1.3,
             reason: (m) => `${Math.round(m.negativeRatio * 100)}% negative at ${Math.round(m.negMedianReview / 60)}h (${Math.round((m.medianRatio - 1) * 100)}% longer than positives)`,
             severity: (m) => Math.min(0.3, (m.medianRatio - 1) * 0.3),
             color: 'var(--color-tag-extractive)'
+        },
+        {
+            id: 'SIREN',
+            condition: (m) => m.posMedianReview > m.negMedianReview && m.posMedianTotal < m.negMedianTotal,
+            reason: (m) => `Pretty until the ${(m.posMedianReview + m.negMedianReview) / 2 / 60}h mark; turns ugly around ${(m.posMedianTotal + m.negMedianTotal) / 2 / 60}h.`,
+            severity: (m) => Math.min(0.3, (m.medianRatio - 1) * 0.3),
+            color: 'var(--color-tag-siren)'
         },
         {
             id: 'ENSHITTIFIED',
@@ -346,22 +351,29 @@ const Metrics = {
         const posPlaytimes = this.getPlaytimeArray(buckets, 'positive', organicFilter);
         const negPlaytimes = this.getPlaytimeArray(buckets, 'negative', organicFilter);
         const allPlaytimes = [...posPlaytimes, ...negPlaytimes];
-        
+        const totalPosPlaytimes = this.getPlaytimeArray(totalBuckets, 'positive', organicFilter);
+        const totalNegPlaytimes = this.getPlaytimeArray(totalBuckets, 'negative', organicFilter);
+        // const totalAllPlaytimes = [...totalPosPlaytimes, ...totalNegPlaytimes];
+
         const posStats = this.computeStats(posPlaytimes);
         const negStats = this.computeStats(negPlaytimes);
         const allStats = this.computeStats(allPlaytimes);
+        const totalPosStats = this.computeStats(totalPosPlaytimes);
+        const totalNegStats = this.computeStats(totalNegPlaytimes);
+        // const totalAllStats = this.computeStats(totalAllPlaytimes);
 
         // Medians
         const posMedianReview = posStats.median;
         const negMedianReview = negStats.median;
-        
-        // Total playtime for stockholm (organic, NOT weighted)
-        const negTotalPlaytimes = this.getPlaytimeArray(totalBuckets, 'negative', organicFilter);
-        const negTotalStats = this.computeStats(negTotalPlaytimes);
-        const negMedianTotal = negTotalStats.median;
+        const posMedianTotal = totalPosStats.median;
+        const negMedianTotal = totalNegStats.median;
+        const posMedianDelta = posMedianTotal - posMedianReview;
+        const negMedianDelta = negMedianTotal - negMedianReview;
+        const medianDeltaRatio = posMedianDelta > 0 ? negMedianDelta / posMedianDelta : 1;
 
         // === RATIO-BASED METRICS ===
         const medianRatio = posMedianReview > 0 ? negMedianReview / posMedianReview : 1;
+        const medianRatioTotal = posMedianTotal > 0 ? negMedianTotal / posMedianTotal : 1;
         const stockholmIndex = negMedianReview > 0 ? negMedianTotal / negMedianReview : 1;
         const refundData = isFree ? null : this.computeRefundHonesty(buckets, organicFilter);
         
@@ -408,8 +420,12 @@ const Metrics = {
             negativeRatio,
             posMedianReview,
             negMedianReview,
+            posMedianTotal,
             negMedianTotal,
+            posMedianDelta,
+            negMedianDelta,
             medianRatio,
+            medianDeltaRatio,
             stockholmIndex,
             refundPosRate: refundData?.posRate ?? null,
             refundNegRate: refundData?.negRate ?? null,

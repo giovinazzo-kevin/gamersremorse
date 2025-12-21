@@ -120,7 +120,7 @@ public record SteamReviewRepository(
         var cursors = new List<IAsyncEnumerable<SteamReview>>();
         foreach (var lang in Languages.Take(numLanguages)) {
             foreach (var filter in filters) {
-                cursors.Add(Scraper.FetchReviews(appId, filter, "all", null, lang, ct));
+                // cursors.Add(Scraper.FetchReviews(appId, filter, "all", null, lang, ct));
                 cursors.Add(Scraper.FetchReviews(appId, filter, "positive", null, lang, ct));
                 cursors.Add(Scraper.FetchReviews(appId, filter, "negative", null, lang, ct));
             }
