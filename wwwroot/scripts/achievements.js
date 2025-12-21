@@ -105,8 +105,16 @@ const ACHIEVEMENTS = {
         hidden: true,
         check: (state) => state.createdCustomInstrument
     },
-    kill_eye: {
-        id: 'kill_eye',
+    hide_prediction: {
+        id: 'hide_prediction',
+        title: 'They Live',
+        description: 'Read between the lines',
+        icon: '👓',
+        hidden: false,
+        check: (state) => state.hidPrediction
+    },
+    self_damage: {
+        id: 'self_damage',
         title: 'Dumb Damage',
         description: 'Why would you do that',
         icon: '💢',

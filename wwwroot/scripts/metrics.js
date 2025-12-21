@@ -19,7 +19,8 @@ const Metrics = {
         'PREDATORY': ['EXTRACTIVE'],
         'EXTRACTIVE': ['TROUBLED'],
         'FLOP': ['TROUBLED'],
-        'TROUBLED': ['HONEST'],
+        'TROUBLED': ['HONEST', 'HEALTHY'],
+        'DEAD': ['HEALTHY'],
         'ENSHITTIFIED': ['RETCONNED', 'HONEYMOON'],
     },
     tagDefinitions: [

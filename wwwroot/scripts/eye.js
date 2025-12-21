@@ -1500,7 +1500,7 @@ const Eye = {
         if (!bar) return;
         
         // Hidden until tookDamage achievement unlocked
-        const hasUnlocked = achievementState?.unlocked?.kill_eye;
+        const hasUnlocked = achievementState?.unlocked?.self_damage;
         if (!hasUnlocked) {
             bar.innerHTML = '';
             return;

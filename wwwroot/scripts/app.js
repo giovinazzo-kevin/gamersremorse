@@ -283,6 +283,10 @@ function updateChart(snapshot) {
 
     const labels = buckets.map(() => '');
     const hidePrediction = document.getElementById('hidePrediction')?.checked ?? false;
+    if (hidePrediction && !getAchievementFlag('hidPrediction')) {
+        setAchievementFlag('hidPrediction');
+    }
+
     const hideAnnotations = document.getElementById('hideAnnotations').checked;
 
     // Calculate projection multipliers from sample rates
