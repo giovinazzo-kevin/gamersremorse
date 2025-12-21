@@ -38,6 +38,21 @@ namespace gamersremorse.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
 
+                    b.Property<bool>("IsStreaming")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("NegativeExhausted")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("PositiveExhausted")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("SampledNegative")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("SampledPositive")
+                        .HasColumnType("INTEGER");
+
                     b.Property<int>("TargetSampleCount")
                         .HasColumnType("INTEGER");
 

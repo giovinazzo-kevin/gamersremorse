@@ -116,13 +116,13 @@ public record SteamReviewRepository(
             _ => new[] { "all" }
         };
 
-        // Build all cursors
-        var cursors = new List<IAsyncEnumerable<SteamReview>>();
+        // Build all cursors - track positive vs negative separately for exhaustion detection
+        var positiveCursors = new List<IAsyncEnumerable<SteamReview>>();
+        var negativeCursors = new List<IAsyncEnumerable<SteamReview>>();
         foreach (var lang in Languages.Take(numLanguages)) {
             foreach (var filter in filters) {
-                // cursors.Add(Scraper.FetchReviews(appId, filter, "all", null, lang, ct));
-                cursors.Add(Scraper.FetchReviews(appId, filter, "positive", null, lang, ct));
-                cursors.Add(Scraper.FetchReviews(appId, filter, "negative", null, lang, ct));
+                positiveCursors.Add(Scraper.FetchReviews(appId, filter, "positive", null, lang, ct));
+                negativeCursors.Add(Scraper.FetchReviews(appId, filter, "negative", null, lang, ct));
             }
         }
 
@@ -133,7 +133,17 @@ public record SteamReviewRepository(
 
         // Fire off parallel cursors (don't await - runs in background)
         using var poolCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        var poolTask = CursorPool.RunCursors(cursors, merged.Writer, poolCts.Token);
+        var allCursors = positiveCursors.Concat(negativeCursors).ToList();
+        var poolTask = CursorPool.RunCursors(allCursors, merged.Writer, poolCts.Token);
+
+        // Track sampling progress
+        var sampledPositive = 0;
+        var sampledNegative = 0;
+        
+        // Mark as streaming
+        meta = meta with { IsStreaming = true };
+        db.Upsert(meta);
+        await db.SaveChangesAsync(ct);
 
         var batch = new List<SteamReview>();
         var count = 0;
@@ -150,6 +160,11 @@ public record SteamReviewRepository(
                 continue;
 
             batch.Add(review);
+            
+            // Track by sentiment
+            if (review.Verdict > 0) sampledPositive++;
+            else sampledNegative++;
+            
             yield return review;
             count++;
 
@@ -161,7 +176,19 @@ public record SteamReviewRepository(
             if (batch.Count >= Options.Value.LazyRefreshBatchSize) {
                 db.ChangeTracker.Clear();
                 db.UpsertRange(batch);
-                db.Upsert(meta with { UpdatedOn = EventDate.UtcNow });
+                
+                // Check for exhaustion
+                var positiveExhausted = sampledPositive >= meta.TotalPositive * 0.95;
+                var negativeExhausted = sampledNegative >= meta.TotalNegative * 0.95;
+                
+                meta = meta with { 
+                    UpdatedOn = EventDate.UtcNow,
+                    SampledPositive = sampledPositive,
+                    SampledNegative = sampledNegative,
+                    PositiveExhausted = positiveExhausted,
+                    NegativeExhausted = negativeExhausted
+                };
+                db.Upsert(meta);
                 await db.SaveChangesAsync(ct);
                 batch.Clear();
             }
@@ -174,9 +201,22 @@ public record SteamReviewRepository(
         if (batch.Count > 0) {
             db.ChangeTracker.Clear();
             db.UpsertRange(batch);
-            db.Upsert(meta with { UpdatedOn = EventDate.UtcNow });
-            await db.SaveChangesAsync(ct);
         }
+        
+        // Final update - mark streaming complete
+        var finalPositiveExhausted = sampledPositive >= meta.TotalPositive * 0.95;
+        var finalNegativeExhausted = sampledNegative >= meta.TotalNegative * 0.95;
+        
+        meta = meta with { 
+            UpdatedOn = EventDate.UtcNow,
+            SampledPositive = sampledPositive,
+            SampledNegative = sampledNegative,
+            PositiveExhausted = finalPositiveExhausted,
+            NegativeExhausted = finalNegativeExhausted,
+            IsStreaming = false
+        };
+        db.Upsert(meta);
+        await db.SaveChangesAsync(ct);
     }
 
     public async Task<(IAsyncEnumerable<SteamReview> Reviews, bool IsStreaming)> GetAll(

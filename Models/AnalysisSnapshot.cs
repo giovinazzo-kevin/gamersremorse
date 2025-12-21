@@ -4,14 +4,19 @@ public record struct AnalysisSnapshot(
     HistogramBucket[] BucketsByReviewTime,
     HistogramBucket[] BucketsByTotalTime,
     VelocityBucket[] VelocityBuckets,
-    int[] AnomalyIndices,
     int TotalPositive,
     int TotalNegative,
     int GameTotalPositive,
     int GameTotalNegative,
     int TargetSampleCount,
     LanguageStats LanguageStats,
-    EditHeatmap EditHeatmap
+    EditHeatmap EditHeatmap,
+    // Sampling metadata for projection
+    double PositiveSampleRate,
+    double NegativeSampleRate,
+    bool PositiveExhausted,
+    bool NegativeExhausted,
+    bool IsStreaming
 );
 
 // Heatmap of when reviews were posted vs when they were edited

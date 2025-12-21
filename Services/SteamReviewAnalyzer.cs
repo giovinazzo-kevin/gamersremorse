@@ -38,13 +38,16 @@ public record SteamReviewAnalyzer(IOptions<SteamReviewAnalyzer.Configuration> Op
     {
         var bucketsByReview = BuildHistogram(reviews, r => r.TimePlayedAtReview.TotalMinutes);
         var bucketsByTotal = BuildHistogram(reviews, r => r.TimePlayedInTotal.TotalMinutes);
-
-        var anomalies = DetectAnomalies(bucketsByReview);
-        var cleanReviews = reviews.Where(r => !IsInAnomalousBucket(r, bucketsByReview, anomalies)).ToList();
-        var velocityBuckets = BuildVelocityBuckets(cleanReviews);
+        var velocityBuckets = BuildVelocityBuckets(reviews);
 
         var positiveReviews = reviews.Where(r => r.Verdict > 0).ToList();
         var negativeReviews = reviews.Where(r => r.Verdict < 0).ToList();
+
+        // Compute sample rates
+        var sampledPositive = positiveReviews.Count;
+        var sampledNegative = negativeReviews.Count;
+        var positiveSampleRate = meta.TotalPositive > 0 ? (double)sampledPositive / meta.TotalPositive : 1.0;
+        var negativeSampleRate = meta.TotalNegative > 0 ? (double)sampledNegative / meta.TotalNegative : 1.0;
 
         // aggregate language stats by month
         var profanityByMonth = new Dictionary<string, int>();
@@ -98,14 +101,18 @@ public record SteamReviewAnalyzer(IOptions<SteamReviewAnalyzer.Configuration> Op
             bucketsByReview,
             bucketsByTotal,
             velocityBuckets,
-            anomalies,
             positiveReviews.Count,
             negativeReviews.Count,
             meta.TotalPositive,
             meta.TotalNegative,
             meta.TargetSampleCount,
             languageStats,
-            editHeatmap
+            editHeatmap,
+            positiveSampleRate,
+            negativeSampleRate,
+            meta.PositiveExhausted,
+            meta.NegativeExhausted,
+            meta.IsStreaming
         );
     }
 
@@ -153,35 +160,6 @@ public record SteamReviewAnalyzer(IOptions<SteamReviewAnalyzer.Configuration> Op
         }).ToArray();
     }
 
-    private static int[] DetectAnomalies(HistogramBucket[] buckets, int windowSize = 3, double threshold = 3)
-    {
-        var anomalies = new List<int>();
-
-        for (int i = 0; i < buckets.Length; i++) {
-            var total = buckets[i].TotalCount;
-            if (total == 0) continue;
-
-            var neighbors = Enumerable.Range(
-                Math.Max(0, i - windowSize),
-                Math.Min(buckets.Length, i + windowSize + 1) - Math.Max(0, i - windowSize)
-            )
-            .Where(j => j != i)
-            .Select(j => (double)buckets[j].TotalCount)
-            .ToList();
-
-            if (neighbors.Count == 0) continue;
-            var median = neighbors.OrderBy(x => x).ElementAt(neighbors.Count / 2);
-            var mad = neighbors.Select(x => Math.Abs(x - median)).OrderBy(x => x).ElementAt(neighbors.Count / 2);
-            if (mad < 1) mad = 1;
-
-            var z = (total - median) / (mad * 1.4826);
-            if (z > threshold)
-                anomalies.Add(i);
-        }
-
-        return anomalies.ToArray();
-    }
-
     private static readonly TimeSpan EditThreshold = TimeSpan.FromDays(7);
     private static bool IsUncertain(SteamReview r) => (r.EditedOn - r.PostedOn) > EditThreshold;
 
@@ -219,16 +197,6 @@ public record SteamReviewAnalyzer(IOptions<SteamReviewAnalyzer.Configuration> Op
             result[i] = new VelocityBucket(min, max, positiveByMonth, negativeByMonth, uncertainPositiveByMonth, uncertainNegativeByMonth);
         }
         return result;
-    }
-
-    private bool IsInAnomalousBucket(SteamReview review, HistogramBucket[] buckets, int[] anomalies)
-    {
-        var minutes = review.TimePlayedAtReview.TotalMinutes;
-        for (int i = 0; i < buckets.Length; i++) {
-            if (minutes >= buckets[i].MinPlaytime && minutes < buckets[i].MaxPlaytime)
-                return anomalies.Contains(i);
-        }
-        return false;
     }
 
     private static double GetVelocity(SteamReview r)
