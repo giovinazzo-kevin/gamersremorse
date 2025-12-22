@@ -99,8 +99,8 @@ public static class BinarySnapshotReader
     private static HistogramBucket ReadBucket(BinaryReader r, string[] months)
     {
         return new HistogramBucket(
-            MinPlaytime: r.ReadInt32(),
-            MaxPlaytime: r.ReadInt32(),
+            MinPlaytime: r.ReadDouble(),
+            MaxPlaytime: r.ReadDouble(),
             PositiveByMonth: ReadChannel(r, months),
             NegativeByMonth: ReadChannel(r, months),
             UncertainPositiveByMonth: ReadChannel(r, months),

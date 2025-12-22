@@ -75,12 +75,16 @@
                 <input type="text" id="appId" placeholder="Steam App ID or store URL">
                 <button onclick="analyze()">Analyze</button>
             </div>
-            <h2 id="game-title"></h2>
             <div id="stats"></div>
+            <h2 id="game-title"></h2>
             <div id="metrics-detail">
                 <p style="color: #999; font-style: italic;">
                     Enter a Steam App ID or URL to analyze.
                 </p>
+            </div>
+            <div id="similar-games" class="similar-row" style="display: none;">
+                <span class="similar-label">Similar games by fingerprint:</span>
+                <div class="similar-thumbnails"></div>
             </div>
         </div>
     </div>

@@ -17,6 +17,135 @@ let currentBanner = '';
 let hasReactedToGame = false;
 let metricsWorker = null;
 
+// Shared WebSocket message handler
+function handleSnapshotMessage(e, metricsTimeoutRef) {
+    if (!document.getElementById('chart')) return;
+    
+    isStreaming = true;
+    state.lastInteraction = Date.now();
+    const snapshot = BinarySnapshot.parse(e.data);
+    currentSnapshot = snapshot;
+    Charts.updateChart(snapshot);
+    Timeline.updateData(snapshot, isFirstSnapshot);
+    Charts.updateVelocityChart(snapshot);
+    Charts.updateLanguageChart(snapshot);
+    Heatmap.update(snapshot);
+    Charts.updateStats(snapshot);
+    
+    if (metricsTimeoutRef.id) clearTimeout(metricsTimeoutRef.id);
+    metricsTimeoutRef.id = setTimeout(() => updateMetrics(snapshot), 200);
+    
+    isFirstSnapshot = false;
+    snapshotCount++;
+    if (setLoading) setLoading(true);
+}
+
+// Shared WebSocket close handler
+function handleAnalysisComplete() {
+    isStreaming = false;
+    setExpression('neutral');
+    
+    setAchievementFlag('analyzedGame');
+
+    if (currentSnapshot) {
+        const sampled = currentSnapshot.totalPositive + currentSnapshot.totalNegative;
+        const gameTotal = currentSnapshot.gameTotalPositive + currentSnapshot.gameTotalNegative;
+        const coverage = gameTotal > 0 ? sampled / gameTotal : 1;
+
+        if (coverage > 0.95 || convergenceScore > 0.9) {
+            convergenceScore = 1;
+        }
+
+        updateMetrics(currentSnapshot);
+
+        // Compute BOTH tag timelines upfront (predicted + sampled)
+        if (Metrics) {
+            const isFree = currentGameInfo?.isFree || false;
+            const isSexual = currentGameInfo?.flags ? (currentGameInfo.flags & 8) !== 0 : false;
+            tagTimelineCache.predicted = Metrics.computeTimeline(currentSnapshot, 3, { isFree, isSexual, hidePrediction: false });
+            tagTimelineCache.sampled = Metrics.computeTimeline(currentSnapshot, 3, { isFree, isSexual, hidePrediction: true });
+            
+            const hidePrediction = document.getElementById('hidePrediction')?.checked ?? false;
+            const cacheKey = hidePrediction ? 'sampled' : 'predicted';
+            Timeline.updateTagData(tagTimelineCache[cacheKey]);
+        }
+        
+        // Fetch controversy context (backend validates analysis is complete)
+        if (currentMetrics && currentGameInfo?.appId) {
+            Controversy.fetchContext(currentGameInfo.appId, currentMetrics, currentSnapshot);
+        }
+    }
+
+    if (setLoading) setLoading(false);
+    
+    // Final metrics update triggers eye emotion (only once per analysis)
+    if (currentMetrics && !hasReactedToGame) {
+        hasReactedToGame = true;
+        updateEyeFromMetrics(currentMetrics);
+        
+        const tags = currentMetrics.verdict?.tags?.map(t => t.id) || [];
+        
+        // Roll for item drop based on analysis tags
+        if (snapshotCount > 1) {
+            const item = Items.rollForDrop(tags, currentMetrics);
+            if (item) {
+                setTimeout(() => Items.showPedestal(item), 1500);
+            }
+        }
+    }
+    
+    // Fetch similar games now that fingerprint exists
+    if (currentGameInfo?.appId) {
+        fetchSimilarGames(currentGameInfo.appId);
+    }
+}
+
+// Create WebSocket with shared handlers
+function createGameSocket(appId) {
+    const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const ws = new WebSocket(`${protocol}//${location.host}/ws/game/${appId}`);
+    const metricsTimeoutRef = { id: null };
+    
+    ws.binaryType = 'arraybuffer';
+    ws.onmessage = (e) => handleSnapshotMessage(e, metricsTimeoutRef);
+    ws.onclose = handleAnalysisComplete;
+    
+    return ws;
+}
+async function fetchSimilarGames(appId) {
+    const container = document.getElementById('similar-games');
+    const thumbs = container.querySelector('.similar-thumbnails');
+
+    try {
+        const res = await fetch(`/wall/similar/${appId}?limit=8`);
+        if (!res.ok) {
+            container.style.display = 'none';
+            return;
+        }
+
+        const games = await res.json();
+        if (!games.length) {
+            container.style.display = 'none';
+            return;
+        }
+
+        thumbs.innerHTML = games.map(g => `
+            <div class="similar-thumb" onclick="analyzeSimilar('${g.appId}')" title="${g.name}">
+                <img src="${g.headerImage}" alt="${g.name}" loading="lazy">
+                <div class="similar-name">${g.name}</div>
+            </div>
+        `).join('');
+
+        container.style.display = 'flex';
+    } catch (e) {
+        container.style.display = 'none';
+    }
+}
+
+function analyzeSimilar(appId) {
+    document.getElementById('appId').value = appId;
+    analyze();
+}
 function getMetricsWorker() {
     if (!metricsWorker) {
         metricsWorker = new Worker('scripts/metrics-worker.js');
@@ -257,37 +386,7 @@ function init_play() {
         // Reconnect WebSocket to resume streaming
         const appId = currentGameInfo.appId;
         if (appId) {
-            const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const ws = new WebSocket(`${protocol}//${location.host}/ws/game/${appId}`);
-            currentSocket = ws;
-            
-            let metricsTimeout = null;
-            ws.binaryType = 'arraybuffer';
-            ws.onmessage = (e) => {
-                if (!document.getElementById('chart')) return;
-                
-                isStreaming = true;
-                state.lastInteraction = Date.now();
-                const snapshot = BinarySnapshot.parse(e.data);
-                currentSnapshot = snapshot;
-                Charts.updateChart(snapshot);
-                Timeline.updateData(snapshot, false);
-                Charts.updateVelocityChart(snapshot);
-                Charts.updateLanguageChart(snapshot);
-                Heatmap.update(snapshot);
-                Charts.updateStats(snapshot);
-                
-                if (metricsTimeout) clearTimeout(metricsTimeout);
-                metricsTimeout = setTimeout(() => updateMetrics(snapshot), 200);
-                
-                snapshotCount++;
-                if (setLoading) setLoading(true);
-            };
-            
-            ws.onclose = () => {
-                isStreaming = false;
-                if (setLoading) setLoading(false);
-            };
+            currentSocket = createGameSocket(appId);
         }
     }
 }
@@ -320,6 +419,8 @@ async function analyze() {
     document.getElementById('metrics-detail').innerHTML = '';
     document.getElementById('opinion-content').innerHTML = '<div class="opinion-loading">⌛ Analyzing...</div>';
     document.getElementById('game-title').textContent = '';
+    document.getElementById('similar-games').style.display = 'none';
+    document.querySelector('#similar-games .similar-thumbnails').innerHTML = '';
     Timeline.draw(); // clears the timeline canvas
 
     const infoRes = await fetch(`/game/${appId}`);
@@ -334,92 +435,8 @@ async function analyze() {
         currentSocket.close();
     }
 
-    const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const ws = new WebSocket(`${protocol}//${location.host}/ws/game/${appId}`);
-    currentSocket = ws;
-
-    let metricsTimeout = null;
-    
-    ws.binaryType = 'arraybuffer';
-    ws.onmessage = (e) => {
-        // Guard against messages after navigation
-        if (!document.getElementById('chart')) return;
-        
-        isStreaming = true;
-        state.lastInteraction = Date.now();
-        const snapshot = BinarySnapshot.parse(e.data);
-        currentSnapshot = snapshot;
-        Charts.updateChart(snapshot);
-        Timeline.updateData(snapshot, isFirstSnapshot);
-        Charts.updateVelocityChart(snapshot);
-        Charts.updateLanguageChart(snapshot);
-        Heatmap.update(snapshot);
-        Charts.updateStats(snapshot);
-        
-        // Debounce metrics - expensive, only run after 200ms of no new snapshots
-        if (metricsTimeout) clearTimeout(metricsTimeout);
-        metricsTimeout = setTimeout(() => updateMetrics(snapshot), 200);
-        
-        isFirstSnapshot = false;
-        snapshotCount++;
-
-        if (setLoading) setLoading(true);
-    };
-
     isFirstSnapshot = true;
-    ws.onclose = () => {
-        isStreaming = false;
-        setExpression('neutral');
-        
-        // Achievement: first analysis
-         setAchievementFlag('analyzedGame');
-
-        if (currentSnapshot) {
-            const sampled = currentSnapshot.totalPositive + currentSnapshot.totalNegative;
-            const gameTotal = currentSnapshot.gameTotalPositive + currentSnapshot.gameTotalNegative;
-            const coverage = gameTotal > 0 ? sampled / gameTotal : 1;
-
-            if (coverage > 0.95 || convergenceScore > 0.9) {
-                convergenceScore = 1;
-            }
-
-            updateMetrics(currentSnapshot);
-
-            // Compute BOTH tag timelines upfront (predicted + sampled)
-            if (Metrics) {
-                const isFree = currentGameInfo?.isFree || false;
-                const isSexual = currentGameInfo?.flags ? (currentGameInfo.flags & 8) !== 0 : false;
-                tagTimelineCache.predicted = Metrics.computeTimeline(currentSnapshot, 3, { isFree, isSexual, hidePrediction: false });
-                tagTimelineCache.sampled = Metrics.computeTimeline(currentSnapshot, 3, { isFree, isSexual, hidePrediction: true });
-                
-                const hidePrediction = document.getElementById('hidePrediction')?.checked ?? false;
-                const cacheKey = hidePrediction ? 'sampled' : 'predicted';
-                Timeline.updateTagData(tagTimelineCache[cacheKey]);
-            }
-            
-            // Fetch controversy context (backend validates analysis is complete)
-            if (currentMetrics && currentGameInfo?.appId) {
-                Controversy.fetchContext(currentGameInfo.appId, currentMetrics, currentSnapshot);
-            }
-        }
-
-        if (setLoading) setLoading(false);
-        // Final metrics update triggers eye emotion (only once per analysis)
-        if (currentMetrics && !hasReactedToGame) {
-            hasReactedToGame = true;
-            updateEyeFromMetrics(currentMetrics);
-            
-            const tags = currentMetrics.verdict?.tags?.map(t => t.id) || [];
-            
-            // Roll for item drop based on analysis tags
-            if (snapshotCount > 1) {
-                const item = Items.rollForDrop(tags, currentMetrics);
-                if (item) {
-                    setTimeout(() => Items.showPedestal(item), 1500);
-                }
-            }
-        }
-    };
+    currentSocket = createGameSocket(appId);
 }
 
 function extractAppId(input) {

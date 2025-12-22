@@ -75,6 +75,7 @@ public class AnalysisHub
 
                     // Build and save fingerprint and update metadata with snapshot
                     if (lastSnapshot is { } final) {
+                        meta = await repo.GetMetadata(appId);
                         var fingerprint = FingerprintBuilder.Build(final, meta);
                         db.Upsert(fingerprint);
                         var snap = BinarySnapshotWriter.Write(final);

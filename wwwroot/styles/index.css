@@ -997,3 +997,49 @@ body.dark-mode {
 .dark-mode .wall-loading {
     color: #666;
 }
+
+.similar-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 12px;
+    margin: 8px 0 0px 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+}
+
+.similar-label {
+    color: #888;
+    font-size: 12px;
+    width: 100%;
+}
+
+.similar-thumbnails {
+    display: flex;
+    gap: 8px;
+}
+
+.similar-thumb {
+    cursor: pointer;
+    transition: transform 0.1s;
+}
+
+    .similar-thumb:hover {
+        transform: scale(1.1);
+    }
+
+    .similar-thumb img {
+        width: 120px;
+        height: 45px;
+        object-fit: cover;
+        border-radius: 4px;
+    }
+
+    .similar-thumb .similar-name {
+        font-size: 10px;
+        color: #aaa;
+        text-align: center;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 120px;
+    }
