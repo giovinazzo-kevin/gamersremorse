@@ -115,152 +115,111 @@ const Timeline = (() => {
             ? new Set(metrics.excludedMonths)
             : new Set();
 
-        const gameTotalPos = snapshot?.gameTotalPositive ?? 0;
-        const gameTotalNeg = snapshot?.gameTotalNegative ?? 0;
-        const gameTotal = gameTotalPos + gameTotalNeg;
-        const trueRatio = gameTotal > 0 ? gameTotalPos / gameTotal : 0.5;
+        // Get projected monthly data from single source of truth
+        const projectedMonthly = snapshot.projectedMonthly || [];
+        
+        // Filter out excluded months and build render data
+        const monthData = projectedMonthly
+            .filter(m => !excludeMonths.has(m.month))
+            .map(m => ({
+                ...m,
+                // Override extras if cursor exhausted
+                extraPos: posExhausted ? 0 : m.extraPos,
+                extraNeg: negExhausted ? 0 : m.extraNeg
+            }));
 
-        const monthData = [];
-        let totalSampled = 0;
-
-        for (const month of data.months) {
-            if (excludeMonths.has(month)) continue;
-
-            const pos = (data.positive[month] || 0);
-            const neg = (data.negative[month] || 0);
-            const uncPos = (data.uncertainPos[month] || 0);
-            const uncNeg = (data.uncertainNeg[month] || 0);
-            const sampledPos = pos + uncPos;
-            const sampledNeg = neg + uncNeg;
-            const sampledTotal = sampledPos + sampledNeg;
-
-            totalSampled += sampledTotal;
-            monthData.push({ month, pos, neg, uncPos, uncNeg, sampledPos, sampledNeg, sampledTotal });
-        }
-
-        if (monthData.length === 0 || totalSampled === 0) return;
-
-        const sampleRate = totalSampled / gameTotal;
-
-        const n = monthData.length;
-        for (let i = 0; i < n; i++) {
-            const m = monthData[i];
-            const positionRatio = i / Math.max(1, n - 1);
-            const maxMultiplier = sampleRate > 0 ? 1 / sampleRate : 1;
-            const multiplier = Math.pow(maxMultiplier, 1 - positionRatio);
-            m.estimatedTrue = m.sampledTotal * multiplier;
-        }
-
-        const estimateSum = monthData.reduce((sum, m) => sum + m.estimatedTrue, 0);
-        const normalizeFactor = estimateSum > 0 ? gameTotal / estimateSum : 1;
-
-        for (const m of monthData) {
-            m.projectedTotal = m.estimatedTrue * normalizeFactor;
-
-            const localRatio = m.sampledTotal > 0 ? m.sampledPos / m.sampledTotal : trueRatio;
-            const ratioDiff = localRatio - trueRatio;
-
-            if (ratioDiff >= 0) {
-                m.projectedNeg = m.sampledNeg;
-                m.projectedPos = Math.max(m.sampledPos, m.projectedTotal - m.projectedNeg);
-            } else {
-                m.projectedPos = m.sampledPos;
-                m.projectedNeg = Math.max(m.sampledNeg, m.projectedTotal - m.projectedPos);
-            }
-
-            m.extraPos = posExhausted ? 0 : Math.max(0, m.projectedPos - m.sampledPos);
-            m.extraNeg = negExhausted ? 0 : Math.max(0, m.projectedNeg - m.sampledNeg);
-        }
+        if (monthData.length === 0) return;
 
         const tagStripH = tagData.length > 0 ? 8 : 0;
         const chartH = h - 20 - tagStripH;
         const midY = chartH / 2;
         const barW = w / monthData.length;
 
-        // Find max for log scale normalization
+        // Find max and median for adaptive scale normalization
+        // Compute exponent so median value fills ~50% of chart height
         let maxPos = 1, maxNeg = 1;
+        const posValues = [], negValues = [];
         for (const m of monthData) {
-            const totalPos = hidePrediction ? m.sampledPos : (m.sampledPos + m.extraPos);
-            const totalNeg = hidePrediction ? m.sampledNeg : (m.sampledNeg + m.extraNeg);
+            const totalPos = hidePrediction ? m.sampledPos : m.projectedPos;
+            const totalNeg = hidePrediction ? m.sampledNeg : m.projectedNeg;
             maxPos = Math.max(maxPos, totalPos);
             maxNeg = Math.max(maxNeg, totalNeg);
+            if (totalPos > 0) posValues.push(totalPos);
+            if (totalNeg > 0) negValues.push(totalNeg);
         }
-        const logMaxPos = Math.log(maxPos + 1);
-        const logMaxNeg = Math.log(maxNeg + 1);
+        
+        // Get median
+        posValues.sort((a, b) => a - b);
+        negValues.sort((a, b) => a - b);
+        const medianPos = posValues.length > 0 ? posValues[Math.floor(posValues.length / 2)] : 1;
+        const medianNeg = negValues.length > 0 ? negValues[Math.floor(negValues.length / 2)] : 1;
+        
+        // Compute exponent: (median/max)^exp = 0.5 => exp = log(0.5) / log(median/max)
+        const posRatio = medianPos / maxPos;
+        const negRatio = medianNeg / maxNeg;
+        const expPos = posRatio < 1 ? Math.log(0.5) / Math.log(posRatio) : 1;
+        const expNeg = negRatio < 1 ? Math.log(0.5) / Math.log(negRatio) : 1;
+        // Clamp to reasonable range
+        const clampedExpPos = Math.max(0.1, Math.min(1, expPos));
+        const clampedExpNeg = Math.max(0.1, Math.min(1, expNeg));
 
         // Draw bars - centered, pos up, neg down
+        // OVERLAY approach: ghost at full height, then solid on top
         for (let i = 0; i < monthData.length; i++) {
             const m = monthData[i];
-
-            const totalPos = hidePrediction ? m.sampledPos : (m.sampledPos + m.extraPos);
-            const totalNeg = hidePrediction ? m.sampledNeg : (m.sampledNeg + m.extraNeg);
-
-            const posH = (Math.log(totalPos + 1) / logMaxPos) * midY;
-            const negH = (Math.log(totalNeg + 1) / logMaxNeg) * midY;
-
-            const sampledPosRatio = totalPos > 0 ? m.pos / totalPos : 0;
-            const uncPosRatio = totalPos > 0 ? m.uncPos / totalPos : 0;
-            const extraPosRatio = totalPos > 0 ? m.extraPos / totalPos : 0;
-
-            const sampledNegRatio = totalNeg > 0 ? m.neg / totalNeg : 0;
-            const uncNegRatio = totalNeg > 0 ? m.uncNeg / totalNeg : 0;
-            const extraNegRatio = totalNeg > 0 ? m.extraNeg / totalNeg : 0;
-
             const x = i * barW;
 
-            // === POSITIVE (going UP from midline) ===
-            let y = midY;
+            if (hidePrediction) {
+                // Just draw sampled data, no ghosts
+                const posH = Math.pow(m.sampledPos / maxPos, clampedExpPos) * midY;
+                const negH = Math.pow(m.sampledNeg / maxNeg, clampedExpNeg) * midY;
 
-            ctx.globalAlpha = 1;
-            const sampledPosH = sampledPosRatio * posH;
-            if (sampledPosH > 0) {
-                ctx.fillStyle = colors.positive;
-                ctx.fillRect(x, y - sampledPosH, barW - 1, sampledPosH);
-                y -= sampledPosH;
-            }
-
-            const uncPosH = uncPosRatio * posH;
-            if (uncPosH > 0) {
-                ctx.fillStyle = colors.uncertain;
-                ctx.fillRect(x, y - uncPosH, barW - 1, uncPosH);
-                y -= uncPosH;
-            }
-
-            if (!hidePrediction) {
-                const extraPosH = extraPosRatio * posH;
-                if (extraPosH > 0) {
-                    ctx.globalAlpha = 0.5;
+                // Positive (up from midline)
+                if (posH > 0) {
+                    ctx.globalAlpha = 1;
                     ctx.fillStyle = colors.positive;
-                    ctx.fillRect(x, y - extraPosH, barW - 1, extraPosH);
-                    y -= extraPosH;
+                    ctx.fillRect(x, midY - posH, barW - 1, posH);
                 }
-            }
 
-            // === NEGATIVE (going DOWN from midline) ===
-            y = midY;
-            ctx.globalAlpha = 1;
-
-            const sampledNegH = sampledNegRatio * negH;
-            if (sampledNegH > 0) {
-                ctx.fillStyle = colors.negative;
-                ctx.fillRect(x, y, barW - 1, sampledNegH);
-                y += sampledNegH;
-            }
-
-            const uncNegH = uncNegRatio * negH;
-            if (uncNegH > 0) {
-                ctx.fillStyle = colors.uncertain;
-                ctx.fillRect(x, y, barW - 1, uncNegH);
-                y += uncNegH;
-            }
-
-            if (!hidePrediction) {
-                const extraNegH = extraNegRatio * negH;
-                if (extraNegH > 0) {
-                    ctx.globalAlpha = 0.5;
+                // Negative (down from midline)
+                if (negH > 0) {
+                    ctx.globalAlpha = 1;
                     ctx.fillStyle = colors.negative;
-                    ctx.fillRect(x, y, barW - 1, extraNegH);
-                    y += extraNegH;
+                    ctx.fillRect(x, midY, barW - 1, negH);
+                }
+            } else {
+                // OVERLAY: Draw projected (ghost) first, then observed (solid) on top
+                const projPosH = Math.pow(m.projectedPos / maxPos, clampedExpPos) * midY;
+                const projNegH = Math.pow(m.projectedNeg / maxNeg, clampedExpNeg) * midY;
+                const sampPosH = Math.pow(m.sampledPos / maxPos, clampedExpPos) * midY;
+                const sampNegH = Math.pow(m.sampledNeg / maxNeg, clampedExpNeg) * midY;
+
+                // === POSITIVE (going UP from midline) ===
+                // Ghost layer (projected) at 50% alpha
+                if (projPosH > 0) {
+                    ctx.globalAlpha = 0.4;
+                    ctx.fillStyle = colors.positive;
+                    ctx.fillRect(x, midY - projPosH, barW - 1, projPosH);
+                }
+                // Solid layer (sampled) at 100% alpha on top
+                if (sampPosH > 0) {
+                    ctx.globalAlpha = 1;
+                    ctx.fillStyle = colors.positive;
+                    ctx.fillRect(x, midY - sampPosH, barW - 1, sampPosH);
+                }
+
+                // === NEGATIVE (going DOWN from midline) ===
+                // Ghost layer (projected) at 50% alpha
+                if (projNegH > 0) {
+                    ctx.globalAlpha = 0.4;
+                    ctx.fillStyle = colors.negative;
+                    ctx.fillRect(x, midY, barW - 1, projNegH);
+                }
+                // Solid layer (sampled) at 100% alpha on top
+                if (sampNegH > 0) {
+                    ctx.globalAlpha = 1;
+                    ctx.fillStyle = colors.negative;
+                    ctx.fillRect(x, midY, barW - 1, sampNegH);
                 }
             }
         }

@@ -226,110 +226,74 @@ const BinarySnapshot = {
     },
 
     /**
-     * Project monthly data using position-based extrapolation.
+     * Project monthly data by scaling observed shape to match game totals.
      * 
-     * Steam's cursor is frontloaded - recent months are oversampled.
-     * We correct by applying exponential extrapolation: oldest months get
-     * scaled up most, newest months stay close to sampled.
+     * The sampled shape IS representative of the true shape.
+     * We just scale it so total mass matches Steam's ground truth.
      * 
-     * Then normalize so total matches Steam's ground truth.
+     * projectedPos = observedPos * (gameTotalPos / totalObservedPos)
+     * projectedNeg = observedNeg * (gameTotalNeg / totalObservedNeg)
      * 
-     * Spike-aware: months more negative than baseline only project negatives,
-     * months more positive only project positives.
+     * Key invariant: at 100% sample rate, projection === observed.
      * 
      * This is THE source of truth. Called once after parse.
-     * drawTimeline and Metrics both read from snapshot.projectedMonthly.
+     * Timeline and Metrics both read from snapshot.projectedMonthly.
      */
     projectMonthlyData(snapshot) {
         const { months, monthlyTotals, gameTotalPositive, gameTotalNegative,
                 positiveExhausted, negativeExhausted } = snapshot;
         
-        const gameTotal = gameTotalPositive + gameTotalNegative;
-        const trueRatio = gameTotal > 0 ? gameTotalPositive / gameTotal : 0.5;
+        const n = months.length;
+        if (n === 0) {
+            snapshot.projectedMonthly = [];
+            return;
+        }
         
-        // Build sampled data per month
+        // First pass: sum observed totals
+        let totalObservedPos = 0;
+        let totalObservedNeg = 0;
+        
+        for (let i = 0; i < n; i++) {
+            totalObservedPos += monthlyTotals.pos[i] + monthlyTotals.uncPos[i];
+            totalObservedNeg += monthlyTotals.neg[i] + monthlyTotals.uncNeg[i];
+        }
+        
+        // Scale factors: observed shape -> game totals
+        const posScale = totalObservedPos > 0 ? gameTotalPositive / totalObservedPos : 1;
+        const negScale = totalObservedNeg > 0 ? gameTotalNegative / totalObservedNeg : 1;
+        
+        // Build projections
         const monthData = [];
-        let totalSampled = 0;
         
-        for (let i = 0; i < months.length; i++) {
+        for (let i = 0; i < n; i++) {
             const pos = monthlyTotals.pos[i];
             const neg = monthlyTotals.neg[i];
             const uncPos = monthlyTotals.uncPos[i];
             const uncNeg = monthlyTotals.uncNeg[i];
-            const sampledPos = pos + uncPos;
-            const sampledNeg = neg + uncNeg;
-            const sampledTotal = sampledPos + sampledNeg;
-            totalSampled += sampledTotal;
+            const observedPos = pos + uncPos;
+            const observedNeg = neg + uncNeg;
+            const observedTotal = observedPos + observedNeg;
+            
+            // Scale proportionally
+            const projectedPos = observedPos * posScale;
+            const projectedNeg = observedNeg * negScale;
+            const projectedTotal = projectedPos + projectedNeg;
+            
+            // Extra = projected minus observed (for ghost bars)
+            const extraPos = positiveExhausted ? 0 : Math.max(0, projectedPos - observedPos);
+            const extraNeg = negativeExhausted ? 0 : Math.max(0, projectedNeg - observedNeg);
             
             monthData.push({
                 month: months[i],
                 pos, neg, uncPos, uncNeg,
-                sampledPos, sampledNeg, sampledTotal
+                observedPos, observedNeg, observedTotal,
+                projectedPos, projectedNeg, projectedTotal,
+                extraPos, extraNeg,
+                sampledPos: observedPos,
+                sampledNeg: observedNeg,
+                sampledTotal: observedTotal,
+                total: projectedTotal
             });
-        }
-        
-        if (monthData.length === 0 || totalSampled === 0 || gameTotal === 0) {
-            snapshot.projectedMonthly = monthData;
-            return;
-        }
-        
-        // Sample rate
-        const sampleRate = totalSampled / gameTotal;
-        
-        // HIGH COVERAGE: If we've sampled 95%+ of reviews, projection IS sampled.
-        // No extrapolation needed - we have the real data.
-        if (sampleRate >= 0.95) {
-            for (const m of monthData) {
-                m.projectedPos = m.sampledPos;
-                m.projectedNeg = m.sampledNeg;
-                m.projectedTotal = m.sampledTotal;
-                m.extraPos = 0;
-                m.extraNeg = 0;
-                m.total = m.sampledTotal;
-            }
-            snapshot.projectedMonthly = monthData;
-            return;
-        }
-        
-        // Position-based extrapolation
-        const n = monthData.length;
-        const maxMultiplier = sampleRate > 0 ? 1 / sampleRate : 1;
-        
-        for (let i = 0; i < n; i++) {
-            const m = monthData[i];
-            // Position 0 = oldest (gets maxMultiplier), position n-1 = newest (gets 1x)
-            const positionRatio = n > 1 ? i / (n - 1) : 1;
-            const multiplier = Math.pow(maxMultiplier, 1 - positionRatio);
-            m.estimatedTrue = m.sampledTotal * multiplier;
-        }
-        
-        // Normalize so estimates sum to gameTotal
-        const estimateSum = monthData.reduce((sum, m) => sum + m.estimatedTrue, 0);
-        const normalizeFactor = estimateSum > 0 ? gameTotal / estimateSum : 1;
-        
-        for (const m of monthData) {
-            m.projectedTotal = m.estimatedTrue * normalizeFactor;
-            
-            // Spike-aware projection
-            const localRatio = m.sampledTotal > 0 ? m.sampledPos / m.sampledTotal : trueRatio;
-            const ratioDiff = localRatio - trueRatio;
-            
-            if (ratioDiff >= 0) {
-                // More positive than usual - project positives, negatives stay sampled
-                m.projectedNeg = m.sampledNeg;
-                m.projectedPos = Math.max(m.sampledPos, m.projectedTotal - m.projectedNeg);
-            } else {
-                // More negative than usual - project negatives, positives stay sampled
-                m.projectedPos = m.sampledPos;
-                m.projectedNeg = Math.max(m.sampledNeg, m.projectedTotal - m.projectedPos);
-            }
-            
-            // Extra is projected minus sampled (for ghost bars)
-            m.extraPos = positiveExhausted ? 0 : Math.max(0, m.projectedPos - m.sampledPos);
-            m.extraNeg = negativeExhausted ? 0 : Math.max(0, m.projectedNeg - m.sampledNeg);
-            
-            // Alias for compatibility with detectSpikes
-            m.total = m.projectedTotal;
         }
         
         snapshot.projectedMonthly = monthData;

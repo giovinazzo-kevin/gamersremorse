@@ -50,7 +50,8 @@ const Charts = (() => {
         const posExhausted = snapshot.positiveExhausted ?? false;
         const negExhausted = snapshot.negativeExhausted ?? false;
 
-        // Build 8 datasets: 4 sampled (solid) + 4 projected (faded)
+        // Build datasets: sampled (solid) and projected (faded)
+        // OVERLAY approach: projected as full height behind, sampled on top (separate stacks)
         const sampledPos = [];
         const sampledUncPos = [];
         const sampledNeg = [];
@@ -70,7 +71,7 @@ const Charts = (() => {
             sampledNeg.push(-filtered.neg);
             sampledUncNeg.push(-filtered.uncNeg);
 
-            // Projected extra (only if not exhausted and not hidden)
+            // Projected values (extra on top of sampled, for stacking)
             if (hidePrediction) {
                 projectedPos.push(0);
                 projectedUncPos.push(0);
@@ -123,11 +124,11 @@ const Charts = (() => {
                         { label: '👍*', data: sampledUncPos, backgroundColor: hexToRgba(colors.uncertain, 0.8), stack: 'stack' },
                         { label: '👎', data: sampledNeg, backgroundColor: hexToRgba(colors.negative, 0.8), stack: 'stack' },
                         { label: '👎*', data: sampledUncNeg, backgroundColor: hexToRgba(colors.uncertain, 0.8), stack: 'stack' },
-                        // Projected (faded) - hidden from legend
-                        { label: '👍 (proj)', data: projectedPos, backgroundColor: hexToRgba(colors.positive, 0.35), stack: 'stack', hidden: false },
-                        { label: '👍* (proj)', data: projectedUncPos, backgroundColor: hexToRgba(colors.uncertain, 0.35), stack: 'stack', hidden: false },
-                        { label: '👎 (proj)', data: projectedNeg, backgroundColor: hexToRgba(colors.negative, 0.35), stack: 'stack', hidden: false },
-                        { label: '👎* (proj)', data: projectedUncNeg, backgroundColor: hexToRgba(colors.uncertain, 0.35), stack: 'stack', hidden: false },
+                        // Projected extra (faded, stacked on top)
+                        { label: '👍 (proj)', data: projectedPos, backgroundColor: hexToRgba(colors.positive, 0.35), stack: 'stack' },
+                        { label: '👍* (proj)', data: projectedUncPos, backgroundColor: hexToRgba(colors.uncertain, 0.35), stack: 'stack' },
+                        { label: '👎 (proj)', data: projectedNeg, backgroundColor: hexToRgba(colors.negative, 0.35), stack: 'stack' },
+                        { label: '👎* (proj)', data: projectedUncNeg, backgroundColor: hexToRgba(colors.uncertain, 0.35), stack: 'stack' },
                     ]
                 },
                 options: {
@@ -162,7 +163,7 @@ const Charts = (() => {
                                     const label = context.dataset.label;
                                     if (value === 0) return null;
                                     if (label.includes('(proj)')) {
-                                        return `${label.replace(' (proj)', '')} projected: +${Math.round(value)}`;
+                                        return `${label.replace(' (proj)', '')} projected: ${Math.round(value)}`;
                                     }
                                     return `${label}: ${Math.round(value)} sampled`;
                                 }
@@ -173,6 +174,7 @@ const Charts = (() => {
             });
         } else {
             chart.data.labels = labels;
+            // Sampled (indices 0-3)
             chart.data.datasets[0].data = sampledPos;
             chart.data.datasets[0].backgroundColor = hexToRgba(colors.positive, 0.8);
             chart.data.datasets[1].data = sampledUncPos;
@@ -181,6 +183,7 @@ const Charts = (() => {
             chart.data.datasets[2].backgroundColor = hexToRgba(colors.negative, 0.8);
             chart.data.datasets[3].data = sampledUncNeg;
             chart.data.datasets[3].backgroundColor = hexToRgba(colors.uncertain, 0.8);
+            // Projected extra (indices 4-7)
             chart.data.datasets[4].data = projectedPos;
             chart.data.datasets[4].backgroundColor = hexToRgba(colors.positive, 0.35);
             chart.data.datasets[5].data = projectedUncPos;

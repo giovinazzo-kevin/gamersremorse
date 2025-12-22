@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Projection Test</title>
+    <style>
+        body {
+            background: #1a1a1a;
+            color: #eee;
+            font-family: monospace;
+            padding: 20px;
+        }
+        .controls {
+            margin-bottom: 20px;
+        }
+        input, button {
+            background: #333;
+            color: #eee;
+            border: 1px solid #555;
+            padding: 8px;
+            margin-right: 10px;
+        }
+        button:hover { background: #444; }
+        canvas {
+            background: #222;
+            width: 100%;
+            height: 120px;
+        }
+        .stats {
+            margin-top: 5px;
+            font-size: 12px;
+            color: #888;
+        }
+        .error-stat { color: #f66; }
+        .good-stat { color: #6f6; }
+        .sample-row {
+            border: 1px solid #333;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+        .sample-row h4 { margin: 0 0 10px 0; }
+        #groundTruth { margin-bottom: 30px; }
+    </style>
+</head>
+<body>
+    <h1>Projection Algorithm Test</h1>
+    
+    <div class="controls">
+        <input type="text" id="appId" placeholder="App ID" value="440">
+        <button onclick="runTest()">Run Test</button>
+        <span id="status"></span>
+    </div>
+    
+    <div id="groundTruth" style="display:none;">
+        <h2>Ground Truth (current sample)</h2>
+        <canvas id="truthCanvas"></canvas>
+        <div class="stats" id="truthStats"></div>
+    </div>
+    
+    <div id="results"></div>
+    
+    <script src="/scripts/binary.js"></script>
+    <script>
+        // Use the ACTUAL projection from binary.js
+        function projectMonthlyData(months, observed, gameTotalPos, gameTotalNeg) {
+            // Build a fake snapshot structure that BinarySnapshot.projectMonthlyData expects
+            const n = months.length;
+            const monthlyTotals = {
+                pos: new Uint32Array(n),
+                neg: new Uint32Array(n),
+                uncPos: new Uint32Array(n),
+                uncNeg: new Uint32Array(n)
+            };
+            
+            for (let i = 0; i < n; i++) {
+                monthlyTotals.pos[i] = observed[i].pos;
+                monthlyTotals.neg[i] = observed[i].neg;
+                monthlyTotals.uncPos[i] = 0;
+                monthlyTotals.uncNeg[i] = 0;
+            }
+            
+            const fakeSnapshot = {
+                months,
+                monthlyTotals,
+                gameTotalPositive: gameTotalPos,
+                gameTotalNegative: gameTotalNeg,
+                positiveExhausted: false,
+                negativeExhausted: false
+            };
+            
+            BinarySnapshot.projectMonthlyData(fakeSnapshot);
+            
+            return fakeSnapshot.projectedMonthly.map(m => ({
+                pos: m.projectedPos,
+                neg: m.projectedNeg
+            }));
+        }
+        
+        function subsample(observed, rate) {
+            return observed.map(o => ({
+                pos: Math.round(o.pos * rate),
+                neg: Math.round(o.neg * rate)
+            }));
+        }
+        
+        function calculateError(projected, truth) {
+            let totalError = 0;
+            let totalTruth = 0;
+            
+            for (let i = 0; i < projected.length; i++) {
+                totalError += Math.abs(projected[i].pos - truth[i].pos);
+                totalError += Math.abs(projected[i].neg - truth[i].neg);
+                totalTruth += truth[i].pos + truth[i].neg;
+            }
+            
+            return totalTruth > 0 ? (totalError / totalTruth * 100) : 0;
+        }
+        
+        function drawTimeline(canvas, data, maxVal) {
+            const ctx = canvas.getContext('2d');
+            const w = canvas.width = canvas.offsetWidth;
+            const h = canvas.height = canvas.offsetHeight;
+            
+            ctx.clearRect(0, 0, w, h);
+            
+            const midY = h / 2;
+            const barW = w / data.length;
+            
+            for (let i = 0; i < data.length; i++) {
+                const x = i * barW;
+                const posH = (data[i].pos / maxVal) * midY;
+                const negH = (data[i].neg / maxVal) * midY;
+                
+                ctx.fillStyle = '#4ecdc4';
+                ctx.fillRect(x, midY - posH, barW - 1, posH);
+                
+                ctx.fillStyle = '#ff6b6b';
+                ctx.fillRect(x, midY, barW - 1, negH);
+            }
+            
+            ctx.strokeStyle = '#444';
+            ctx.beginPath();
+            ctx.moveTo(0, midY);
+            ctx.lineTo(w, midY);
+            ctx.stroke();
+        }
+        
+        function drawComparison(canvas, truth, projected, observed, maxVal) {
+            const ctx = canvas.getContext('2d');
+            const w = canvas.width = canvas.offsetWidth;
+            const h = canvas.height = canvas.offsetHeight;
+            
+            ctx.clearRect(0, 0, w, h);
+            
+            const midY = h / 2;
+            const barW = w / truth.length;
+            
+            for (let i = 0; i < truth.length; i++) {
+                const x = i * barW;
+                
+                // Truth (outline)
+                ctx.strokeStyle = '#4ecdc4';
+                ctx.strokeRect(x + 1, midY - (truth[i].pos / maxVal) * midY, barW - 3, (truth[i].pos / maxVal) * midY);
+                ctx.strokeStyle = '#ff6b6b';
+                ctx.strokeRect(x + 1, midY, barW - 3, (truth[i].neg / maxVal) * midY);
+                
+                // Projected (faded)
+                ctx.fillStyle = 'rgba(78, 205, 196, 0.4)';
+                ctx.fillRect(x, midY - (projected[i].pos / maxVal) * midY, barW - 1, (projected[i].pos / maxVal) * midY);
+                ctx.fillStyle = 'rgba(255, 107, 107, 0.4)';
+                ctx.fillRect(x, midY, barW - 1, (projected[i].neg / maxVal) * midY);
+                
+                // Observed (solid)
+                ctx.fillStyle = '#4ecdc4';
+                ctx.fillRect(x, midY - (observed[i].pos / maxVal) * midY, barW - 1, (observed[i].pos / maxVal) * midY);
+                ctx.fillStyle = '#ff6b6b';
+                ctx.fillRect(x, midY, barW - 1, (observed[i].neg / maxVal) * midY);
+            }
+            
+            ctx.strokeStyle = '#444';
+            ctx.beginPath();
+            ctx.moveTo(0, midY);
+            ctx.lineTo(w, midY);
+            ctx.stroke();
+        }
+        
+        let groundTruthData = null;
+        let months = null;
+        let gameTotalPos = 0;
+        let gameTotalNeg = 0;
+        let maxVal = 1;
+        
+        function runTest() {
+            const appId = document.getElementById('appId').value;
+            const status = document.getElementById('status');
+            
+            status.textContent = 'Connecting...';
+            
+            const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const ws = new WebSocket(`${protocol}//${location.host}/ws/game/${appId}`);
+            
+            ws.binaryType = 'arraybuffer';
+            
+            ws.onopen = () => {
+                status.textContent = 'Connected, waiting for data...';
+            };
+            
+            ws.onmessage = (event) => {
+                if (event.data instanceof ArrayBuffer) {
+                    const snapshot = BinarySnapshot.parse(event.data);
+                    processSnapshot(snapshot);
+                }
+            };
+            
+            ws.onerror = (e) => {
+                status.textContent = 'WebSocket error';
+                console.error(e);
+            };
+            
+            ws.onclose = () => {
+                status.textContent += ' [closed]';
+            };
+        }
+        
+        function processSnapshot(snapshot) {
+            const status = document.getElementById('status');
+            
+            months = snapshot.months;
+            gameTotalPos = snapshot.gameTotalPositive;
+            gameTotalNeg = snapshot.gameTotalNegative;
+            
+            // Extract current data as "ground truth"
+            groundTruthData = [];
+            for (let i = 0; i < months.length; i++) {
+                groundTruthData.push({
+                    pos: snapshot.monthlyTotals.pos[i] + snapshot.monthlyTotals.uncPos[i],
+                    neg: snapshot.monthlyTotals.neg[i] + snapshot.monthlyTotals.uncNeg[i]
+                });
+            }
+            
+            // Find max for scaling
+            maxVal = 1;
+            for (const d of groundTruthData) {
+                maxVal = Math.max(maxVal, d.pos, d.neg);
+            }
+            
+            // Draw ground truth
+            document.getElementById('groundTruth').style.display = 'block';
+            drawTimeline(document.getElementById('truthCanvas'), groundTruthData, maxVal);
+            
+            let totalPos = 0, totalNeg = 0;
+            for (const d of groundTruthData) {
+                totalPos += d.pos;
+                totalNeg += d.neg;
+            }
+            
+            const sampleRate = (totalPos + totalNeg) / (gameTotalPos + gameTotalNeg) * 100;
+            document.getElementById('truthStats').innerHTML = 
+                `Observed: ${totalPos + totalNeg} (${totalPos} pos, ${totalNeg} neg) | ` +
+                `Game totals: ${gameTotalPos} pos, ${gameTotalNeg} neg | ` +
+                `Sample rate: ${sampleRate.toFixed(1)}%`;
+            
+            status.textContent = `Received ${totalPos + totalNeg} reviews (${sampleRate.toFixed(1)}% sampled)`;
+            
+            // Run tests at different sample rates
+            const rates = [0.05, 0.1, 0.2, 0.3, 0.5, 0.7, 0.9];
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = '<h2>Subsample Tests</h2><p>Outline = truth, Faded = projected, Solid = observed</p>';
+            
+            for (const rate of rates) {
+                const subsampled = subsample(groundTruthData, rate);
+                
+                // For testing: groundTruthData IS our "100%" truth
+                // So gameTotals should be the sum of groundTruthData, not Steam's totals
+                let truthTotalPos = 0, truthTotalNeg = 0;
+                for (const d of groundTruthData) {
+                    truthTotalPos += d.pos;
+                    truthTotalNeg += d.neg;
+                }
+                
+                // Project: given subsampled data and "true" totals, recover shape
+                const projected = projectMonthlyData(months, subsampled, truthTotalPos, truthTotalNeg);
+                const error = calculateError(projected, groundTruthData);
+                
+                const rowDiv = document.createElement('div');
+                rowDiv.className = 'sample-row';
+                rowDiv.innerHTML = `
+                    <h4>${(rate * 100).toFixed(0)}% Subsample → Project to 100%</h4>
+                    <canvas id="canvas-${rate}"></canvas>
+                    <div class="stats">
+                        Error vs truth: <span class="${error < 20 ? 'good-stat' : 'error-stat'}">${error.toFixed(1)}%</span>
+                    </div>
+                `;
+                resultsDiv.appendChild(rowDiv);
+                
+                    setTimeout(() => {
+                        drawComparison(document.getElementById(`canvas-${rate}`), groundTruthData, projected, subsampled, maxVal);
+                    }, 10);
+            }
+        }
+    </script>
+</body>
+</html>
