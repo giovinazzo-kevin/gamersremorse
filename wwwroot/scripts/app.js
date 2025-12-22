@@ -138,16 +138,11 @@ document.getElementById('hidePrediction')?.addEventListener('change', () => {
     if (currentSnapshot) {
         Charts.updateChart(currentSnapshot);
         updateMetrics(currentSnapshot);
-        // Use cached tag timeline, compute lazily if not cached
-        if (Metrics && currentGameInfo) {
-            const isFree = currentGameInfo?.isFree || false;
-            const isSexual = currentGameInfo?.flags ? (currentGameInfo.flags & 8) !== 0 : false;
-            const hidePrediction = document.getElementById('hidePrediction')?.checked ?? false;
-            const cacheKey = hidePrediction ? 'sampled' : 'predicted';
-            if (!tagTimelineCache[cacheKey]) {
-                tagTimelineCache[cacheKey] = Metrics.computeTimeline(currentSnapshot, 3, { isFree, isSexual, hidePrediction });
-            }
-            updateTagTimeline(tagTimelineCache[cacheKey]);
+        // Just use cached tag timeline - no recomputation
+        const hidePrediction = document.getElementById('hidePrediction')?.checked ?? false;
+        const cacheKey = hidePrediction ? 'sampled' : 'predicted';
+        if (tagTimelineCache[cacheKey]) {
+            Timeline.updateTagData(tagTimelineCache[cacheKey]);
         }
         Timeline.draw();
     }
@@ -284,15 +279,15 @@ async function analyze() {
 
             updateMetrics(currentSnapshot);
 
-            // Compute tag timeline after analysis completes (cache predicted version)
+            // Compute BOTH tag timelines upfront (predicted + sampled)
             if (Metrics) {
                 const isFree = currentGameInfo?.isFree || false;
                 const isSexual = currentGameInfo?.flags ? (currentGameInfo.flags & 8) !== 0 : false;
+                tagTimelineCache.predicted = Metrics.computeTimeline(currentSnapshot, 3, { isFree, isSexual, hidePrediction: false });
+                tagTimelineCache.sampled = Metrics.computeTimeline(currentSnapshot, 3, { isFree, isSexual, hidePrediction: true });
+                
                 const hidePrediction = document.getElementById('hidePrediction')?.checked ?? false;
                 const cacheKey = hidePrediction ? 'sampled' : 'predicted';
-                if (!tagTimelineCache[cacheKey]) {
-                    tagTimelineCache[cacheKey] = Metrics.computeTimeline(currentSnapshot, 3, { isFree, isSexual, hidePrediction });
-                }
                 Timeline.updateTagData(tagTimelineCache[cacheKey]);
             }
             

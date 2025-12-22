@@ -45,7 +45,7 @@ const Metrics = {
         },
         {
             id: 'EXTRACTIVE',
-            condition: (m) => m.medianCertainRatio > 1.3,
+            condition: (m) => m.medianCertainRatio > 1.3 || m.medianRatio > 1.3,
             reason: (m) => `${Math.round(m.negativeRatio * 100)}% negative at ${Math.round(m.negMedianReview / 60)}h (${Math.round((m.medianRatio - 1) * 100)}% longer than positives)`,
             severity: (m) => Math.min(0.3, (m.medianRatio - 1) * 0.3),
             color: 'var(--color-tag-extractive)'
@@ -76,7 +76,7 @@ const Metrics = {
         },
         {
             id: 'PREDATORY',
-            condition: (m) => m.medianCertainRatio > 1.5 && m.negativeRatio > 0.30,
+            condition: (m) => (m.medianCertainRatio > 1.5 || m.medianRatio > 1.5) && m.negativeRatio > 0.30,
             reason: (m) => `${Math.round(m.negativeRatio * 100)}% negative after ${Math.round(m.negMedianReview / 60)}h median (${Math.round((m.medianRatio - 1) * 100)}% longer than positive)`,
             severity: 0.25,
             color: 'var(--color-tag-predatory)'
@@ -127,7 +127,7 @@ const Metrics = {
         {
             id: 'DEAD',
             condition: (m) => m.isEndDead,
-            reason: (m) => `Activity declined - tail end is dead`,
+            reason: (m) => `Activity collapsed to ${Math.round((m.endActivity / m.peakActivity) * 100)}% of peak`,
             severity: 0.01,
             color: 'var(--color-tag-dead)'
         },
@@ -437,7 +437,9 @@ const Metrics = {
             ? (temporalData.secondHalfNegRatio - temporalData.firstHalfNegRatio) / temporalData.stddev : 0;
         
         const activityData = this.computeWindowEndActivity(buckets, filter, snapshot, usePrediction);
-        const isEndDead = activityData.isInBottom10;
+        const isEndDead = activityData.isDead;
+        const peakActivity = activityData.peakActivity;
+        const endActivity = activityData.endActivity;
         const revivalData = this.detectRevival(buckets, filter, snapshot, usePrediction);
 
         const confidence = this.computeConfidence(sampledTotal) * Math.sqrt(Math.max(0.1, convergenceScore));
@@ -485,6 +487,8 @@ const Metrics = {
             secondHalfNegRatio: temporalData.secondHalfNegRatio,
             temporalDriftZ,
             isEndDead,
+            peakActivity,
+            endActivity,
             hasRevival: revivalData.hasRevival,
             firstWaveNegRatio: revivalData.firstWaveNegRatio,
             lastWaveNegRatio: revivalData.lastWaveNegRatio,
@@ -610,6 +614,7 @@ const Metrics = {
 
     getPlaytimeArray(buckets, type, filter, snapshot = null, includeCertain = true, includeUncertain = true) {
         const values = [];
+        
         for (const bucket of buckets) {
             const f = this.filterBucket(bucket, filter, snapshot);
             const midpoint = (bucket.minPlaytime + bucket.maxPlaytime) / 2;
@@ -621,8 +626,10 @@ const Metrics = {
                 if (includeCertain) count += f.neg;
                 if (includeUncertain) count += f.uncNeg;
             }
+            // Raw counts - shape is what matters for medians/p95
             for (let i = 0; i < count; i++) values.push(midpoint);
         }
+        
         return values;
     },
 
@@ -738,7 +745,7 @@ const Metrics = {
 
     computeWindowEndActivity(buckets, filter, snapshot = null, usePrediction = true) {
         const windowData = this.getMonthlyActivityData(buckets, filter, snapshot, usePrediction);
-        if (windowData.activity.length < 6) return { endActivity: 1, startActivity: 1, isInBottom10: false };
+        if (windowData.activity.length < 6) return { endActivity: 1, startActivity: 1, peakActivity: 1, isInBottom10: false, isVelocityCollapse: false, isDead: false };
         
         const activity = windowData.activity;
         const firstHalfCount = Math.floor(activity.length / 2);
@@ -746,8 +753,20 @@ const Metrics = {
         const startActivity = firstHalf.reduce((sum, m) => sum + m.count, 0) / firstHalf.length;
         const endMonths = activity.slice(-3);
         const endActivity = endMonths.reduce((sum, m) => sum + m.count, 0) / endMonths.length;
+        
+        // Peak activity (max monthly count)
+        const peakActivity = Math.max(...activity.map(m => m.count));
+        
+        // Velocity collapse: current < 10% of peak
+        const isVelocityCollapse = peakActivity > 0 && endActivity < peakActivity * 0.1;
+        
+        // Bottom 10% of own history
         const isInBottom10 = endActivity <= windowData.p10;
-        return { endActivity, startActivity, isInBottom10 };
+        
+        // DEAD = was big AND now small (not just always small)
+        const isDead = isInBottom10 && isVelocityCollapse;
+        
+        return { endActivity, startActivity, peakActivity, isInBottom10, isVelocityCollapse, isDead };
     },
 
     detectRevival(buckets, filter, snapshot = null, usePrediction = true) {

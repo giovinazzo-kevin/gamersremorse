@@ -250,17 +250,16 @@ const BinarySnapshot = {
         }
         
         // First pass: sum observed totals
-        let totalObservedPos = 0;
-        let totalObservedNeg = 0;
+        let totalObserved = 0;
         
         for (let i = 0; i < n; i++) {
-            totalObservedPos += monthlyTotals.pos[i] + monthlyTotals.uncPos[i];
-            totalObservedNeg += monthlyTotals.neg[i] + monthlyTotals.uncNeg[i];
+            totalObserved += monthlyTotals.pos[i] + monthlyTotals.uncPos[i];
+            totalObserved += monthlyTotals.neg[i] + monthlyTotals.uncNeg[i];
         }
         
-        // Scale factors: observed shape -> game totals
-        const posScale = totalObservedPos > 0 ? gameTotalPositive / totalObservedPos : 1;
-        const negScale = totalObservedNeg > 0 ? gameTotalNegative / totalObservedNeg : 1;
+        // Single uniform scale factor: preserves sampled ratio exactly
+        const gameTotal = gameTotalPositive + gameTotalNegative;
+        const scale = totalObserved > 0 ? gameTotal / totalObserved : 1;
         
         // Build projections
         const monthData = [];
@@ -274,9 +273,9 @@ const BinarySnapshot = {
             const observedNeg = neg + uncNeg;
             const observedTotal = observedPos + observedNeg;
             
-            // Scale proportionally
-            const projectedPos = observedPos * posScale;
-            const projectedNeg = observedNeg * negScale;
+            // Scale uniformly (preserves ratio)
+            const projectedPos = observedPos * scale;
+            const projectedNeg = observedNeg * scale;
             const projectedTotal = projectedPos + projectedNeg;
             
             // Extra = projected minus observed (for ghost bars)
