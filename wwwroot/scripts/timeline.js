@@ -135,33 +135,14 @@ const Timeline = (() => {
         const midY = chartH / 2;
         const barW = w / monthData.length;
 
-        // Find max and median for adaptive scale normalization
-        // Compute exponent so median value fills ~50% of chart height
+        // Find max for sqrt scale normalization
         let maxPos = 1, maxNeg = 1;
-        const posValues = [], negValues = [];
         for (const m of monthData) {
             const totalPos = hidePrediction ? m.sampledPos : m.projectedPos;
             const totalNeg = hidePrediction ? m.sampledNeg : m.projectedNeg;
             maxPos = Math.max(maxPos, totalPos);
             maxNeg = Math.max(maxNeg, totalNeg);
-            if (totalPos > 0) posValues.push(totalPos);
-            if (totalNeg > 0) negValues.push(totalNeg);
         }
-        
-        // Get median
-        posValues.sort((a, b) => a - b);
-        negValues.sort((a, b) => a - b);
-        const medianPos = posValues.length > 0 ? posValues[Math.floor(posValues.length / 2)] : 1;
-        const medianNeg = negValues.length > 0 ? negValues[Math.floor(negValues.length / 2)] : 1;
-        
-        // Compute exponent: (median/max)^exp = 0.5 => exp = log(0.5) / log(median/max)
-        const posRatio = medianPos / maxPos;
-        const negRatio = medianNeg / maxNeg;
-        const expPos = posRatio < 1 ? Math.log(0.5) / Math.log(posRatio) : 1;
-        const expNeg = negRatio < 1 ? Math.log(0.5) / Math.log(negRatio) : 1;
-        // Clamp to reasonable range
-        const clampedExpPos = Math.max(0.1, Math.min(1, expPos));
-        const clampedExpNeg = Math.max(0.1, Math.min(1, expNeg));
 
         // Draw bars - centered, pos up, neg down
         // OVERLAY approach: ghost at full height, then solid on top
@@ -171,8 +152,8 @@ const Timeline = (() => {
 
             if (hidePrediction) {
                 // Just draw sampled data, no ghosts
-                const posH = Math.pow(m.sampledPos / maxPos, clampedExpPos) * midY;
-                const negH = Math.pow(m.sampledNeg / maxNeg, clampedExpNeg) * midY;
+                const posH = Math.sqrt(m.sampledPos / maxPos) * midY;
+                const negH = Math.sqrt(m.sampledNeg / maxNeg) * midY;
 
                 // Positive (up from midline)
                 if (posH > 0) {
@@ -189,10 +170,10 @@ const Timeline = (() => {
                 }
             } else {
                 // OVERLAY: Draw projected (ghost) first, then observed (solid) on top
-                const projPosH = Math.pow(m.projectedPos / maxPos, clampedExpPos) * midY;
-                const projNegH = Math.pow(m.projectedNeg / maxNeg, clampedExpNeg) * midY;
-                const sampPosH = Math.pow(m.sampledPos / maxPos, clampedExpPos) * midY;
-                const sampNegH = Math.pow(m.sampledNeg / maxNeg, clampedExpNeg) * midY;
+                const projPosH = Math.sqrt(m.projectedPos / maxPos) * midY;
+                const projNegH = Math.sqrt(m.projectedNeg / maxNeg) * midY;
+                const sampPosH = Math.sqrt(m.sampledPos / maxPos) * midY;
+                const sampNegH = Math.sqrt(m.sampledNeg / maxNeg) * midY;
 
                 // === POSITIVE (going UP from midline) ===
                 // Ghost layer (projected) at 50% alpha

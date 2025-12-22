@@ -114,20 +114,23 @@ public static class FingerprintBuilder
                 monthlyNeg[month] = monthlyNeg.GetValueOrDefault(month) + count;
         }
 
-        var maxMonthly = allMonths.Max(m => monthlyPos.GetValueOrDefault(m) + monthlyNeg.GetValueOrDefault(m));
-        if (maxMonthly == 0) maxMonthly = 1;
+        // Find max for sqrt scale
+        var maxPos = allMonths.Select(m => monthlyPos.GetValueOrDefault(m)).DefaultIfEmpty(1).Max();
+        var maxNeg = allMonths.Select(m => monthlyNeg.GetValueOrDefault(m)).DefaultIfEmpty(1).Max();
+        if (maxPos == 0) maxPos = 1;
+        if (maxNeg == 0) maxNeg = 1;
 
-        var logMax = Math.Log(maxMonthly + 1);
         var midY = HistogramHeight + TimelineHeight / 2;
+        var halfHeight = TimelineHeight / 2;
 
         for (int i = 0; i < allMonths.Count; i++) {
             var month = allMonths[i];
             var pos = monthlyPos.GetValueOrDefault(month);
             var neg = monthlyNeg.GetValueOrDefault(month);
 
-            // Log scale for height
-            var posHeight = (int)(Math.Log(pos + 1) / logMax * (TimelineHeight / 2));
-            var negHeight = (int)(Math.Log(neg + 1) / logMax * (TimelineHeight / 2));
+            // Sqrt scale for height
+            var posHeight = pos > 0 ? (int)(Math.Sqrt(pos / (double)maxPos) * halfHeight) : 0;
+            var negHeight = neg > 0 ? (int)(Math.Sqrt(neg / (double)maxNeg) * halfHeight) : 0;
 
             var startCol = (int)(i * colsPerMonth);
             var endCol = (int)((i + 1) * colsPerMonth);
