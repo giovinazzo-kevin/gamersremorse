@@ -1,4 +1,4 @@
-importScripts('metrics.js');
+importScripts('binary.js', 'metrics.js');
 
 self.onmessage = function(e) {
     try {

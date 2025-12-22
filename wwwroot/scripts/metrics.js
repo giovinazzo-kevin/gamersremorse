@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Metrics module for gamersremorse
  * Pure analysis functions - no UI, no side effects
  * 
@@ -606,122 +606,12 @@ const Metrics = {
      * @param {Object} snapshot - Snapshot with game totals
      * @returns {Array} Array of { month, pos, neg, total, projectedPos, projectedNeg, projectedTotal }
      */
-    getPredictedMonthlyData(buckets, filter, snapshot, usePrediction = true) {
-        // Use pre-aggregated monthlyTotals
-        if (snapshot?.months && snapshot?.monthlyTotals) {
-            const months = snapshot.months;
-            const totals = snapshot.monthlyTotals;
-            const monthIndex = snapshot.monthIndex;
-            
-            const fromIdx = filter?.from ? (monthIndex[filter.from] ?? 0) : 0;
-            const toIdx = filter?.to ? (monthIndex[filter.to] ?? months.length - 1) : months.length - 1;
-            const excludeSet = filter?.excludeMonths ? new Set(filter.excludeMonths) : null;
-            
-            const monthData = [];
-            let totalSampled = 0;
-            
-            for (let i = fromIdx; i <= toIdx; i++) {
-                if (excludeSet && excludeSet.has(months[i])) continue;
-                const pos = totals.pos[i];
-                const neg = totals.neg[i];
-                const uncPos = totals.uncPos[i];
-                const uncNeg = totals.uncNeg[i];
-                const sampledPos = pos + uncPos;
-                const sampledNeg = neg + uncNeg;
-                const sampledTotal = sampledPos + sampledNeg;
-                totalSampled += sampledTotal;
-                monthData.push({ month: months[i], pos, neg, uncPos, uncNeg, sampledPos, sampledNeg, sampledTotal });
-            }
-            
-            if (monthData.length === 0 || totalSampled === 0) return monthData;
-            
-            // Apply projection only if enabled
-            if (usePrediction) {
-                return this._projectMonthlyData(monthData, totalSampled, snapshot);
-            }
-            
-            // No projection - just set pos/neg/total from sampled values
-            for (const m of monthData) {
-                m.projectedPos = m.sampledPos;
-                m.projectedNeg = m.sampledNeg;
-                m.projectedTotal = m.sampledTotal;
-                m.total = m.sampledTotal;
-            }
-            return monthData;
-        }
-        
-        // No typed arrays available - return empty
-        return [];
-    },
-
     /**
-     * Apply position-based extrapolation to monthly data
-     * Shared by both fast path (typed arrays) and fallback (dictionaries)
+     * Get projected monthly data - delegates to BinarySnapshot as single source of truth.
      */
-    _projectMonthlyData(monthData, totalSampled, snapshot) {
-        if (monthData.length === 0 || totalSampled === 0) return monthData;
-        
-        // Game totals from Steam (ground truth)
-        const gameTotalPos = snapshot.gameTotalPositive || 0;
-        const gameTotalNeg = snapshot.gameTotalNegative || 0;
-        const gameTotal = gameTotalPos + gameTotalNeg;
-        const trueRatio = gameTotal > 0 ? gameTotalPos / gameTotal : 0.5;
-        
-        if (gameTotal === 0) return monthData;
-        
-        // Sample rate
-        const sampleRate = totalSampled / gameTotal;
-        
-        // Position-based extrapolation:
-        // Recent months (position close to end) are oversampled - less extrapolation needed
-        // Old months (position close to start) are undersampled - more extrapolation needed
-        const n = monthData.length;
-        for (let i = 0; i < n; i++) {
-            const m = monthData[i];
-            
-            // Position 0 = oldest, position n-1 = newest
-            const positionRatio = i / Math.max(1, n - 1); // 0 (oldest) to 1 (newest)
-            
-            // For newest months (positionRatio=1): multiplier → 1 (no extrapolation)
-            // For oldest months (positionRatio=0): multiplier → 1/sampleRate (full extrapolation)
-            const maxMultiplier = sampleRate > 0 ? 1 / sampleRate : 1;
-            const multiplier = Math.pow(maxMultiplier, 1 - positionRatio);
-            
-            m.estimatedTrue = m.sampledTotal * multiplier;
-        }
-        
-        // Normalize so estimates sum to gameTotal
-        const estimateSum = monthData.reduce((sum, m) => sum + m.estimatedTrue, 0);
-        const normalizeFactor = estimateSum > 0 ? gameTotal / estimateSum : 1;
-        
-        for (const m of monthData) {
-            m.projectedTotal = m.estimatedTrue * normalizeFactor;
-            
-            // Spike-aware projection:
-            // If this month is more negative than baseline, only project the negatives
-            // If this month is more positive than baseline, only project the positives
-            const localRatio = m.sampledTotal > 0 ? m.sampledPos / m.sampledTotal : trueRatio;
-            const ratioDiff = localRatio - trueRatio;
-            
-            if (ratioDiff >= 0) {
-                // More positive than usual - project positives, negatives stay sampled
-                m.projectedNeg = m.sampledNeg;
-                m.projectedPos = Math.max(m.sampledPos, m.projectedTotal - m.projectedNeg);
-            } else {
-                // More negative than usual - project negatives, positives stay sampled
-                m.projectedPos = m.sampledPos;
-                m.projectedNeg = Math.max(m.sampledNeg, m.projectedTotal - m.projectedPos);
-            }
-            
-            // Final totals
-            m.total = m.projectedTotal;
-            m.pos = m.projectedPos;
-            m.neg = m.projectedNeg;
-        }
-        
-        return monthData;
+    getPredictedMonthlyData(buckets, filter, snapshot, usePrediction = true) {
+        return BinarySnapshot.getProjectedMonthly(snapshot, filter, usePrediction);
     },
-
     computeStats(values) {
         if (values.length === 0) return { mean: 0, median: 0, stddev: 0, p95: 0 };
         const sorted = [...values].sort((a, b) => a - b);
@@ -825,7 +715,6 @@ const Metrics = {
         const endMonths = activity.slice(-3);
         const endActivity = endMonths.reduce((sum, m) => sum + m.count, 0) / endMonths.length;
         const isInBottomQuartile = endActivity <= windowData.p25;
-        console.log(activity.map(a => a.month + ': ' + a.count));
         return { endActivity, startActivity, isInBottomQuartile };
     },
 
