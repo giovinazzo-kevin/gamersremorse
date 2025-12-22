@@ -255,6 +255,7 @@ function calculateBeamPath(startX, startY, dirX, dirY, totalLength, bounces, pie
             } else if (bouncesLeft > 0 && nearestType) {
                 // Bounce off enemy - burst damage
                 bounceHits.set(nearestEnemy, remaining);
+                hitEnemies.add(nearestEnemy);
             } else {
                 // No pierce, no bounce - beam stops but still does tick damage
                 hitEnemies.add(nearestEnemy);
@@ -484,7 +485,7 @@ const Combat = {
             
             // PEW sequence -> callback fires beam
             BeamCharge.stop(true, tier, () => {
-                this.fireBeam(target.x, target.y, tier);
+                this.fireBeam(target.x, target.y, this.frameEffects.baseDamage, tier);
             });
             // Don't reset expression yet - ignition sequence playing
         } else if (this.isCharging) {
@@ -508,7 +509,7 @@ const Combat = {
         return this.completedTier > 0;
     },
 
-    fireBeam(targetX, targetY, tier) {
+    fireBeam(targetX, targetY, baseDamage, tier) {
         const start = this.getPupilPosition();
         const dx = targetX - start.x;
         const dy = targetY - start.y;
@@ -520,8 +521,8 @@ const Combat = {
         // Duration: +25% per tier (base from item, default 0.5s)
         const baseDuration = this.frameEffects.laserDuration || 0.5;
         const duration = baseDuration * Math.pow(1.25, tier - 1);
-        // Damage: +50% per tier (base 3)
-        const damage = 3 * Math.pow(1.5, tier - 1);
+        // Damage: +50% per tier
+        const damage = baseDamage * Math.pow(1.5, tier - 1);
         // Width: from item (default 25px), doubles at tier 5 (capped)
         const baseWidth = this.frameEffects.laserWidth || 25;
         const widthMultiplier = 1 + Math.min(1, (tier - 1) / 4);  // 1 at tier 1, 2 at tier 5

@@ -166,7 +166,7 @@ const Items = {
             rarity: 'legendary',
             stackable: true,
             condition: { negativeRatio: { gt: 0.7 } },
-            effects: { demonic: true, tint: '#ff0000', laserCharge: true, laserWidth: 80, laserFillTime: 1.0, laserDuration: 1.5 },
+            effects: { demonic: true, tint: '#ff0000', laserCharge: true, piercing: true, pierce: 1000, baseDamage: 3, laserWidth: 80, laserFillTime: 1.0, laserDuration: 1.5 },
             sound: 'zelda_secret'
         },
         rubber_cement: {
@@ -417,6 +417,7 @@ const Items = {
             blinkRate: 1,
             tearRate: 1,
             dilation: 0,
+            baseDamage: 1,
             jitter: false,
             ghostly: false,
             halo: false,
@@ -469,6 +470,9 @@ const Items = {
                 } else if (key === 'pierce') {
                     // pierce stacks additively
                     merged.pierce += value * count;
+                } else if (key === 'baseDamage') {
+                    // damage stacks additively
+                    merged.baseDamage += value * count;
                 } else if (key === 'laserFillTime') {
                     // laserFillTime averages (each item contributes count times)
                     fillTimeSum += value * count;
