@@ -113,6 +113,11 @@ function getColors() {
     };
 }
 
+function getTagColor(tag) {
+    const varName = `--color-tag-${(tag || 'start').toLowerCase().replace(/_/g, '-')}`;
+    return getComputedStyle(document.documentElement).getPropertyValue(varName).trim() || '#666';
+}
+
 function colorDistance(c1, c2) {
     // Weighted Euclidean distance (human eye is more sensitive to green)
     const rDiff = c1.r - c2.r;

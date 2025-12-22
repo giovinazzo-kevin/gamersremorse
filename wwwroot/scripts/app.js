@@ -3,11 +3,7 @@ let velocityChart = null;
 let languageChart = null;
 let currentSnapshot = null;
 let currentGameInfo = null;
-let timelineCanvas = null;
-let timelineCtx = null;
-let timelineData = { months: [], positive: {}, negative: {}, uncertainPos: {}, uncertainNeg: {}, volume: [], maxVolume: 0 };
-let timelineSelection = { start: 0, end: 1 };
-let timelineDrag = null;
+// Timeline state now managed by Timeline module
 let isFirstSnapshot = true;
 let snapshotCount = 0;
 let currentMetrics = null;
@@ -154,7 +150,7 @@ document.getElementById('hidePrediction')?.addEventListener('change', () => {
             }
             updateTagTimeline(tagTimelineCache[cacheKey]);
         }
-        drawTimeline();
+        Timeline.draw();
     }
 });
 document.getElementById('hideSpikes')?.addEventListener('change', () => {
@@ -163,7 +159,7 @@ document.getElementById('hideSpikes')?.addEventListener('change', () => {
         updateVelocityChart(currentSnapshot);
         updateLanguageChart(currentSnapshot);
         updateStats(currentSnapshot);
-        drawTimeline();
+        Timeline.draw();
     }
 });
 document.getElementById('hideAnnotations')?.addEventListener('change', () => {
@@ -173,7 +169,11 @@ document.getElementById('showTotalTime')?.addEventListener('change', () => {
     if (currentSnapshot) updateChart(currentSnapshot);
 });
 
-initTimeline();
+Timeline.init({
+    getSnapshot: () => currentSnapshot,
+    getMetrics: () => currentMetrics,
+    onSelectionChange: applyTimelineFilter
+});
 
 async function analyze() {
     const input = document.getElementById('appId').value;
@@ -192,8 +192,7 @@ async function analyze() {
     isFirstSnapshot = true;
     snapshotCount = 0;
     hasReactedToGame = false;
-    timelineData = { months: [], positive: {}, negative: {}, uncertainPos: {}, uncertainNeg: {}, volume: [], maxVolume: 0 };
-    timelineSelection = { start: 0, end: 1 };
+    Timeline.reset();
     tagTimelineData = [];
     tagTimelineCache = { predicted: null, sampled: null };
 
@@ -218,7 +217,7 @@ async function analyze() {
     document.getElementById('metrics-detail').innerHTML = '';
     document.getElementById('opinion-content').innerHTML = '<div class="opinion-loading">⌛ Analyzing...</div>';
     document.getElementById('game-title').textContent = '';
-    drawTimeline(); // clears the timeline canvas
+    Timeline.draw(); // clears the timeline canvas
 
     const infoRes = await fetch(`/game/${appId}`);
     if (infoRes.ok) {
@@ -238,7 +237,7 @@ async function analyze() {
         state.lastInteraction = Date.now();
         const snapshot = BinarySnapshot.parse(e.data);
         updateChart(snapshot);
-        updateTimelineData(snapshot, isFirstSnapshot);
+        Timeline.updateData(snapshot, isFirstSnapshot);
         updateVelocityChart(snapshot);
         updateLanguageChart(snapshot);
         updateEditHeatmap(snapshot);
@@ -282,7 +281,7 @@ async function analyze() {
                 if (!tagTimelineCache[cacheKey]) {
                     tagTimelineCache[cacheKey] = Metrics.computeTimeline(currentSnapshot, 3, { isFree, isSexual, hidePrediction });
                 }
-                updateTagTimeline(tagTimelineCache[cacheKey]);
+                Timeline.updateTagData(tagTimelineCache[cacheKey]);
             }
             
             // Fetch controversy context for any detected events
@@ -315,22 +314,7 @@ function extractAppId(input) {
     return match ? match[1] : null;
 }
 
-function findInflectionPoint(snapshot) {
-    const buckets = snapshot.bucketsByReviewTime;
-    const months = timelineData.months;
-
-    for (let i = 0; i < months.length; i++) {
-        // compute medians for all data up to month i
-        const range = { from: months[0], to: months[i] };
-        const posMedian = computeMedianForRange(buckets, 'positive', range);
-        const negMedian = computeMedianForRange(buckets, 'negative', range);
-
-        if (negMedian > posMedian) {
-            return months[i]; // first month where it flipped
-        }
-    }
-    return null; // never flipped, game is healthy
-}
+// findInflectionPoint removed - was dead code, used timelineData.months
 
 function computeRefundHonesty(buckets) {
     let negBeforeRefund = 0;
@@ -855,389 +839,7 @@ function updateStats(snapshot) {
     `;
 }
 
-function initTimeline() {
-    timelineCanvas = document.getElementById('timeline');
-    timelineCtx = timelineCanvas.getContext('2d');
-
-    resizeTimeline();
-    addEventListener('resize', resizeTimeline);
-
-    timelineCanvas.addEventListener('mousedown', onTimelineMouseDown);
-    addEventListener('mousemove', onTimelineMouseMove);
-    addEventListener('mouseup', onTimelineMouseUp);
-}
-
-function resizeTimeline() {
-    const rect = timelineCanvas.getBoundingClientRect();
-    timelineCanvas.width = rect.width;
-    timelineCanvas.height = rect.height;
-    drawTimeline();
-}
-
-function updateTimelineData(snapshot, reset = false) {
-    // Use pre-aggregated monthlyTotals from binary parser (fast path)
-    const { months, monthlyTotals } = snapshot;
-    
-    // Convert typed arrays to dict format for compatibility with existing drawTimeline
-    // TODO: Eventually refactor drawTimeline to use typed arrays directly
-    const positive = {};
-    const negative = {};
-    const uncertainPos = {};
-    const uncertainNeg = {};
-    const volume = [];
-    
-    for (let i = 0; i < months.length; i++) {
-        const m = months[i];
-        const pos = monthlyTotals.pos[i];
-        const neg = monthlyTotals.neg[i];
-        const uncPos = monthlyTotals.uncPos[i];
-        const uncNeg = monthlyTotals.uncNeg[i];
-        
-        if (pos > 0) positive[m] = pos;
-        if (neg > 0) negative[m] = neg;
-        if (uncPos > 0) uncertainPos[m] = uncPos;
-        if (uncNeg > 0) uncertainNeg[m] = uncNeg;
-        volume.push(pos + neg + uncPos + uncNeg);
-    }
-
-    timelineData.months = months;
-    timelineData.positive = positive;
-    timelineData.negative = negative;
-    timelineData.uncertainPos = uncertainPos;
-    timelineData.uncertainNeg = uncertainNeg;
-    timelineData.volume = volume;
-    timelineData.maxVolume = Math.max(...volume, 1);
-
-    if (reset) {
-        timelineSelection = { start: 0, end: 1 };
-    }
-
-    drawTimeline();
-}
-function getTagColor(tag) {
-    const varName = `--color-tag-${(tag || "start").toLowerCase().replace(/_/g, '-')}`;
-    return getComputedStyle(document.documentElement).getPropertyValue(varName).trim() || '#666';
-}
-
-function drawTimeline() {
-    const w = timelineCanvas.width;
-    const h = timelineCanvas.height;
-    const colors = getColors();
-
-    timelineCtx.clearRect(0, 0, w, h);
-
-    if (timelineData.months.length === 0) return;
-    if (!currentSnapshot) return;
-
-    // Get display options
-    const posExhausted = currentSnapshot?.positiveExhausted ?? false;
-    const negExhausted = currentSnapshot?.negativeExhausted ?? false;
-    const hidePrediction = document.getElementById('hidePrediction')?.checked ?? false;
-    const hideSpikes = document.getElementById('hideSpikes')?.checked ?? false;
-    const excludeMonths = hideSpikes && currentMetrics?.excludedMonths
-        ? new Set(currentMetrics.excludedMonths)
-        : new Set();
-    
-    // Ground truth from Steam
-    const gameTotalPos = currentSnapshot?.gameTotalPositive ?? 0;
-    const gameTotalNeg = currentSnapshot?.gameTotalNegative ?? 0;
-    const gameTotal = gameTotalPos + gameTotalNeg;
-    const trueRatio = gameTotal > 0 ? gameTotalPos / gameTotal : 0.5;
-    
-    // Build per-month sampled data, excluding spikes
-    const monthData = [];
-    let totalSampled = 0;
-    
-    for (const month of timelineData.months) {
-        if (excludeMonths.has(month)) continue;
-        
-        const pos = (timelineData.positive[month] || 0);
-        const neg = (timelineData.negative[month] || 0);
-        const uncPos = (timelineData.uncertainPos[month] || 0);
-        const uncNeg = (timelineData.uncertainNeg[month] || 0);
-        const sampledPos = pos + uncPos;
-        const sampledNeg = neg + uncNeg;
-        const sampledTotal = sampledPos + sampledNeg;
-        
-        totalSampled += sampledTotal;
-        monthData.push({ month, pos, neg, uncPos, uncNeg, sampledPos, sampledNeg, sampledTotal });
-    }
-    
-    if (monthData.length === 0 || totalSampled === 0) return;
-    
-    // PROJECTION LOGIC:
-    // Our sampling is frontloaded (recent months overrepresented).
-    // The "missing" reviews (gameTotal - totalSampled) are disproportionately OLD.
-    // 
-    // Approach: distribute missing volume BOTTOM-FIRST.
-    // Older months get filled up before newer months get extras.
-    // This counteracts the frontloading bias.
-    
-    const missingTotal = Math.max(0, gameTotal - totalSampled);
-    
-    // First pass: estimate each month's "fair share" of total volume.
-    // Use sampled distribution as a starting point, but we'll redistribute.
-    // For now, assume uniform-ish distribution as baseline, then adjust.
-    
-    // Calculate how much each month is "owed" vs what we sampled.
-    // If we sampled 10% of gameTotal, each month should have ~10% of its true volume.
-    // Months with LESS than that proportion are undersampled (older months).
-    
-    const sampleRate = totalSampled / gameTotal; // e.g., 0.14 for 20k of 145k
-    
-    // For each month, estimate its TRUE volume.
-    // If sampling were uniform, true volume = sampled / sampleRate.
-    // But sampling ISN'T uniform - it's frontloaded.
-    // So we use a position-based correction: older months get scaled up more.
-    
-    const n = monthData.length;
-    for (let i = 0; i < n; i++) {
-        const m = monthData[i];
-        
-        // Position 0 = oldest, position n-1 = newest
-        // Recent months are OVERSAMPLED (cursor is frontloaded), so we may have nearly all of them.
-        // Old months are UNDERSAMPLED, so we need to extrapolate more.
-        //
-        // Use exponential decay: newest months get almost no extrapolation,
-        // oldest months get full extrapolation.
-        const positionRatio = i / Math.max(1, n - 1); // 0 (oldest) to 1 (newest)
-        
-        // For newest months (positionRatio=1): multiplier ? 1 (no extrapolation beyond sampled)
-        // For oldest months (positionRatio=0): multiplier ? 1/sampleRate (full extrapolation)
-        // Use exponential interpolation between these
-        const maxMultiplier = sampleRate > 0 ? 1 / sampleRate : 1;
-        const multiplier = Math.pow(maxMultiplier, 1 - positionRatio);
-        
-        m.estimatedTrue = m.sampledTotal * multiplier;
-    }
-    
-    // Normalize so estimates sum to gameTotal
-    const estimateSum = monthData.reduce((sum, m) => sum + m.estimatedTrue, 0);
-    const normalizeFactor = estimateSum > 0 ? gameTotal / estimateSum : 1;
-    
-    for (const m of monthData) {
-        m.projectedTotal = m.estimatedTrue * normalizeFactor;
-        
-        // Key insight: spikes are ADDITIONAL angry/happy people on top of baseline.
-        // If this month is more negative than usual, only project the negatives.
-        // If this month is more positive than usual, only project the positives.
-        // The non-spiking side stays at what we sampled.
-        
-        const localRatio = m.sampledTotal > 0 ? m.sampledPos / m.sampledTotal : trueRatio;
-        const ratioDiff = localRatio - trueRatio; // positive = more positive than usual
-        
-        if (ratioDiff >= 0) {
-            // More positive than usual - only project positives, negatives stay as sampled
-            m.projectedNeg = m.sampledNeg;
-            m.projectedPos = Math.max(m.sampledPos, m.projectedTotal - m.projectedNeg);
-        } else {
-            // More negative than usual - only project negatives, positives stay as sampled
-            m.projectedPos = m.sampledPos;
-            m.projectedNeg = Math.max(m.sampledNeg, m.projectedTotal - m.projectedPos);
-        }
-        
-        // Extra is what we project minus what we sampled
-        // But respect exhaustion flags
-        m.extraPos = posExhausted ? 0 : Math.max(0, m.projectedPos - m.sampledPos);
-        m.extraNeg = negExhausted ? 0 : Math.max(0, m.projectedNeg - m.sampledNeg);
-    }
-
-    const tagStripH = tagTimelineData.length > 0 ? 8 : 0;
-    const chartH = h - 20 - tagStripH;
-    const barW = w / monthData.length;
-    
-    // Calculate max volume for scaling
-    let maxVolume = 1;
-    for (const m of monthData) {
-        if (hidePrediction) {
-            maxVolume = Math.max(maxVolume, m.sampledTotal);
-        } else {
-            maxVolume = Math.max(maxVolume, m.sampledTotal + m.extraPos + m.extraNeg);
-        }
-    }
-
-    // Draw bars
-    for (let i = 0; i < monthData.length; i++) {
-        const m = monthData[i];
-        
-        const displayTotal = hidePrediction 
-            ? m.sampledTotal 
-            : (m.sampledTotal + m.extraPos + m.extraNeg);
-        
-        if (displayTotal === 0) continue;
-        
-        const totalH = (displayTotal / maxVolume) * chartH;
-        
-        // Heights for sampled portions
-        const sampledPosH = (m.pos / displayTotal) * totalH;
-        const sampledUncPosH = (m.uncPos / displayTotal) * totalH;
-        const sampledNegH = (m.neg / displayTotal) * totalH;
-        const sampledUncNegH = (m.uncNeg / displayTotal) * totalH;
-        
-        // Heights for projected extra
-        const projectedPosH = hidePrediction ? 0 : (m.extraPos / displayTotal) * totalH;
-        const projectedNegH = hidePrediction ? 0 : (m.extraNeg / displayTotal) * totalH;
-
-        let y = chartH;
-
-        // === SAMPLED PORTION (bottom, solid) ===
-        timelineCtx.globalAlpha = 1;
-        
-        // negative on bottom
-        timelineCtx.fillStyle = colors.negative;
-        timelineCtx.fillRect(i * barW, y - sampledNegH, barW - 1, sampledNegH);
-        y -= sampledNegH;
-
-        // uncertain negative
-        timelineCtx.fillStyle = colors.uncertain;
-        timelineCtx.fillRect(i * barW, y - sampledUncNegH, barW - 1, sampledUncNegH);
-        y -= sampledUncNegH;
-
-        // uncertain positive
-        timelineCtx.fillStyle = colors.uncertain;
-        timelineCtx.fillRect(i * barW, y - sampledUncPosH, barW - 1, sampledUncPosH);
-        y -= sampledUncPosH;
-
-        // positive
-        timelineCtx.fillStyle = colors.positive;
-        timelineCtx.fillRect(i * barW, y - sampledPosH, barW - 1, sampledPosH);
-        y -= sampledPosH;
-
-        // === PROJECTED PORTION (top, faded) ===
-        if (!hidePrediction && (projectedPosH > 0 || projectedNegH > 0)) {
-            timelineCtx.globalAlpha = 0.5;
-            
-            if (projectedNegH > 0) {
-                timelineCtx.fillStyle = colors.negative;
-                timelineCtx.fillRect(i * barW, y - projectedNegH, barW - 1, projectedNegH);
-                y -= projectedNegH;
-            }
-
-            if (projectedPosH > 0) {
-                timelineCtx.fillStyle = colors.positive;
-                timelineCtx.fillRect(i * barW, y - projectedPosH, barW - 1, projectedPosH);
-                y -= projectedPosH;
-            }
-            
-            timelineCtx.globalAlpha = 1;
-        }
-    }
-
-    // Draw tag strip below chart
-    if (tagTimelineData.length > 0) {
-        const stripY = chartH + 2;
-
-        for (const entry of tagTimelineData) {
-            const monthIdx = monthData.findIndex(m => m.month === entry.month);
-            if (monthIdx < 0) continue;
-
-            const x = (monthIdx / monthData.length) * w;
-
-            const significantTags = entry.tags.filter(t =>
-                !['LOW_DATA', 'CORRUPTED', 'HORNY'].includes(t)
-            );
-            const primaryTag = significantTags[0] || entry.tags[0];
-            const color = getTagColor(primaryTag);
-
-            timelineCtx.fillStyle = color;
-            timelineCtx.fillRect(x, stripY, barW, tagStripH - 2);
-        }
-    }
-
-    // Selection outline
-    const selX = timelineSelection.start * w;
-    const selW = (timelineSelection.end - timelineSelection.start) * w;
-
-    timelineCtx.strokeStyle = 'rgba(139, 0, 0, 0.8)';
-    timelineCtx.lineWidth = 2;
-    timelineCtx.strokeRect(selX, 0, selW, chartH + tagStripH);
-
-    // Handles
-    timelineCtx.fillStyle = '#8b0000';
-    timelineCtx.fillRect(selX - 4, 0, 8, chartH + tagStripH);
-    timelineCtx.fillRect(selX + selW - 4, 0, 8, chartH + tagStripH);
-
-    // Year labels
-    timelineCtx.fillStyle = isDarkMode() ? '#888' : '#666';
-    timelineCtx.font = '10px Verdana';
-    timelineCtx.textAlign = 'center';
-
-    const years = [...new Set(monthData.map(m => m.month.split('-')[0]))];
-    for (const year of years) {
-        const juneMonth = `${year}-06`;
-        const juneIdx = monthData.findIndex(m => m.month === juneMonth);
-        if (juneIdx < 0) continue;
-        const x = (juneIdx / monthData.length) * w;
-        timelineCtx.fillText(year, x, h - 5);
-    }
-
-    updateTimelineLabel();
-}
-
-function updateTimelineLabel() {
-    const el = document.getElementById('timeline-range');
-    if (timelineData.months.length === 0) {
-        el.textContent = '';
-        return;
-    }
-
-    const startIdx = Math.floor(timelineSelection.start * (timelineData.months.length - 1));
-    const endIdx = Math.floor(timelineSelection.end * (timelineData.months.length - 1));
-    const startMonth = timelineData.months[startIdx];
-    const endMonth = timelineData.months[endIdx];
-
-    el.textContent = `${startMonth} ? ${endMonth}`;
-}
-
-function onTimelineMouseDown(e) {
-    const rect = timelineCanvas.getBoundingClientRect();
-    const x = (e.clientX - rect.left) / rect.width;
-
-    const handleSize = 0.02;
-    const nearStart = Math.abs(x - timelineSelection.start) < handleSize;
-    const nearEnd = Math.abs(x - timelineSelection.end) < handleSize;
-    const inside = x >= timelineSelection.start && x <= timelineSelection.end;
-
-    if (nearStart && !nearEnd) {
-        timelineDrag = 'start';
-    } else if (nearEnd && !nearStart) {
-        timelineDrag = 'end';
-    } else if (inside) {
-        timelineDrag = { type: 'middle', offsetStart: x - timelineSelection.start, offsetEnd: timelineSelection.end - x };
-    }
-}
-
-function onTimelineMouseMove(e) {
-    if (!timelineDrag) return;
-
-    const rect = timelineCanvas.getBoundingClientRect();
-    const x = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-
-    if (timelineDrag === 'start') {
-        timelineSelection.start = Math.min(x, timelineSelection.end - 0.02);
-    } else if (timelineDrag === 'end') {
-        timelineSelection.end = Math.max(x, timelineSelection.start + 0.02);
-    } else if (timelineDrag.type === 'middle') {
-        const width = timelineSelection.end - timelineSelection.start;
-        let newStart = x - timelineDrag.offsetStart;
-        let newEnd = x + timelineDrag.offsetEnd;
-
-        if (newStart < 0) { newStart = 0; newEnd = width; }
-        if (newEnd > 1) { newEnd = 1; newStart = 1 - width; }
-
-        timelineSelection.start = newStart;
-        timelineSelection.end = newEnd;
-    }
-
-    drawTimeline();
-}
-
-function onTimelineMouseUp() {
-    if (timelineDrag) {
-        timelineDrag = null;
-        applyTimelineFilter();
-    }
-}
+// drawTimeline, updateTimelineLabel, mouse handlers moved to timeline.js
 
 function applyTimelineFilter() {
     if (currentSnapshot) {
@@ -1254,15 +856,7 @@ function applyTimelineFilter() {
 }
 
 function getSelectedMonths() {
-    if (timelineData.months.length === 0) return null;
-
-    const startIdx = Math.floor(timelineSelection.start * (timelineData.months.length - 1));
-    const endIdx = Math.floor(timelineSelection.end * (timelineData.months.length - 1));
-
-    return {
-        from: timelineData.months[startIdx],
-        to: timelineData.months[endIdx]
-    };
+    return Timeline.getSelectedMonths();
 }
 
 function filterBucketByTime(bucket) {
@@ -1436,7 +1030,7 @@ function updateOpinionPanel(metrics) {
 
 function updateTagTimeline(timeline) {
     tagTimelineData = timeline;
-    drawTimeline(); // redraw to include tag overlay
+    Timeline.updateTagData(timeline);
 }
 
 function updateEyeFromMetrics(metrics) {

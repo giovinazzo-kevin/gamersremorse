@@ -74,7 +74,7 @@ public class AnalysisHub
 
                 // Build and save fingerprint
                 if (lastSnapshot is { } final) {
-                    var fingerprint = FingerprintBuilder.Build(final, meta, appInfo);
+                    var fingerprint = FingerprintBuilder.Build(final, meta);
                     db.Upsert(fingerprint);
                     await db.SaveChangesAsync();
                 }

@@ -160,5 +160,10 @@ app.MapGet("/wall/similar/{appId}", async (
 
         return Results.Ok(similar);
     });
+app.MapGet("/fingerprint/{appId}", async (int appId, AppDbContext db) => {
+    var fp = await db.Fingerprints.FindAsync((AppId)appId);
+    if (fp == null) return Results.NotFound();
+    return Results.Ok(new { fp.ThumbnailPng });
+});
 app.UseStaticFiles();
 app.Run();

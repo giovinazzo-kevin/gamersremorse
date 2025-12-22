@@ -437,7 +437,7 @@ const Metrics = {
             ? (temporalData.secondHalfNegRatio - temporalData.firstHalfNegRatio) / temporalData.stddev : 0;
         
         const activityData = this.computeWindowEndActivity(buckets, filter, snapshot, usePrediction);
-        const isEndDead = activityData.isInBottomQuartile;
+        const isEndDead = activityData.isInBottom10;
         const revivalData = this.detectRevival(buckets, filter, snapshot, usePrediction);
 
         const confidence = this.computeConfidence(sampledTotal) * Math.sqrt(Math.max(0.1, convergenceScore));
@@ -738,7 +738,7 @@ const Metrics = {
 
     computeWindowEndActivity(buckets, filter, snapshot = null, usePrediction = true) {
         const windowData = this.getMonthlyActivityData(buckets, filter, snapshot, usePrediction);
-        if (windowData.activity.length < 6) return { endActivity: 1, startActivity: 1, isInBottomQuartile: false };
+        if (windowData.activity.length < 6) return { endActivity: 1, startActivity: 1, isInBottom10: false };
         
         const activity = windowData.activity;
         const firstHalfCount = Math.floor(activity.length / 2);
@@ -746,8 +746,8 @@ const Metrics = {
         const startActivity = firstHalf.reduce((sum, m) => sum + m.count, 0) / firstHalf.length;
         const endMonths = activity.slice(-3);
         const endActivity = endMonths.reduce((sum, m) => sum + m.count, 0) / endMonths.length;
-        const isInBottomQuartile = endActivity <= windowData.p25;
-        return { endActivity, startActivity, isInBottomQuartile };
+        const isInBottom10 = endActivity <= windowData.p10;
+        return { endActivity, startActivity, isInBottom10 };
     },
 
     detectRevival(buckets, filter, snapshot = null, usePrediction = true) {

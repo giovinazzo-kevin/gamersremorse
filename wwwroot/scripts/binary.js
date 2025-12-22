@@ -276,6 +276,21 @@ const BinarySnapshot = {
         // Sample rate
         const sampleRate = totalSampled / gameTotal;
         
+        // HIGH COVERAGE: If we've sampled 95%+ of reviews, projection IS sampled.
+        // No extrapolation needed - we have the real data.
+        if (sampleRate >= 0.95) {
+            for (const m of monthData) {
+                m.projectedPos = m.sampledPos;
+                m.projectedNeg = m.sampledNeg;
+                m.projectedTotal = m.sampledTotal;
+                m.extraPos = 0;
+                m.extraNeg = 0;
+                m.total = m.sampledTotal;
+            }
+            snapshot.projectedMonthly = monthData;
+            return;
+        }
+        
         // Position-based extrapolation
         const n = monthData.length;
         const maxMultiplier = sampleRate > 0 ? 1 / sampleRate : 1;
