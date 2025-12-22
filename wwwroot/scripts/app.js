@@ -19,7 +19,61 @@ let loadingMessageCount = 0;
 let tagTimelineData = [];
 let numReactions = 0;
 let currentBanner = '';
-let hasReactedToGame = false; // Only trigger eye reaction once per analysis
+let hasReactedToGame = false;
+let metricsWorker = null;
+
+function getMetricsWorker() {
+    if (!metricsWorker) {
+        metricsWorker = new Worker('scripts/metrics-worker.js');
+        metricsWorker.onmessage = (e) => {
+            if (e.data.ok) {
+                applyMetricsResult(e.data.result);
+            }
+        };
+    }
+    return metricsWorker;
+}
+
+function applyMetricsResult(metrics) {
+    currentMetrics = metrics;
+    renderMetrics();
+    updateOpinionPanel(currentMetrics);
+}
+
+function renderMetrics() {
+    const metricsEl = document.getElementById('metrics-detail');
+    if (!metricsEl || !currentMetrics) return;
+    
+    const v = currentMetrics.verdict;
+    const opacity = isStreaming ? (0.3 + convergenceScore * 0.7) : 1;
+    const tagPills = v.tags.map(t =>
+        `<span class="tag-pill" style="background:${t.color}; opacity:${opacity}">${t.id}</span>`
+    ).join(' ');
+    const loadingMsg = getLoadingMessage();
+    const preliminaryWarning = isStreaming && convergenceScore < 0.8
+        ? `<div class="loading"><span class="loading-icon">?</span> ${loadingMsg}</div>`
+        : isStreaming
+            ? `<div class="loading"><span class="loading-icon">??</span> ${loadingMsg}</div>`
+            : '';
+    metricsEl.innerHTML = `
+        <div class="verdict-tags">
+            ${tagPills || '<span class="tag-pill" style="background:#666">NEUTRAL</span>'}
+        </div>
+        <ul class="reasons">
+            ${v.reasons.map(r => `<li>${r}</li>`).join('')}
+        </ul>
+        ${preliminaryWarning}
+        <div class="metrics-raw">
+            Median ratio: ${currentMetrics.medianRatio.toFixed(2)} |
+            Refund honesty: ${currentMetrics.refundNegRate !== null ? Math.round(currentMetrics.refundNegRate * 100) + '%' : 'N/A (F2P)'} |
+            Stockholm: ${currentMetrics.stockholmIndex.toFixed(2)}x |
+            Confidence: ${Math.round(convergenceScore * 100)}%
+        </div>
+    `;
+    if (cachedControversyHtml) {
+        metricsEl.innerHTML += cachedControversyHtml;
+    }
+}
 
 function quitToDesktop() {
     const msg = exitMessages[Math.floor(Math.random() * exitMessages.length)];
@@ -149,7 +203,7 @@ async function analyze() {
     }
     document.getElementById('stats').innerHTML = '';
     document.getElementById('metrics-detail').innerHTML = '';
-    document.getElementById('opinion-content').innerHTML = '<div class="opinion-loading">⏳ Analyzing...</div>';
+    document.getElementById('opinion-content').innerHTML = '<div class="opinion-loading">⌛ Analyzing...</div>';
     document.getElementById('game-title').textContent = '';
     drawTimeline(); // clears the timeline canvas
 
@@ -163,17 +217,24 @@ async function analyze() {
     const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
     const ws = new WebSocket(`${protocol}//${location.host}/ws/game/${appId}`);
 
+    let metricsTimeout = null;
+    
+    ws.binaryType = 'arraybuffer';
     ws.onmessage = (e) => {
         isStreaming = true;
         state.lastInteraction = Date.now();
-        const snapshot = JSON.parse(e.data);
+        const snapshot = BinarySnapshot.parse(e.data);
         updateChart(snapshot);
         updateTimelineData(snapshot, isFirstSnapshot);
         updateVelocityChart(snapshot);
         updateLanguageChart(snapshot);
         updateEditHeatmap(snapshot);
         updateStats(snapshot);
-        updateMetrics(snapshot);
+        
+        // Debounce metrics - expensive, only run after 200ms of no new snapshots
+        if (metricsTimeout) clearTimeout(metricsTimeout);
+        metricsTimeout = setTimeout(() => updateMetrics(snapshot), 200);
+        
         isFirstSnapshot = false;
         snapshotCount++;
 
@@ -470,10 +531,10 @@ function updateVelocityChart(snapshot) {
             data: {
                 labels,
                 datasets: [
-                    { label: '👍', data: positive, backgroundColor: hexToRgba(colors.positive, 0.7), stack: 'stack' },
-                    { label: '👍*', data: uncertainPos, backgroundColor: hexToRgba(colors.uncertain, 0.7), stack: 'stack' },
-                    { label: '👎', data: negative, backgroundColor: hexToRgba(colors.negative, 0.7), stack: 'stack' },
-                    { label: '👎*', data: uncertainNeg, backgroundColor: hexToRgba(colors.uncertain, 0.7), stack: 'stack' }
+                    { label: '??', data: positive, backgroundColor: hexToRgba(colors.positive, 0.7), stack: 'stack' },
+                    { label: '??*', data: uncertainPos, backgroundColor: hexToRgba(colors.uncertain, 0.7), stack: 'stack' },
+                    { label: '??', data: negative, backgroundColor: hexToRgba(colors.negative, 0.7), stack: 'stack' },
+                    { label: '??*', data: uncertainNeg, backgroundColor: hexToRgba(colors.uncertain, 0.7), stack: 'stack' }
                 ]
             },
             options: {
@@ -506,55 +567,51 @@ function updateLanguageChart(snapshot) {
     const hideSpikes = document.getElementById('hideSpikes')?.checked;
     const excludeMonths = hideSpikes && currentMetrics?.excludedMonths ? new Set(currentMetrics.excludedMonths) : new Set();
     
-    // Get all months in range
-    const allMonths = new Set();
-    for (const bucket of snapshot.bucketsByReviewTime) {
-        for (const month of Object.keys(bucket.positiveByMonth || {})) allMonths.add(month);
-        for (const month of Object.keys(bucket.negativeByMonth || {})) allMonths.add(month);
+    // Use snapshot.months directly (typed array format)
+    const allMonths = snapshot.months || [];
+    const monthIndex = snapshot.monthIndex || {};
+    const monthlyTotals = snapshot.monthlyTotals;
+    
+    if (allMonths.length < 2) return;
+    
+    // Filter months by range and exclusions, collect indices
+    const filteredIndices = [];
+    const filteredMonths = [];
+    for (let i = 0; i < allMonths.length; i++) {
+        const m = allMonths[i];
+        if (excludeMonths.has(m)) continue;
+        if (range && (m < range.from || m > range.to)) continue;
+        filteredIndices.push(i);
+        filteredMonths.push(m);
     }
     
-    const months = [...allMonths]
-        .filter(m => !excludeMonths.has(m))
-        .filter(m => !range || (m >= range.from && m <= range.to))
-        .sort();
+    if (filteredMonths.length < 2) return;
     
-    if (months.length < 2) return;
-    
-    // Count reviews per month for rate calculation
-    const reviewsByMonth = {};
-    for (const bucket of snapshot.bucketsByReviewTime) {
-        for (const month of months) {
-            const count = (bucket.positiveByMonth?.[month] || 0) +
-                         (bucket.negativeByMonth?.[month] || 0) +
-                         (bucket.uncertainPositiveByMonth?.[month] || 0) +
-                         (bucket.uncertainNegativeByMonth?.[month] || 0);
-            reviewsByMonth[month] = (reviewsByMonth[month] || 0) + count;
-        }
-    }
-    
-    // Build time series for each language metric (as % of reviews that month)
+    // Build time series using typed array indices
     const series = {
-        slurs: months.map(m => {
-            const reviews = reviewsByMonth[m] || 1;
-            return ((stats.slursByMonth?.[m] || 0) / reviews) * 100;
+        slurs: filteredIndices.map(i => {
+            const reviews = (monthlyTotals.pos[i] + monthlyTotals.neg[i] + monthlyTotals.uncPos[i] + monthlyTotals.uncNeg[i]) || 1;
+            return ((stats.slurs?.[i] || 0) / reviews) * 100;
         }),
-        profanity: months.map(m => {
-            const reviews = reviewsByMonth[m] || 1;
-            return ((stats.profanityByMonth?.[m] || 0) / reviews) * 100;
+        profanity: filteredIndices.map(i => {
+            const reviews = (monthlyTotals.pos[i] + monthlyTotals.neg[i] + monthlyTotals.uncPos[i] + monthlyTotals.uncNeg[i]) || 1;
+            return ((stats.profanity?.[i] || 0) / reviews) * 100;
         }),
-        insults: months.map(m => {
-            const reviews = reviewsByMonth[m] || 1;
-            return ((stats.insultsByMonth?.[m] || 0) / reviews) * 100;
+        insults: filteredIndices.map(i => {
+            const reviews = (monthlyTotals.pos[i] + monthlyTotals.neg[i] + monthlyTotals.uncPos[i] + monthlyTotals.uncNeg[i]) || 1;
+            return ((stats.insults?.[i] || 0) / reviews) * 100;
         }),
-        complaints: months.map(m => {
-            const reviews = reviewsByMonth[m] || 1;
-            return ((stats.complaintsByMonth?.[m] || 0) / reviews) * 100;
+        complaints: filteredIndices.map(i => {
+            const reviews = (monthlyTotals.pos[i] + monthlyTotals.neg[i] + monthlyTotals.uncPos[i] + monthlyTotals.uncNeg[i]) || 1;
+            return ((stats.complaints?.[i] || 0) / reviews) * 100;
         }),
-        banter: months.map(m => {
-            const reviews = reviewsByMonth[m] || 1;
-            return ((stats.banterByMonth?.[m] || 0) / reviews) * 100;
+        banter: filteredIndices.map(i => {
+            const reviews = (monthlyTotals.pos[i] + monthlyTotals.neg[i] + monthlyTotals.uncPos[i] + monthlyTotals.uncNeg[i]) || 1;
+            return ((stats.banter?.[i] || 0) / reviews) * 100;
         }),
     };
+    
+    const months = filteredMonths;
     
     const colors = getColors();
     
@@ -776,8 +833,8 @@ function updateStats(snapshot) {
 
     document.getElementById('stats').innerHTML = `
         ${samplingInfo}
-        <strong>Game:</strong> ${snapshot.gameTotalPositive.toLocaleString()} 👍 / ${snapshot.gameTotalNegative.toLocaleString()} 👎 (${gameRatio}% positive) |
-        <strong>Median:</strong> ${formatPlaytime(posMedian)} 👍 / ${formatPlaytime(negMedian)} 👎
+        <strong>Game:</strong> ${snapshot.gameTotalPositive.toLocaleString()} ?? / ${snapshot.gameTotalNegative.toLocaleString()} ?? (${gameRatio}% positive) |
+        <strong>Median:</strong> ${formatPlaytime(posMedian)} ?? / ${formatPlaytime(negMedian)} ??
     `;
 }
 
@@ -801,42 +858,38 @@ function resizeTimeline() {
 }
 
 function updateTimelineData(snapshot, reset = false) {
+    // Use pre-aggregated monthlyTotals from binary parser (fast path)
+    const { months, monthlyTotals } = snapshot;
+    
+    // Convert typed arrays to dict format for compatibility with existing drawTimeline
+    // TODO: Eventually refactor drawTimeline to use typed arrays directly
     const positive = {};
     const negative = {};
     const uncertainPos = {};
     const uncertainNeg = {};
-
-    for (const bucket of snapshot.bucketsByReviewTime) {
-        for (const [month, count] of Object.entries(bucket.positiveByMonth)) {
-            positive[month] = (positive[month] || 0) + count;
-        }
-        for (const [month, count] of Object.entries(bucket.negativeByMonth)) {
-            negative[month] = (negative[month] || 0) + count;
-        }
-        for (const [month, count] of Object.entries(bucket.uncertainPositiveByMonth)) {
-            uncertainPos[month] = (uncertainPos[month] || 0) + count;
-        }
-        for (const [month, count] of Object.entries(bucket.uncertainNegativeByMonth)) {
-            uncertainNeg[month] = (uncertainNeg[month] || 0) + count;
-        }
+    const volume = [];
+    
+    for (let i = 0; i < months.length; i++) {
+        const m = months[i];
+        const pos = monthlyTotals.pos[i];
+        const neg = monthlyTotals.neg[i];
+        const uncPos = monthlyTotals.uncPos[i];
+        const uncNeg = monthlyTotals.uncNeg[i];
+        
+        if (pos > 0) positive[m] = pos;
+        if (neg > 0) negative[m] = neg;
+        if (uncPos > 0) uncertainPos[m] = uncPos;
+        if (uncNeg > 0) uncertainNeg[m] = uncNeg;
+        volume.push(pos + neg + uncPos + uncNeg);
     }
 
-    const allMonths = [...new Set([
-        ...Object.keys(positive),
-        ...Object.keys(negative),
-        ...Object.keys(uncertainPos),
-        ...Object.keys(uncertainNeg)
-    ])].sort();
-
-    timelineData.months = allMonths;
+    timelineData.months = months;
     timelineData.positive = positive;
     timelineData.negative = negative;
     timelineData.uncertainPos = uncertainPos;
     timelineData.uncertainNeg = uncertainNeg;
-    timelineData.volume = allMonths.map(m =>
-        (positive[m] || 0) + (negative[m] || 0) + (uncertainPos[m] || 0) + (uncertainNeg[m] || 0)
-    );
-    timelineData.maxVolume = Math.max(...timelineData.volume, 1);
+    timelineData.volume = volume;
+    timelineData.maxVolume = Math.max(...volume, 1);
 
     if (reset) {
         timelineSelection = { start: 0, end: 1 };
@@ -932,8 +985,8 @@ function drawTimeline() {
         // oldest months get full extrapolation.
         const positionRatio = i / Math.max(1, n - 1); // 0 (oldest) to 1 (newest)
         
-        // For newest months (positionRatio=1): multiplier → 1 (no extrapolation beyond sampled)
-        // For oldest months (positionRatio=0): multiplier → 1/sampleRate (full extrapolation)
+        // For newest months (positionRatio=1): multiplier ? 1 (no extrapolation beyond sampled)
+        // For oldest months (positionRatio=0): multiplier ? 1/sampleRate (full extrapolation)
         // Use exponential interpolation between these
         const maxMultiplier = sampleRate > 0 ? 1 / sampleRate : 1;
         const multiplier = Math.pow(maxMultiplier, 1 - positionRatio);
@@ -1116,7 +1169,7 @@ function updateTimelineLabel() {
     const startMonth = timelineData.months[startIdx];
     const endMonth = timelineData.months[endIdx];
 
-    el.textContent = `${startMonth} → ${endMonth}`;
+    el.textContent = `${startMonth} ? ${endMonth}`;
 }
 
 function onTimelineMouseDown(e) {
@@ -1198,29 +1251,22 @@ function getSelectedMonths() {
 function filterBucketByTime(bucket) {
     const range = getSelectedMonths();
     const hideSpikes = document.getElementById('hideSpikes')?.checked;
-    const excludeMonths = hideSpikes && currentMetrics?.excludedMonths ? new Set(currentMetrics.excludedMonths) : new Set();
+    const excludeMonths = hideSpikes && currentMetrics?.excludedMonths ? currentMetrics.excludedMonths : null;
 
-    if (!range && excludeMonths.size === 0) return {
+    if (!range && !excludeMonths) return {
         pos: bucket.positiveCount,
         neg: bucket.negativeCount,
         uncPos: bucket.uncertainPositiveCount,
         uncNeg: bucket.uncertainNegativeCount
     };
 
-    let pos = 0, neg = 0, uncPos = 0, uncNeg = 0;
-    for (const [month, count] of Object.entries(bucket.positiveByMonth)) {
-        if ((!range || (month >= range.from && month <= range.to)) && !excludeMonths.has(month)) pos += count;
-    }
-    for (const [month, count] of Object.entries(bucket.negativeByMonth)) {
-        if ((!range || (month >= range.from && month <= range.to)) && !excludeMonths.has(month)) neg += count;
-    }
-    for (const [month, count] of Object.entries(bucket.uncertainPositiveByMonth)) {
-        if ((!range || (month >= range.from && month <= range.to)) && !excludeMonths.has(month)) uncPos += count;
-    }
-    for (const [month, count] of Object.entries(bucket.uncertainNegativeByMonth)) {
-        if ((!range || (month >= range.from && month <= range.to)) && !excludeMonths.has(month)) uncNeg += count;
-    }
-    return { pos, neg, uncPos, uncNeg };
+    // Use typed array fast path
+    const filter = {
+        from: range?.from,
+        to: range?.to,
+        excludeMonths
+    };
+    return BinarySnapshot.filterBucket(bucket, currentSnapshot.months, filter, currentSnapshot.monthIndex);
 }
 
 function updateConvergence(current, last, snapshot) {
@@ -1257,52 +1303,17 @@ function updateMetrics(snapshot) {
     const filter = getSelectedMonths();
     const isFree = currentGameInfo?.isFree || false;
     const isSexual = currentGameInfo?.flags ? (currentGameInfo.flags & 8) !== 0 : false;
-    const loadingMsg = getLoadingMessage();
 
-    // confidence is about absolute sample size AND relative coverage
     convergenceScore = updateConvergence(currentMetrics, lastMetrics, currentSnapshot);
     lastMetrics = currentMetrics;
 
     const hidePrediction = document.getElementById('hidePrediction')?.checked ?? false;
-    currentMetrics = Metrics.compute(snapshot, { timelineFilter: filter, isFree, isSexual, convergenceScore, hidePrediction });
-
-    const metricsEl = document.getElementById('metrics-detail');
-    if (metricsEl && currentMetrics) {
-        const v = currentMetrics.verdict;
-        const severityPct = Math.round(v.severity * 100);
-        const opacity = isStreaming ? (0.3 + convergenceScore * 0.7) : 1;
-        const tagPills = v.tags.map(t =>
-            `<span class="tag-pill" style="background:${t.color}; opacity:${opacity}">${t.id}</span>`
-        ).join(' ');
-        const preliminaryWarning = isStreaming && convergenceScore < 0.8
-            ? `<div class="loading"><span class="loading-icon">⏳</span> ${loadingMsg}</div>`
-            : isStreaming
-                ? `<div class="loading"><span class="loading-icon">💬</span> ${loadingMsg}</div>`
-                : '';
-        metricsEl.innerHTML = `
-            <div class="verdict-tags">
-                ${tagPills || '<span class="tag-pill" style="background:#666">NEUTRAL</span>'}
-            </div>
-            <ul class="reasons">
-                ${v.reasons.map(r => `<li>${r}</li>`).join('')}
-            </ul>
-            ${preliminaryWarning}
-            <div class="metrics-raw">
-                Median ratio: ${currentMetrics.medianRatio.toFixed(2)} |
-                Refund honesty: ${currentMetrics.refundNegRate !== null ? Math.round(currentMetrics.refundNegRate * 100) + '%' : 'N/A (F2P)'} |
-                Stockholm: ${currentMetrics.stockholmIndex.toFixed(2)}x |
-                Confidence: ${Math.round(convergenceScore * 100)}%
-            </div>
-        `;
-        if (cachedControversyHtml) {
-            metricsEl.innerHTML += cachedControversyHtml;
-        }
-    }
-
-    // Update opinion panel
-    updateOpinionPanel(currentMetrics);
+    const options = { timelineFilter: filter, isFree, isSexual, convergenceScore, hidePrediction };
+    
+    // Offload to worker
+    const worker = getMetricsWorker();
+    worker.postMessage({ snapshot, options });
 }
-
 function updateOpinionPanel(metrics) {
     const el = document.getElementById('opinion-content');
     if (!el || !metrics) return;
@@ -1315,7 +1326,7 @@ function updateOpinionPanel(metrics) {
         const progressPct = target > 0 ? Math.round((sampled / target) * 100) : 0;
         el.innerHTML = `
             <div class="opinion-converging">
-                <div class="opinion-verdict caution">⏳ Analysis in progress...</div>
+                <div class="opinion-verdict caution">? Analysis in progress...</div>
                 <p>The data is still converging. Early patterns are forming but the verdict isn't stable yet.</p>
                 <p><strong>Progress:</strong> ${sampled.toLocaleString()} / ${target.toLocaleString()} reviews (${progressPct}%)</p>
                 <p><strong>Confidence:</strong> ${pct}%${pct == 69 ? " (nice)" : ""}</p>
@@ -1343,7 +1354,7 @@ function updateOpinionPanel(metrics) {
     } else if (tags.includes('EXTRACTIVE') || tags.includes('STOCKHOLM')) {
         verdictClass = 'warning';
         verdictText = 'Time extraction detected';
-        verdictExplain = `People who dislike this game figure it out at ${negMedianHours}h—after those who like it (${posMedianHours}h). The game takes before it reveals.`;
+        verdictExplain = `People who dislike this game figure it out at ${negMedianHours}h�after those who like it (${posMedianHours}h). The game takes before it reveals.`;
     } else if (tags.includes('HEALTHY') || tags.includes('HONEST')) {
         verdictClass = 'healthy';
         verdictText = 'Respects your time';
@@ -1464,31 +1475,8 @@ function updateEyeFromMetrics(metrics) {
 }
 
 function filterVelocityBucketByTime(bucket) {
-    const range = getSelectedMonths();
-    const hideSpikes = document.getElementById('hideSpikes')?.checked;
-    const excludeMonths = hideSpikes && currentMetrics?.excludedMonths ? new Set(currentMetrics.excludedMonths) : new Set();
-
-    if (!range && excludeMonths.size === 0) return {
-        pos: bucket.positiveCount,
-        neg: bucket.negativeCount,
-        uncPos: bucket.uncertainPositiveCount,
-        uncNeg: bucket.uncertainNegativeCount
-    };
-
-    let pos = 0, neg = 0, uncPos = 0, uncNeg = 0;
-    for (const [month, count] of Object.entries(bucket.positiveByMonth)) {
-        if ((!range || (month >= range.from && month <= range.to)) && !excludeMonths.has(month)) pos += count;
-    }
-    for (const [month, count] of Object.entries(bucket.negativeByMonth)) {
-        if ((!range || (month >= range.from && month <= range.to)) && !excludeMonths.has(month)) neg += count;
-    }
-    for (const [month, count] of Object.entries(bucket.uncertainPositiveByMonth)) {
-        if ((!range || (month >= range.from && month <= range.to)) && !excludeMonths.has(month)) uncPos += count;
-    }
-    for (const [month, count] of Object.entries(bucket.uncertainNegativeByMonth)) {
-        if ((!range || (month >= range.from && month <= range.to)) && !excludeMonths.has(month)) uncNeg += count;
-    }
-    return { pos, neg, uncPos, uncNeg };
+    // Velocity buckets use same structure as histogram buckets
+    return filterBucketByTime(bucket);
 }
 
 // ============================================================
@@ -1826,9 +1814,9 @@ async function fetchControversyContext(gameName, metrics, snapshot) {
     if (container) {
         container.innerHTML += `
             <div class="controversy-section" id="controversy-loading">
-                <h4>📰 What Happened?</h4>
+                <h4>?? What Happened?</h4>
                 <div class="controversy-item">
-                    <div class="controversy-text">🔍 Searching for context...</div>
+                    <div class="controversy-text">?? Searching for context...</div>
                 </div>
             </div>
         `;
@@ -1866,22 +1854,16 @@ function detectNotableEvents(metrics, snapshot) {
     const months = Object.keys(metrics.counts).length > 0 ? [] : [];
     let launchWasNegative = false;
 
-    // Get first 3 months of data to determine launch sentiment
-    const allMonths = new Set();
-    for (const bucket of snapshot.bucketsByReviewTime) {
-        for (const month of Object.keys(bucket.positiveByMonth || {})) allMonths.add(month);
-        for (const month of Object.keys(bucket.negativeByMonth || {})) allMonths.add(month);
-    }
-    const sortedMonths = [...allMonths].sort();
-    const launchMonths = sortedMonths.slice(0, 3);
+    // Get first 3 months of data to determine launch sentiment (typed array format)
+    const sortedMonths = snapshot.months || [];
+    const monthlyTotals = snapshot.monthlyTotals;
+    const launchMonthCount = Math.min(3, sortedMonths.length);
 
-    if (launchMonths.length > 0) {
+    if (launchMonthCount > 0 && monthlyTotals) {
         let launchPos = 0, launchNeg = 0;
-        for (const bucket of snapshot.bucketsByReviewTime) {
-            for (const month of launchMonths) {
-                launchPos += (bucket.positiveByMonth?.[month] || 0) + (bucket.uncertainPositiveByMonth?.[month] || 0);
-                launchNeg += (bucket.negativeByMonth?.[month] || 0) + (bucket.uncertainNegativeByMonth?.[month] || 0);
-            }
+        for (let i = 0; i < launchMonthCount; i++) {
+            launchPos += (monthlyTotals.pos[i] || 0) + (monthlyTotals.uncPos[i] || 0);
+            launchNeg += (monthlyTotals.neg[i] || 0) + (monthlyTotals.uncNeg[i] || 0);
         }
         launchWasNegative = launchNeg > launchPos;
     }
@@ -2043,7 +2025,7 @@ function displayControversyContext(contexts) {
     if (!container) return;
 
     let html = '<div class="controversy-section">';
-    html += '<h4>📰 What Happened?</h4>';
+    html += '<h4>?? What Happened?</h4>';
 
     for (const ctx of contexts) {
         const tag = ctx.event.tag;

@@ -1,9 +1,7 @@
 using gamersremorse.Services;
 using Microsoft.EntityFrameworkCore;
 using System.Net.WebSockets;
-using System.Text.Json;
 
-var options = new JsonSerializerOptions() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddHttpClient();
 builder.Services.AddDbContextFactory<AppDbContext>();
@@ -90,8 +88,8 @@ app.Map("/ws/game/{appId}", async (HttpContext ctx, AppId appId, AnalysisHub hub
 
     var count = 0;
     await foreach (var snapshot in reader.ReadAllAsync(ctx.RequestAborted)) {
-        var json = JsonSerializer.SerializeToUtf8Bytes(snapshot, options);
-        await ws.SendAsync(json, WebSocketMessageType.Text, true, ctx.RequestAborted);
+        var binary = BinarySnapshotWriter.Write(snapshot);
+        await ws.SendAsync(binary, WebSocketMessageType.Binary, true, ctx.RequestAborted);
         count++;
     }
 

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Metrics module for gamersremorse
  * Pure analysis functions - no UI, no side effects
  * 
@@ -321,10 +321,9 @@ const Metrics = {
 
         // Use prediction unless explicitly hidden
         const usePrediction = !options.hidePrediction;
-        const predictionSnapshot = usePrediction ? snapshot : null;
 
-        // Detect spikes (using predicted data if enabled)
-        const spikeData = this.detectSpikes(buckets, null, predictionSnapshot);
+        // Detect spikes (always pass snapshot for typed array access)
+        const spikeData = this.detectSpikes(buckets, null, snapshot, usePrediction);
         
         const filterSpikesToWindow = (spikes) => {
             if (!filter || !filter.from) return spikes;
@@ -384,11 +383,11 @@ const Metrics = {
         }
 
         // Playtime distributions
-        const posPlaytimes = this.getPlaytimeArray(buckets, 'positive', organicFilter);
-        const negPlaytimes = this.getPlaytimeArray(buckets, 'negative', organicFilter);
+        const posPlaytimes = this.getPlaytimeArray(buckets, 'positive', organicFilter, snapshot);
+        const negPlaytimes = this.getPlaytimeArray(buckets, 'negative', organicFilter, snapshot);
         const allPlaytimes = [...posPlaytimes, ...negPlaytimes];
-        const totalPosPlaytimes = this.getPlaytimeArray(totalBuckets, 'positive', organicFilter);
-        const totalNegPlaytimes = this.getPlaytimeArray(totalBuckets, 'negative', organicFilter);
+        const totalPosPlaytimes = this.getPlaytimeArray(totalBuckets, 'positive', organicFilter, snapshot);
+        const totalNegPlaytimes = this.getPlaytimeArray(totalBuckets, 'negative', organicFilter, snapshot);
 
         const posStats = this.computeStats(posPlaytimes);
         const negStats = this.computeStats(negPlaytimes);
@@ -406,8 +405,8 @@ const Metrics = {
 
         const medianRatio = posMedianReview > 0 ? negMedianReview / posMedianReview : 1;
         const stockholmIndex = negMedianReview > 0 ? negMedianTotal / negMedianReview : 1;
-        const refundData = isFree ? null : this.computeRefundHonesty(buckets, organicFilter);
-        const negBimodal = this.detectBimodality(buckets, organicFilter);
+        const refundData = isFree ? null : this.computeRefundHonesty(buckets, organicFilter, snapshot);
+        const negBimodal = this.detectBimodality(buckets, organicFilter, snapshot);
 
         const tailThreshold = allStats.mean + 2 * allStats.stddev;
         const tailRatio = allPlaytimes.length > 0 
@@ -418,9 +417,9 @@ const Metrics = {
         const temporalDriftZ = temporalData.stddev > 0 
             ? (temporalData.secondHalfNegRatio - temporalData.firstHalfNegRatio) / temporalData.stddev : 0;
         
-        const activityData = this.computeWindowEndActivity(buckets, filter, predictionSnapshot);
+        const activityData = this.computeWindowEndActivity(buckets, filter, snapshot, usePrediction);
         const isEndDead = activityData.isInBottomQuartile;
-        const revivalData = this.detectRevival(buckets, filter, predictionSnapshot);
+        const revivalData = this.detectRevival(buckets, filter, snapshot, usePrediction);
 
         const confidence = this.computeConfidence(sampledTotal) * Math.sqrt(Math.max(0.1, convergenceScore));
         const editAnalysis = this.analyzeEditHeatmap(snapshot.editHeatmap);
@@ -497,7 +496,7 @@ const Metrics = {
      * Assumes even temporal distribution, adjusts as data streams in
      */
     projectCounts(buckets, filter, snapshot) {
-        const sampled = this.computeSampledCounts(buckets, filter);
+        const sampled = this.computeSampledCounts(buckets, filter, snapshot);
         
         const gameTotalPos = snapshot.gameTotalPositive || 1;
         const gameTotalNeg = snapshot.gameTotalNegative || 1;
@@ -562,11 +561,11 @@ const Metrics = {
     /**
      * Get sampled counts (not projected)
      */
-    computeSampledCounts(buckets, filter = null) {
+    computeSampledCounts(buckets, filter = null, snapshot = null) {
         let pos = 0, neg = 0, uncPos = 0, uncNeg = 0;
 
         for (const bucket of buckets) {
-            const filtered = this.filterBucket(bucket, filter);
+            const filtered = this.filterBucket(bucket, filter, snapshot);
             pos += filtered.pos;
             neg += filtered.neg;
             uncPos += filtered.uncPos;
@@ -584,10 +583,10 @@ const Metrics = {
         };
     },
 
-    getPlaytimeArray(buckets, type, filter) {
+    getPlaytimeArray(buckets, type, filter, snapshot = null) {
         const values = [];
         for (const bucket of buckets) {
-            const f = this.filterBucket(bucket, filter);
+            const f = this.filterBucket(bucket, filter, snapshot);
             const midpoint = (bucket.minPlaytime + bucket.maxPlaytime) / 2;
             const count = type === 'positive' ? f.pos + f.uncPos : f.neg + f.uncNeg;
             for (let i = 0; i < count; i++) values.push(midpoint);
@@ -607,50 +606,60 @@ const Metrics = {
      * @param {Object} snapshot - Snapshot with game totals
      * @returns {Array} Array of { month, pos, neg, total, projectedPos, projectedNeg, projectedTotal }
      */
-    getPredictedMonthlyData(buckets, filter, snapshot) {
-        // Collect all months
-        const allMonths = new Set();
-        for (const bucket of buckets) {
-            for (const month of Object.keys(bucket.positiveByMonth || {})) allMonths.add(month);
-            for (const month of Object.keys(bucket.negativeByMonth || {})) allMonths.add(month);
-            for (const month of Object.keys(bucket.uncertainPositiveByMonth || {})) allMonths.add(month);
-            for (const month of Object.keys(bucket.uncertainNegativeByMonth || {})) allMonths.add(month);
-        }
-        
-        let sortedMonths = [...allMonths].sort();
-        
-        // Apply filter
-        if (filter) {
-            sortedMonths = sortedMonths.filter(m => {
-                if (filter.from && m < filter.from) return false;
-                if (filter.to && m > filter.to) return false;
-                if (filter.excludeMonths && filter.excludeMonths.includes(m)) return false;
-                return true;
-            });
-        }
-        
-        if (sortedMonths.length === 0) return [];
-        
-        // Build raw sampled data per month
-        const monthData = [];
-        let totalSampled = 0;
-        
-        for (const month of sortedMonths) {
-            let pos = 0, neg = 0, uncPos = 0, uncNeg = 0;
-            for (const bucket of buckets) {
-                pos += bucket.positiveByMonth?.[month] || 0;
-                neg += bucket.negativeByMonth?.[month] || 0;
-                uncPos += bucket.uncertainPositiveByMonth?.[month] || 0;
-                uncNeg += bucket.uncertainNegativeByMonth?.[month] || 0;
+    getPredictedMonthlyData(buckets, filter, snapshot, usePrediction = true) {
+        // Use pre-aggregated monthlyTotals
+        if (snapshot?.months && snapshot?.monthlyTotals) {
+            const months = snapshot.months;
+            const totals = snapshot.monthlyTotals;
+            const monthIndex = snapshot.monthIndex;
+            
+            const fromIdx = filter?.from ? (monthIndex[filter.from] ?? 0) : 0;
+            const toIdx = filter?.to ? (monthIndex[filter.to] ?? months.length - 1) : months.length - 1;
+            const excludeSet = filter?.excludeMonths ? new Set(filter.excludeMonths) : null;
+            
+            const monthData = [];
+            let totalSampled = 0;
+            
+            for (let i = fromIdx; i <= toIdx; i++) {
+                if (excludeSet && excludeSet.has(months[i])) continue;
+                const pos = totals.pos[i];
+                const neg = totals.neg[i];
+                const uncPos = totals.uncPos[i];
+                const uncNeg = totals.uncNeg[i];
+                const sampledPos = pos + uncPos;
+                const sampledNeg = neg + uncNeg;
+                const sampledTotal = sampledPos + sampledNeg;
+                totalSampled += sampledTotal;
+                monthData.push({ month: months[i], pos, neg, uncPos, uncNeg, sampledPos, sampledNeg, sampledTotal });
             }
-            const sampledPos = pos + uncPos;
-            const sampledNeg = neg + uncNeg;
-            const sampledTotal = sampledPos + sampledNeg;
-            totalSampled += sampledTotal;
-            monthData.push({ month, pos, neg, uncPos, uncNeg, sampledPos, sampledNeg, sampledTotal });
+            
+            if (monthData.length === 0 || totalSampled === 0) return monthData;
+            
+            // Apply projection only if enabled
+            if (usePrediction) {
+                return this._projectMonthlyData(monthData, totalSampled, snapshot);
+            }
+            
+            // No projection - just set pos/neg/total from sampled values
+            for (const m of monthData) {
+                m.projectedPos = m.sampledPos;
+                m.projectedNeg = m.sampledNeg;
+                m.projectedTotal = m.sampledTotal;
+                m.total = m.sampledTotal;
+            }
+            return monthData;
         }
         
-        if (totalSampled === 0) return monthData;
+        // No typed arrays available - return empty
+        return [];
+    },
+
+    /**
+     * Apply position-based extrapolation to monthly data
+     * Shared by both fast path (typed arrays) and fallback (dictionaries)
+     */
+    _projectMonthlyData(monthData, totalSampled, snapshot) {
+        if (monthData.length === 0 || totalSampled === 0) return monthData;
         
         // Game totals from Steam (ground truth)
         const gameTotalPos = snapshot.gameTotalPositive || 0;
@@ -726,7 +735,7 @@ const Metrics = {
         return { mean, median, stddev, p95 };
     },
 
-    detectBimodality(buckets, filter) {
+    detectBimodality(buckets, filter, snapshot = null) {
         const earlyThreshold = 20 * 60;
         const lateThreshold = 100 * 60;
         const minClusterRatio = 0.15;
@@ -734,7 +743,7 @@ const Metrics = {
         let earlyCount = 0, lateCount = 0, totalNeg = 0;
         
         for (const bucket of buckets) {
-            const filtered = this.filterBucket(bucket, filter);
+            const filtered = this.filterBucket(bucket, filter, snapshot);
             const neg = filtered.neg + filtered.uncNeg;
             totalNeg += neg;
             const midpoint = (bucket.minPlaytime + bucket.maxPlaytime) / 2;
@@ -752,56 +761,38 @@ const Metrics = {
     },
 
     computeTemporalDrift(buckets, filter, snapshot) {
-        const allMonths = new Set();
-        for (const bucket of buckets) {
-            for (const month of Object.keys(bucket.positiveByMonth || {})) allMonths.add(month);
-            for (const month of Object.keys(bucket.negativeByMonth || {})) allMonths.add(month);
-        }
+        // Use getPredictedMonthlyData which already handles typed arrays
+        const monthlyData = this.getPredictedMonthlyData(buckets, filter, snapshot);
+        if (monthlyData.length < 6) return { firstHalfNegRatio: 0, secondHalfNegRatio: 0, stddev: 0 };
 
-        let sortedMonths = [...allMonths].sort();
-        
-        if (filter) {
-            sortedMonths = sortedMonths.filter(m => {
-                if (filter.from && m < filter.from) return false;
-                if (filter.to && m > filter.to) return false;
-                if (filter.excludeMonths && filter.excludeMonths.includes(m)) return false;
-                return true;
-            });
-        }
-        
-        if (sortedMonths.length < 6) return { firstHalfNegRatio: 0, secondHalfNegRatio: 0, stddev: 0 };
-
-        const monthlyRatios = [];
-        for (const month of sortedMonths) {
-            let pos = 0, neg = 0;
-            for (const bucket of buckets) {
-                pos += (bucket.positiveByMonth?.[month] || 0) + (bucket.uncertainPositiveByMonth?.[month] || 0);
-                neg += (bucket.negativeByMonth?.[month] || 0) + (bucket.uncertainNegativeByMonth?.[month] || 0);
-            }
-            if (pos + neg > 0) monthlyRatios.push(neg / (pos + neg));
-        }
+        const monthlyRatios = monthlyData
+            .filter(m => (m.pos + m.neg) > 0)
+            .map(m => m.neg / (m.pos + m.neg));
         
         const recentMonths = 12;
-        const cutoff = Math.max(0, sortedMonths.length - recentMonths);
-        const earlierPeriod = { from: sortedMonths[0], to: sortedMonths[cutoff - 1] || sortedMonths[0], excludeMonths: filter?.excludeMonths };
-        const recentPeriod = { from: sortedMonths[cutoff], to: sortedMonths[sortedMonths.length - 1], excludeMonths: filter?.excludeMonths };
-
-        const earlierCounts = this.projectCounts(buckets, earlierPeriod, snapshot);
-        const recentCounts = this.projectCounts(buckets, recentPeriod, snapshot);
+        const cutoff = Math.max(0, monthlyData.length - recentMonths);
         
-        const firstHalfNegRatio = earlierCounts.total > 0 
-            ? (earlierCounts.negative + earlierCounts.uncertainNegative) / earlierCounts.total : 0;
-        const secondHalfNegRatio = recentCounts.total > 0 
-            ? (recentCounts.negative + recentCounts.uncertainNegative) / recentCounts.total : 0;
+        let earlierPos = 0, earlierNeg = 0, recentPos = 0, recentNeg = 0;
+        for (let i = 0; i < cutoff; i++) {
+            earlierPos += monthlyData[i].pos;
+            earlierNeg += monthlyData[i].neg;
+        }
+        for (let i = cutoff; i < monthlyData.length; i++) {
+            recentPos += monthlyData[i].pos;
+            recentNeg += monthlyData[i].neg;
+        }
+        
+        const firstHalfNegRatio = (earlierPos + earlierNeg) > 0 ? earlierNeg / (earlierPos + earlierNeg) : 0;
+        const secondHalfNegRatio = (recentPos + recentNeg) > 0 ? recentNeg / (recentPos + recentNeg) : 0;
         
         const ratioStats = this.computeStats(monthlyRatios);
         return { firstHalfNegRatio, secondHalfNegRatio, stddev: ratioStats.stddev || 0.1 };
     },
 
-    getMonthlyActivityData(buckets, filter = null, snapshot = null) {
-        // Use predicted data if snapshot available
+    getMonthlyActivityData(buckets, filter = null, snapshot = null, usePrediction = true) {
+        // Use snapshot data (with or without projection)
         if (snapshot) {
-            const monthlyData = this.getPredictedMonthlyData(buckets, filter, snapshot);
+            const monthlyData = this.getPredictedMonthlyData(buckets, filter, snapshot, usePrediction);
             if (monthlyData.length === 0) return { months: [], activity: [], p25: 0, p75: 0 };
             
             const activity = monthlyData.map(m => ({
@@ -819,39 +810,12 @@ const Metrics = {
             return { months: monthlyData.map(m => m.month), activity, p10, p25, p75 };
         }
         
-        // Fallback to raw data
-        const allMonths = new Set();
-        for (const bucket of buckets) {
-            for (const month of Object.keys(bucket.positiveByMonth || {})) allMonths.add(month);
-            for (const month of Object.keys(bucket.negativeByMonth || {})) allMonths.add(month);
-            for (const month of Object.keys(bucket.uncertainPositiveByMonth || {})) allMonths.add(month);
-            for (const month of Object.keys(bucket.uncertainNegativeByMonth || {})) allMonths.add(month);
-        }
-        
-        let sortedMonths = [...allMonths].sort();
-        if (filter && filter.from) sortedMonths = sortedMonths.filter(m => m >= filter.from && m <= filter.to);
-        
-        const activity = sortedMonths.map(month => {
-            let pos = 0, neg = 0;
-            for (const bucket of buckets) {
-                pos += (bucket.positiveByMonth?.[month] || 0) + (bucket.uncertainPositiveByMonth?.[month] || 0);
-                neg += (bucket.negativeByMonth?.[month] || 0) + (bucket.uncertainNegativeByMonth?.[month] || 0);
-            }
-            return { month, pos, neg, count: pos + neg };
-        });
-        
-        if (activity.length === 0) return { months: [], activity: [], p25: 0, p75: 0 };
-        
-        const sortedByCount = [...activity].sort((a, b) => a.count - b.count);
-        const p10 = sortedByCount[Math.floor(sortedByCount.length * 0.10)]?.count || 0;
-        const p25 = sortedByCount[Math.floor(sortedByCount.length * 0.25)]?.count || 0;
-        const p75 = sortedByCount[Math.floor(sortedByCount.length * 0.75)]?.count || 0;
-        
-        return { months: sortedMonths, activity, p10, p25, p75 };
+        // No snapshot available - return empty
+        return { months: [], activity: [], p10: 0, p25: 0, p75: 0 };
     },
 
-    computeWindowEndActivity(buckets, filter, snapshot = null) {
-        const windowData = this.getMonthlyActivityData(buckets, filter, snapshot);
+    computeWindowEndActivity(buckets, filter, snapshot = null, usePrediction = true) {
+        const windowData = this.getMonthlyActivityData(buckets, filter, snapshot, usePrediction);
         if (windowData.activity.length < 6) return { endActivity: 1, startActivity: 1, isInBottomQuartile: false };
         
         const activity = windowData.activity;
@@ -860,13 +824,13 @@ const Metrics = {
         const startActivity = firstHalf.reduce((sum, m) => sum + m.count, 0) / firstHalf.length;
         const endMonths = activity.slice(-3);
         const endActivity = endMonths.reduce((sum, m) => sum + m.count, 0) / endMonths.length;
-        const isInBottomQuartile = startActivity > 0 && endActivity < startActivity * 0.2;
-        
+        const isInBottomQuartile = endActivity <= windowData.p25;
+        console.log(activity.map(a => a.month + ': ' + a.count));
         return { endActivity, startActivity, isInBottomQuartile };
     },
 
-    detectRevival(buckets, filter, snapshot = null) {
-        const windowData = this.getMonthlyActivityData(buckets, filter, snapshot);
+    detectRevival(buckets, filter, snapshot = null, usePrediction = true) {
+        const windowData = this.getMonthlyActivityData(buckets, filter, snapshot, usePrediction);
         if (windowData.activity.length < 6) return { hasRevival: false };
         
         const activity = windowData.activity;
@@ -925,32 +889,11 @@ const Metrics = {
         return { hasRevival: true, firstWaveNegRatio, lastWaveNegRatio, revivalSentimentChange: lastWaveNegRatio - firstWaveNegRatio, isStillAlive };
     },
 
-    detectSpikes(buckets, filter, snapshot = null) {
-        // Use predicted data if snapshot available, otherwise fall back to raw
-        let monthlyData;
-        if (snapshot) {
-            monthlyData = this.getPredictedMonthlyData(buckets, filter, snapshot);
-        } else {
-            // Fallback to raw data (backwards compatibility)
-            const allMonths = new Set();
-            for (const bucket of buckets) {
-                for (const month of Object.keys(bucket.positiveByMonth || {})) allMonths.add(month);
-                for (const month of Object.keys(bucket.negativeByMonth || {})) allMonths.add(month);
-            }
-            
-            let sortedMonths = [...allMonths].sort();
-            if (filter) sortedMonths = sortedMonths.filter(m => m >= filter.from && m <= filter.to);
-            
-            monthlyData = [];
-            for (const month of sortedMonths) {
-                let pos = 0, neg = 0;
-                for (const bucket of buckets) {
-                    pos += (bucket.positiveByMonth?.[month] || 0) + (bucket.uncertainPositiveByMonth?.[month] || 0);
-                    neg += (bucket.negativeByMonth?.[month] || 0) + (bucket.uncertainNegativeByMonth?.[month] || 0);
-                }
-                monthlyData.push({ month, pos, neg, total: pos + neg });
-            }
-        }
+    detectSpikes(buckets, filter, snapshot = null, usePrediction = true) {
+        // Get monthly data (with or without projection)
+        const monthlyData = snapshot 
+            ? this.getPredictedMonthlyData(buckets, filter, snapshot, usePrediction)
+            : [];
         
         // Compute baseline sentiment ratio across ALL months
         const totalPos = monthlyData.reduce((sum, m) => sum + m.pos, 0);
@@ -1083,12 +1026,12 @@ const Metrics = {
         return { tags, primaryTag, severity: normalizedSeverity, rawSeverity: totalSeverity, reasons: tags.map(t => t.reason) };
     },
 
-    computeRefundHonesty(buckets, filter = null) {
+    computeRefundHonesty(buckets, filter = null, snapshot = null) {
         let posBeforeRefund = 0, negBeforeRefund = 0;
         let posTotal = 0, negTotal = 0;
 
         for (const bucket of buckets) {
-            const filtered = this.filterBucket(bucket, filter);
+            const filtered = this.filterBucket(bucket, filter, snapshot);
             const pos = filtered.pos + filtered.uncPos;
             const neg = filtered.neg + filtered.uncNeg;
             posTotal += pos;
@@ -1119,7 +1062,11 @@ const Metrics = {
         return 1.0;
     },
 
-    filterBucket(bucket, filter) {
+    /**
+     * Filter bucket using typed arrays (fast path) or dictionary fallback
+     * Snapshot must be passed via options or stored in closure
+     */
+    filterBucket(bucket, filter, snapshot = null) {
         if (!filter) {
             return {
                 pos: bucket.positiveCount,
@@ -1129,30 +1076,27 @@ const Metrics = {
             };
         }
 
-        const excludeSet = new Set(filter.excludeMonths || []);
-        let pos = 0, neg = 0, uncPos = 0, uncNeg = 0;
+        // Fast path: typed arrays (new format)
+        if (bucket.pos && snapshot?.months) {
+            const months = snapshot.months;
+            const monthIndex = snapshot.monthIndex;
+            const fromIdx = filter.from ? (monthIndex[filter.from] ?? 0) : 0;
+            const toIdx = filter.to ? (monthIndex[filter.to] ?? months.length - 1) : months.length - 1;
+            const excludeSet = filter.excludeMonths ? new Set(filter.excludeMonths) : null;
 
-        for (const [month, count] of Object.entries(bucket.positiveByMonth || {})) {
-            if (this.monthInRange(month, filter) && !excludeSet.has(month)) pos += count;
-        }
-        for (const [month, count] of Object.entries(bucket.negativeByMonth || {})) {
-            if (this.monthInRange(month, filter) && !excludeSet.has(month)) neg += count;
-        }
-        for (const [month, count] of Object.entries(bucket.uncertainPositiveByMonth || {})) {
-            if (this.monthInRange(month, filter) && !excludeSet.has(month)) uncPos += count;
-        }
-        for (const [month, count] of Object.entries(bucket.uncertainNegativeByMonth || {})) {
-            if (this.monthInRange(month, filter) && !excludeSet.has(month)) uncNeg += count;
+            let pos = 0, neg = 0, uncPos = 0, uncNeg = 0;
+            for (let i = fromIdx; i <= toIdx; i++) {
+                if (excludeSet && excludeSet.has(months[i])) continue;
+                pos += bucket.pos[i];
+                neg += bucket.neg[i];
+                uncPos += bucket.uncPos[i];
+                uncNeg += bucket.uncNeg[i];
+            }
+            return { pos, neg, uncPos, uncNeg };
         }
 
-        return { pos, neg, uncPos, uncNeg };
-    },
-    
-    monthInRange(month, filter) {
-        if (!filter || (!filter.from && !filter.to)) return true;
-        if (filter.from && month < filter.from) return false;
-        if (filter.to && month > filter.to) return false;
-        return true;
+        // No typed arrays - return zeros
+        return { pos: 0, neg: 0, uncPos: 0, uncNeg: 0 };
     },
 
     analyzeEditHeatmap(editHeatmap) {
@@ -1195,15 +1139,7 @@ const Metrics = {
     },
 
     computeTimeline(snapshot, windowMonths = 3, options = {}) {
-        const buckets = snapshot.bucketsByReviewTime;
-        
-        const allMonths = new Set();
-        for (const bucket of buckets) {
-            for (const month of Object.keys(bucket.positiveByMonth || {})) allMonths.add(month);
-            for (const month of Object.keys(bucket.negativeByMonth || {})) allMonths.add(month);
-        }
-        const sortedMonths = [...allMonths].sort();
-        
+        const sortedMonths = snapshot.months || [];
         if (sortedMonths.length < windowMonths) return [];
         
         const timeline = [];
@@ -1234,4 +1170,7 @@ const Metrics = {
     }
 };
 
-window.Metrics = Metrics;
+// Export for both browser and worker contexts
+if (typeof window !== 'undefined') {
+    window.Metrics = Metrics;
+}
