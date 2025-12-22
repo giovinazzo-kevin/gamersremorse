@@ -312,6 +312,9 @@ const BinarySnapshot = {
             // Extra is projected minus sampled (for ghost bars)
             m.extraPos = positiveExhausted ? 0 : Math.max(0, m.projectedPos - m.sampledPos);
             m.extraNeg = negativeExhausted ? 0 : Math.max(0, m.projectedNeg - m.sampledNeg);
+            
+            // Alias for compatibility with detectSpikes
+            m.total = m.projectedTotal;
         }
         
         snapshot.projectedMonthly = monthData;
@@ -382,6 +385,7 @@ const BinarySnapshot = {
                 projectedPos: m.sampledPos,
                 projectedNeg: m.sampledNeg,
                 projectedTotal: m.sampledTotal,
+                total: m.sampledTotal,
                 extraPos: 0,
                 extraNeg: 0
             }));

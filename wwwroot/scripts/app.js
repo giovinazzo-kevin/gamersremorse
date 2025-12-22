@@ -17,6 +17,7 @@ let isStreaming = true;
 let convergenceScore = 0;
 let loadingMessageCount = 0;
 let tagTimelineData = [];
+let tagTimelineCache = { predicted: null, sampled: null };
 let numReactions = 0;
 let currentBanner = '';
 let hasReactedToGame = false;
@@ -142,6 +143,17 @@ document.getElementById('hidePrediction')?.addEventListener('change', () => {
     if (currentSnapshot) {
         updateChart(currentSnapshot);
         updateMetrics(currentSnapshot);
+        // Use cached tag timeline, compute lazily if not cached
+        if (Metrics && currentGameInfo) {
+            const isFree = currentGameInfo?.isFree || false;
+            const isSexual = currentGameInfo?.flags ? (currentGameInfo.flags & 8) !== 0 : false;
+            const hidePrediction = document.getElementById('hidePrediction')?.checked ?? false;
+            const cacheKey = hidePrediction ? 'sampled' : 'predicted';
+            if (!tagTimelineCache[cacheKey]) {
+                tagTimelineCache[cacheKey] = Metrics.computeTimeline(currentSnapshot, 3, { isFree, isSexual, hidePrediction });
+            }
+            updateTagTimeline(tagTimelineCache[cacheKey]);
+        }
         drawTimeline();
     }
 });
@@ -183,6 +195,7 @@ async function analyze() {
     timelineData = { months: [], positive: {}, negative: {}, uncertainPos: {}, uncertainNeg: {}, volume: [], maxVolume: 0 };
     timelineSelection = { start: 0, end: 1 };
     tagTimelineData = [];
+    tagTimelineCache = { predicted: null, sampled: null };
 
     // clear UI
     if (chart) {
@@ -260,12 +273,16 @@ async function analyze() {
 
             updateMetrics(currentSnapshot);
 
-            // Compute tag timeline after analysis completes
+            // Compute tag timeline after analysis completes (cache predicted version)
             if (Metrics) {
                 const isFree = currentGameInfo?.isFree || false;
                 const isSexual = currentGameInfo?.flags ? (currentGameInfo.flags & 8) !== 0 : false;
-                const tagTimeline = Metrics.computeTimeline(currentSnapshot, 3, { isFree, isSexual });
-                updateTagTimeline(tagTimeline);
+                const hidePrediction = document.getElementById('hidePrediction')?.checked ?? false;
+                const cacheKey = hidePrediction ? 'sampled' : 'predicted';
+                if (!tagTimelineCache[cacheKey]) {
+                    tagTimelineCache[cacheKey] = Metrics.computeTimeline(currentSnapshot, 3, { isFree, isSexual, hidePrediction });
+                }
+                updateTagTimeline(tagTimelineCache[cacheKey]);
             }
             
             // Fetch controversy context for any detected events

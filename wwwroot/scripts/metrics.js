@@ -45,7 +45,7 @@ const Metrics = {
         },
         {
             id: 'EXTRACTIVE',
-            condition: (m) => m.medianRatio > 1.3,
+            condition: (m) => m.medianCertainRatio > 1.3,
             reason: (m) => `${Math.round(m.negativeRatio * 100)}% negative at ${Math.round(m.negMedianReview / 60)}h (${Math.round((m.medianRatio - 1) * 100)}% longer than positives)`,
             severity: (m) => Math.min(0.3, (m.medianRatio - 1) * 0.3),
             color: 'var(--color-tag-extractive)'
@@ -76,7 +76,7 @@ const Metrics = {
         },
         {
             id: 'PREDATORY',
-            condition: (m) => m.medianRatio > 1.5 && m.negativeRatio > 0.30,
+            condition: (m) => m.medianCertainRatio > 1.5 && m.negativeRatio > 0.30,
             reason: (m) => `${Math.round(m.negativeRatio * 100)}% negative after ${Math.round(m.negMedianReview / 60)}h median (${Math.round((m.medianRatio - 1) * 100)}% longer than positive)`,
             severity: 0.25,
             color: 'var(--color-tag-predatory)'
@@ -382,18 +382,29 @@ const Metrics = {
             negativeRatio = actualNegRatio;
         }
 
-        // Playtime distributions
+        // Playtime distributions (all reviews)
         const posPlaytimes = this.getPlaytimeArray(buckets, 'positive', organicFilter, snapshot);
         const negPlaytimes = this.getPlaytimeArray(buckets, 'negative', organicFilter, snapshot);
         const allPlaytimes = [...posPlaytimes, ...negPlaytimes];
         const totalPosPlaytimes = this.getPlaytimeArray(totalBuckets, 'positive', organicFilter, snapshot);
         const totalNegPlaytimes = this.getPlaytimeArray(totalBuckets, 'negative', organicFilter, snapshot);
 
+        // Playtime distributions (certain reviews only - not edited 7+ days later)
+        const posPlaytimesCertain = this.getPlaytimeArray(buckets, 'positive', organicFilter, snapshot, true, false);
+        const negPlaytimesCertain = this.getPlaytimeArray(buckets, 'negative', organicFilter, snapshot, true, false);
+        const totalPosPlaytimesCertain = this.getPlaytimeArray(totalBuckets, 'positive', organicFilter, snapshot, true, false);
+        const totalNegPlaytimesCertain = this.getPlaytimeArray(totalBuckets, 'negative', organicFilter, snapshot, true, false);
+
         const posStats = this.computeStats(posPlaytimes);
         const negStats = this.computeStats(negPlaytimes);
         const allStats = this.computeStats(allPlaytimes);
         const totalPosStats = this.computeStats(totalPosPlaytimes);
         const totalNegStats = this.computeStats(totalNegPlaytimes);
+
+        const posStatsCertain = this.computeStats(posPlaytimesCertain);
+        const negStatsCertain = this.computeStats(negPlaytimesCertain);
+        const totalPosStatsCertain = this.computeStats(totalPosPlaytimesCertain);
+        const totalNegStatsCertain = this.computeStats(totalNegPlaytimesCertain);
 
         const posMedianReview = posStats.median;
         const negMedianReview = negStats.median;
@@ -403,8 +414,16 @@ const Metrics = {
         const negMedianDelta = negMedianTotal - negMedianReview;
         const medianDeltaRatio = posMedianDelta > 0 ? negMedianDelta / posMedianDelta : 1;
 
+        // Certain-only medians (uncontaminated by post-edit playtime)
+        const posMedianCertain = posStatsCertain.median;
+        const negMedianCertain = negStatsCertain.median;
+        const posMedianTotalCertain = totalPosStatsCertain.median;
+        const negMedianTotalCertain = totalNegStatsCertain.median;
+
         const medianRatio = posMedianReview > 0 ? negMedianReview / posMedianReview : 1;
+        const medianRatioCertain = posMedianCertain > 0 ? negMedianCertain / posMedianCertain : 1;
         const stockholmIndex = negMedianReview > 0 ? negMedianTotal / negMedianReview : 1;
+        const stockholmIndexCertain = negMedianCertain > 0 ? negMedianTotalCertain / negMedianCertain : 1;
         const refundData = isFree ? null : this.computeRefundHonesty(buckets, organicFilter, snapshot);
         const negBimodal = this.detectBimodality(buckets, organicFilter, snapshot);
 
@@ -437,8 +456,14 @@ const Metrics = {
             posMedianDelta,
             negMedianDelta,
             medianRatio,
+            medianRatioCertain,
             medianDeltaRatio,
             stockholmIndex,
+            stockholmIndexCertain,
+            posMedianCertain,
+            negMedianCertain,
+            posMedianTotalCertain,
+            negMedianTotalCertain,
             refundPosRate: refundData?.posRate ?? null,
             refundNegRate: refundData?.negRate ?? null,
             negBimodal,
@@ -583,12 +608,19 @@ const Metrics = {
         };
     },
 
-    getPlaytimeArray(buckets, type, filter, snapshot = null) {
+    getPlaytimeArray(buckets, type, filter, snapshot = null, includeCertain = true, includeUncertain = true) {
         const values = [];
         for (const bucket of buckets) {
             const f = this.filterBucket(bucket, filter, snapshot);
             const midpoint = (bucket.minPlaytime + bucket.maxPlaytime) / 2;
-            const count = type === 'positive' ? f.pos + f.uncPos : f.neg + f.uncNeg;
+            let count = 0;
+            if (type === 'positive') {
+                if (includeCertain) count += f.pos;
+                if (includeUncertain) count += f.uncPos;
+            } else {
+                if (includeCertain) count += f.neg;
+                if (includeUncertain) count += f.uncNeg;
+            }
             for (let i = 0; i < count; i++) values.push(midpoint);
         }
         return values;
@@ -785,14 +817,14 @@ const Metrics = {
             : [];
         
         // Compute baseline sentiment ratio across ALL months
-        const totalPos = monthlyData.reduce((sum, m) => sum + m.pos, 0);
-        const totalNeg = monthlyData.reduce((sum, m) => sum + m.neg, 0);
+        const totalPos = monthlyData.reduce((sum, m) => sum + (m.projectedPos ?? m.pos), 0);
+        const totalNeg = monthlyData.reduce((sum, m) => sum + (m.projectedNeg ?? m.neg), 0);
         const baselineNegRatio = (totalPos + totalNeg) > 0 ? totalNeg / (totalPos + totalNeg) : 0.5;
         
         // Compute per-month neg ratios for sentiment stddev
         const monthlyNegRatios = monthlyData
             .filter(m => m.total >= 10) // need minimum data for meaningful ratio
-            .map(m => m.neg / m.total);
+            .map(m => (m.projectedNeg ?? m.neg) / m.total);
         const sentimentStats = this.computeStats(monthlyNegRatios);
         
         const windowSize = 3;
@@ -822,7 +854,7 @@ const Metrics = {
             }
             
             // === SENTIMENT Z-SCORE (new) ===
-            const negRatio = m.neg / m.total;
+            const negRatio = (m.projectedNeg ?? m.neg) / m.total;
             let sentimentZ = 0;
             if (sentimentStats.stddev > 0) {
                 // Positive sentimentZ = more negative than baseline
@@ -1041,7 +1073,8 @@ const Metrics = {
             const metrics = this.compute(snapshot, { 
                 timelineFilter: filter, 
                 isFree: options.isFree, 
-                isSexual: options.isSexual
+                isSexual: options.isSexual,
+                hidePrediction: options.hidePrediction
             });
             
             timeline.push({
