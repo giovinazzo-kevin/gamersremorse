@@ -30,9 +30,26 @@ app.UseHttpsRedirection();
 app.MapGet("/game/{appId}", async (HttpContext ctx, AppId appId, SteamReviewRepository repo) => {
     return await repo.GetInfo(appId);
 });
-app.MapGet("/controversies", async (string game, string months, string? types, GoogleScraper google, CancellationToken ct) => {
+
+app.MapGet("/controversies/{appId}", async (AppId appId, string months, string? types, GoogleScraper google, SteamReviewRepository repo, IDbContextFactory<AppDbContext> dbFactory, CancellationToken ct) => {
+
+    // Validate: require completed analysis (fingerprint exists)
+    using var db = dbFactory.CreateDbContext();
+    var fingerprint = await db.Fingerprints.FindAsync(new object[] { appId }, ct);
+    if (fingerprint == null)
+        return Results.BadRequest("Game not analyzed yet");
+
+    // Get game name from Steam
+    var info = await repo.GetInfo(appId, ct);
+    var game = info?.Name ?? $"App {appId}";
 
     var monthList = months.Split(',', StringSplitOptions.RemoveEmptyEntries);
+
+    // Validate month formats: YYYY or YYYY-MM only
+    var monthRegex = new System.Text.RegularExpressions.Regex(@"^\d{4}(-\d{2})?$");
+    if (!monthList.All(m => monthRegex.IsMatch(m)))
+        return Results.BadRequest("Invalid month format. Use YYYY or YYYY-MM");
+
     var typeList = types?.Split(',', StringSplitOptions.RemoveEmptyEntries) ?? monthList.Select(_ => "unknown").ToArray();
 
     var monthNames = new[] { "", "January", "February", "March", "April", "May", "June",
@@ -63,12 +80,12 @@ app.MapGet("/controversies", async (string game, string months, string? types, G
             _ => $"What was the {game} (video game) controversy in {year}"
         } + bullets;
 
-        overview = await google.GetAIOverview(query, ct);
+        overview = await google.GetAIOverview(query);
 
         // Fallback to year-only if month-specific returned nothing
         if (overview == null && !string.IsNullOrEmpty(monthName) && eventType != "death") {
             query = $"What happened to {game} (video game) in {year}" + bullets;
-            overview = await google.GetAIOverview(query, ct);
+            overview = await google.GetAIOverview(query);
         }
         var orderBy = int.TryParse(year, out var y) ? y : 0;
         var thenBy = monthNumber ?? 0;
@@ -76,8 +93,9 @@ app.MapGet("/controversies", async (string game, string months, string? types, G
     });
 
     var results = await Task.WhenAll(tasks);
-    return results.OrderByDescending(r => r.orderBy).ThenByDescending(r => r.thenBy).Where(r => r.overview != null);
+    return Results.Ok(results.OrderByDescending(r => r.orderBy).ThenByDescending(r => r.thenBy).Where(r => r.overview != null));
 });
+
 app.Map("/ws/game/{appId}", async (HttpContext ctx, AppId appId, AnalysisHub hub) => {
     if (!ctx.WebSockets.IsWebSocketRequest)
         return Results.BadRequest();

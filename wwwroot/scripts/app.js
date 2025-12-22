@@ -397,8 +397,10 @@ async function analyze() {
                 Timeline.updateTagData(tagTimelineCache[cacheKey]);
             }
             
-            // Controversy context now handled by backend
-            // (commented out - client shouldn't query from partial data)
+            // Fetch controversy context (backend validates analysis is complete)
+            if (currentMetrics && currentGameInfo?.appId) {
+                Controversy.fetchContext(currentGameInfo.appId, currentMetrics, currentSnapshot);
+            }
         }
 
         if (setLoading) setLoading(false);

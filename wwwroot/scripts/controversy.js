@@ -14,7 +14,7 @@ const Controversy = (function() {
         cachedHtml = null;
     }
 
-    async function fetchContext(gameName, metrics, snapshot) {
+    async function fetchContext(appId, metrics, snapshot) {
         const events = detectNotableEvents(metrics, snapshot);
         
         // Show status in the controversy section
@@ -34,7 +34,7 @@ const Controversy = (function() {
         const allEvents = events.slice(0, 4);
         const months = allEvents.map(e => e.month).join(',');
         const types = allEvents.map(e => e.type).join(',');
-        const res = await fetch(`/controversies?game=${encodeURIComponent(gameName)}&months=${months}&types=${types}`);
+        const res = await fetch(`/controversies/${appId}?months=${months}&types=${types}`);
         const data = await res.json();
         const contexts = data
             .filter(d => d.overview)
