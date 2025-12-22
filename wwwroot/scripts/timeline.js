@@ -130,76 +130,163 @@ const Timeline = (() => {
 
         if (monthData.length === 0) return;
 
+        const yearLabelH = 20;
         const tagStripH = tagData.length > 0 ? 8 : 0;
-        const chartH = h - 20 - tagStripH;
-        const midY = chartH / 2;
+        // Chart area is full height minus year labels - tags are INSIDE the selection
+        const chartH = h - yearLabelH;
+        const midY = (chartH - tagStripH) / 2;
         const barW = w / monthData.length;
 
-        // Find global max for unified scale (so 88% pos looks 7x taller than 12% neg)
+        // Find global max for unified scale
+        // projectedPos already includes uncertains, so don't add uncPos again
         let maxVal = 1;
         for (const m of monthData) {
-            const totalPos = hidePrediction ? m.sampledPos : m.projectedPos;
-            const totalNeg = hidePrediction ? m.sampledNeg : m.projectedNeg;
+            const totalPos = hidePrediction ? (m.pos + m.uncPos) : m.projectedPos;
+            const totalNeg = hidePrediction ? (m.neg + m.uncNeg) : m.projectedNeg;
             maxVal = Math.max(maxVal, totalPos, totalNeg);
         }
 
         // Draw bars - centered, pos up, neg down
-        // OVERLAY approach: ghost at full height, then solid on top
+        // Certain reviews solid, uncertain reviews lighter (on outside edge)
         for (let i = 0; i < monthData.length; i++) {
             const m = monthData[i];
             const x = i * barW;
 
             if (hidePrediction) {
                 // Just draw sampled data, no ghosts
-                const posH = Math.sqrt(m.sampledPos / maxVal) * midY;
-                const negH = Math.sqrt(m.sampledNeg / maxVal) * midY;
+                // Total height must fit in midY
+                const totalPos = m.pos + m.uncPos;
+                const totalNeg = m.neg + m.uncNeg;
+                
+                const posScale = totalPos > 0 ? Math.sqrt(totalPos / maxVal) * midY / totalPos : 0;
+                const negScale = totalNeg > 0 ? Math.sqrt(totalNeg / maxVal) * midY / totalNeg : 0;
+                
+                const posCertainH = m.pos * posScale;
+                const negCertainH = m.neg * negScale;
+                const posUncOnlyH = m.uncPos * posScale;
+                const negUncOnlyH = m.uncNeg * negScale;
 
-                // Positive (up from midline)
-                if (posH > 0) {
+                // Positive (up from midline): certain first (inner), then uncertain stacked above (outer)
+                let yPos = midY;
+                if (posCertainH > 0) {
                     ctx.globalAlpha = 1;
                     ctx.fillStyle = colors.positive;
-                    ctx.fillRect(x, midY - posH, barW - 1, posH);
+                    ctx.fillRect(x, yPos - posCertainH, barW - 1, posCertainH);
+                    yPos -= posCertainH;
+                }
+                if (posUncOnlyH > 0) {
+                    ctx.globalAlpha = 1;
+                    ctx.fillStyle = colors.uncertain;
+                    ctx.fillRect(x, yPos - posUncOnlyH, barW - 1, posUncOnlyH);
                 }
 
-                // Negative (down from midline)
-                if (negH > 0) {
+                // Negative (down from midline): certain first (inner), then uncertain stacked below (outer)
+                let yNeg = midY;
+                if (negCertainH > 0) {
                     ctx.globalAlpha = 1;
                     ctx.fillStyle = colors.negative;
-                    ctx.fillRect(x, midY, barW - 1, negH);
+                    ctx.fillRect(x, yNeg, barW - 1, negCertainH);
+                    yNeg += negCertainH;
+                }
+                if (negUncOnlyH > 0) {
+                    ctx.globalAlpha = 1;
+                    ctx.fillStyle = colors.uncertain;
+                    ctx.fillRect(x, yNeg, barW - 1, negUncOnlyH);
                 }
             } else {
-                // OVERLAY: Draw projected (ghost) first, then observed (solid) on top
-                const projPosH = Math.sqrt(m.projectedPos / maxVal) * midY;
-                const projNegH = Math.sqrt(m.projectedNeg / maxVal) * midY;
-                const sampPosH = Math.sqrt(m.sampledPos / maxVal) * midY;
-                const sampNegH = Math.sqrt(m.sampledNeg / maxVal) * midY;
+                // Stack order matches chart: certain → proj certain → proj uncertain → sampled uncertain
+                // Note: projectedPos already includes uncertains, so total is just projectedPos
+                // But we want to show sampled uncertain separately, so:
+                // - projectedPos includes projected certain + projected uncertain
+                // - We show: sampled certain, then projected extra (proj - sampled), then sampled uncertain
+                
+                // Total bar height = projectedPos (which is scaled observedPos = pos + uncPos)
+                // We DON'T add uncPos again - it's already in projectedPos
+                const totalPos = m.projectedPos;
+                const totalNeg = m.projectedNeg;
+                
+                // Heights as proportion of total, scaled to midY
+                const posScale = totalPos > 0 ? Math.sqrt(totalPos / maxVal) * midY / totalPos : 0;
+                const negScale = totalNeg > 0 ? Math.sqrt(totalNeg / maxVal) * midY / totalNeg : 0;
+                
+                // Sampled parts
+                const posCertainH = m.pos * posScale;
+                const negCertainH = m.neg * negScale;
+                const posUncOnlyH = m.uncPos * posScale;
+                const negUncOnlyH = m.uncNeg * negScale;
+                
+                // Projected extras (what projection adds beyond sampled)
+                // extraPos = projectedPos - observedPos = projectedPos - (pos + uncPos)
+                const projExtraPosH = m.extraPos * posScale;
+                const projExtraNegH = m.extraNeg * negScale;
+                
+                // Projected uncertain (proportional to sampled uncertain ratio)
+                const uncRatioPos = (m.pos + m.uncPos) > 0 ? m.uncPos / (m.pos + m.uncPos) : 0;
+                const uncRatioNeg = (m.neg + m.uncNeg) > 0 ? m.uncNeg / (m.neg + m.uncNeg) : 0;
+                const projUncPosH = projExtraPosH * uncRatioPos;
+                const projUncNegH = projExtraNegH * uncRatioNeg;
+                // Adjust proj extra to only be the certain part
+                const projCertainPosH = projExtraPosH - projUncPosH;
+                const projCertainNegH = projExtraNegH - projUncNegH;
 
                 // === POSITIVE (going UP from midline) ===
-                // Ghost layer (projected) at 50% alpha
-                if (projPosH > 0) {
-                    ctx.globalAlpha = 0.4;
-                    ctx.fillStyle = colors.positive;
-                    ctx.fillRect(x, midY - projPosH, barW - 1, projPosH);
-                }
-                // Solid layer (sampled) at 100% alpha on top
-                if (sampPosH > 0) {
+                let yPos = midY;
+                // 1. Sampled certain (solid)
+                if (posCertainH > 0) {
                     ctx.globalAlpha = 1;
                     ctx.fillStyle = colors.positive;
-                    ctx.fillRect(x, midY - sampPosH, barW - 1, sampPosH);
+                    ctx.fillRect(x, yPos - posCertainH, barW - 1, posCertainH);
+                    yPos -= posCertainH;
+                }
+                // 2. Projected certain extra (faded)
+                if (projCertainPosH > 0) {
+                    ctx.globalAlpha = 0.4;
+                    ctx.fillStyle = colors.positive;
+                    ctx.fillRect(x, yPos - projCertainPosH, barW - 1, projCertainPosH);
+                    yPos -= projCertainPosH;
+                }
+                // 3. Projected uncertain (faded gray)
+                if (projUncPosH > 0) {
+                    ctx.globalAlpha = 0.4;
+                    ctx.fillStyle = colors.uncertain;
+                    ctx.fillRect(x, yPos - projUncPosH, barW - 1, projUncPosH);
+                    yPos -= projUncPosH;
+                }
+                // 4. Sampled uncertain (solid gray)
+                if (posUncOnlyH > 0) {
+                    ctx.globalAlpha = 1;
+                    ctx.fillStyle = colors.uncertain;
+                    ctx.fillRect(x, yPos - posUncOnlyH, barW - 1, posUncOnlyH);
                 }
 
                 // === NEGATIVE (going DOWN from midline) ===
-                // Ghost layer (projected) at 50% alpha
-                if (projNegH > 0) {
-                    ctx.globalAlpha = 0.4;
-                    ctx.fillStyle = colors.negative;
-                    ctx.fillRect(x, midY, barW - 1, projNegH);
-                }
-                // Solid layer (sampled) at 100% alpha on top
-                if (sampNegH > 0) {
+                let yNeg = midY;
+                // 1. Sampled certain (solid)
+                if (negCertainH > 0) {
                     ctx.globalAlpha = 1;
                     ctx.fillStyle = colors.negative;
-                    ctx.fillRect(x, midY, barW - 1, sampNegH);
+                    ctx.fillRect(x, yNeg, barW - 1, negCertainH);
+                    yNeg += negCertainH;
+                }
+                // 2. Projected certain extra (faded)
+                if (projCertainNegH > 0) {
+                    ctx.globalAlpha = 0.4;
+                    ctx.fillStyle = colors.negative;
+                    ctx.fillRect(x, yNeg, barW - 1, projCertainNegH);
+                    yNeg += projCertainNegH;
+                }
+                // 3. Projected uncertain (faded gray)
+                if (projUncNegH > 0) {
+                    ctx.globalAlpha = 0.4;
+                    ctx.fillStyle = colors.uncertain;
+                    ctx.fillRect(x, yNeg, barW - 1, projUncNegH);
+                    yNeg += projUncNegH;
+                }
+                // 4. Sampled uncertain (solid gray)
+                if (negUncOnlyH > 0) {
+                    ctx.globalAlpha = 1;
+                    ctx.fillStyle = colors.uncertain;
+                    ctx.fillRect(x, yNeg, barW - 1, negUncOnlyH);
                 }
             }
         }
@@ -214,9 +301,9 @@ const Timeline = (() => {
         ctx.lineTo(w, midY);
         ctx.stroke();
 
-        // Draw tag strip below chart
+        // Draw tag strip at bottom of chart area (above year labels, inside selection)
         if (tagData.length > 0) {
-            const stripY = chartH + 2;
+            const stripY = chartH - tagStripH;
             for (const entry of tagData) {
                 const monthIdx = monthData.findIndex(m => m.month === entry.month);
                 if (monthIdx < 0) continue;
@@ -231,17 +318,17 @@ const Timeline = (() => {
             }
         }
 
-        // Selection outline
+        // Selection outline - covers chart area (bars + tags)
         const selX = selection.start * w;
         const selW = (selection.end - selection.start) * w;
         ctx.strokeStyle = 'rgba(139, 0, 0, 0.8)';
         ctx.lineWidth = 2;
-        ctx.strokeRect(selX, 0, selW, chartH + tagStripH);
+        ctx.strokeRect(selX, 0, selW, chartH);
 
         // Handles
         ctx.fillStyle = '#8b0000';
-        ctx.fillRect(selX - 4, 0, 8, chartH + tagStripH);
-        ctx.fillRect(selX + selW - 4, 0, 8, chartH + tagStripH);
+        ctx.fillRect(selX - 4, 0, 8, chartH);
+        ctx.fillRect(selX + selW - 4, 0, 8, chartH);
 
         // Year labels
         ctx.fillStyle = isDarkMode() ? '#888' : '#666';

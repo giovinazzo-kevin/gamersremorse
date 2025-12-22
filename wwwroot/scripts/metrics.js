@@ -356,22 +356,25 @@ const Metrics = {
         // This allows tags like FLOP to trigger when viewing launch window
         let positiveRatio, negativeRatio;
         if (filter && filter.from) {
+            // Get window counts from monthly data
+            const predictedMonthly = this.getPredictedMonthlyData(buckets, organicFilter, snapshot);
+            let windowPos = 0, windowNeg = 0;
+            for (const m of predictedMonthly) {
+                windowPos += m.sampledPos || (m.pos + m.uncPos) || 0;
+                windowNeg += m.sampledNeg || (m.neg + m.uncNeg) || 0;
+            }
+            
             if (usePrediction) {
-                // Use predicted monthly data for the window
-                const predictedMonthly = this.getPredictedMonthlyData(buckets, organicFilter, snapshot);
-                let windowPos = 0, windowNeg = 0;
-                for (const m of predictedMonthly) {
-                    windowPos += m.projectedPos || m.pos || 0;
-                    windowNeg += m.projectedNeg || m.neg || 0;
-                }
-                const windowTotal = windowPos + windowNeg;
-                positiveRatio = windowTotal > 0 ? windowPos / windowTotal : 0.5;
-                negativeRatio = windowTotal > 0 ? windowNeg / windowTotal : 0.5;
+                // Apply bias correction: scale pos and neg separately to match Steam's ratio
+                const posScale = snapshot.gameTotalPositive / Math.max(1, snapshot.totalPositive);
+                const negScale = snapshot.gameTotalNegative / Math.max(1, snapshot.totalNegative);
+                const correctedPos = windowPos * posScale;
+                const correctedNeg = windowNeg * negScale;
+                const windowTotal = correctedPos + correctedNeg;
+                positiveRatio = windowTotal > 0 ? correctedPos / windowTotal : 0.5;
+                negativeRatio = windowTotal > 0 ? correctedNeg / windowTotal : 0.5;
             } else {
-                // Use raw sampled counts for the window
-                const sampled = this.computeSampledCounts(buckets, organicFilter);
-                const windowPos = sampled.positive + sampled.uncertainPositive;
-                const windowNeg = sampled.negative + sampled.uncertainNegative;
+                // Raw sampled ratio (no bias correction)
                 const windowTotal = windowPos + windowNeg;
                 positiveRatio = windowTotal > 0 ? windowPos / windowTotal : 0.5;
                 negativeRatio = windowTotal > 0 ? windowNeg / windowTotal : 0.5;

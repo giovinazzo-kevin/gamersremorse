@@ -119,16 +119,17 @@ const Charts = (() => {
                 data: {
                     labels,
                     datasets: [
-                        // Sampled (solid)
+                        // Certains first (colored)
                         { label: '👍', data: sampledPos, backgroundColor: hexToRgba(colors.positive, 0.8), stack: 'stack' },
-                        { label: '👍*', data: sampledUncPos, backgroundColor: hexToRgba(colors.uncertain, 0.8), stack: 'stack' },
                         { label: '👎', data: sampledNeg, backgroundColor: hexToRgba(colors.negative, 0.8), stack: 'stack' },
-                        { label: '👎*', data: sampledUncNeg, backgroundColor: hexToRgba(colors.uncertain, 0.8), stack: 'stack' },
-                        // Projected extra (faded, stacked on top)
+                        // Projected certains (colored, faded)
                         { label: '👍 (proj)', data: projectedPos, backgroundColor: hexToRgba(colors.positive, 0.35), stack: 'stack' },
-                        { label: '👍* (proj)', data: projectedUncPos, backgroundColor: hexToRgba(colors.uncertain, 0.35), stack: 'stack' },
                         { label: '👎 (proj)', data: projectedNeg, backgroundColor: hexToRgba(colors.negative, 0.35), stack: 'stack' },
+                        // All uncertains together (gray) - projected first, then sampled
+                        { label: '👍* (proj)', data: projectedUncPos, backgroundColor: hexToRgba(colors.uncertain, 0.35), stack: 'stack' },
                         { label: '👎* (proj)', data: projectedUncNeg, backgroundColor: hexToRgba(colors.uncertain, 0.35), stack: 'stack' },
+                        { label: '👍*', data: sampledUncPos, backgroundColor: hexToRgba(colors.uncertain, 0.8), stack: 'stack' },
+                        { label: '👎*', data: sampledUncNeg, backgroundColor: hexToRgba(colors.uncertain, 0.8), stack: 'stack' },
                     ]
                 },
                 options: {
@@ -174,24 +175,25 @@ const Charts = (() => {
             });
         } else {
             chart.data.labels = labels;
-            // Sampled (indices 0-3)
+            // Certains (indices 0-1)
             chart.data.datasets[0].data = sampledPos;
             chart.data.datasets[0].backgroundColor = hexToRgba(colors.positive, 0.8);
-            chart.data.datasets[1].data = sampledUncPos;
-            chart.data.datasets[1].backgroundColor = hexToRgba(colors.uncertain, 0.8);
-            chart.data.datasets[2].data = sampledNeg;
-            chart.data.datasets[2].backgroundColor = hexToRgba(colors.negative, 0.8);
-            chart.data.datasets[3].data = sampledUncNeg;
-            chart.data.datasets[3].backgroundColor = hexToRgba(colors.uncertain, 0.8);
-            // Projected extra (indices 4-7)
-            chart.data.datasets[4].data = projectedPos;
-            chart.data.datasets[4].backgroundColor = hexToRgba(colors.positive, 0.35);
-            chart.data.datasets[5].data = projectedUncPos;
+            chart.data.datasets[1].data = sampledNeg;
+            chart.data.datasets[1].backgroundColor = hexToRgba(colors.negative, 0.8);
+            // Projected certains (indices 2-3)
+            chart.data.datasets[2].data = projectedPos;
+            chart.data.datasets[2].backgroundColor = hexToRgba(colors.positive, 0.35);
+            chart.data.datasets[3].data = projectedNeg;
+            chart.data.datasets[3].backgroundColor = hexToRgba(colors.negative, 0.35);
+            // All uncertains (indices 4-7) - projected first, then sampled
+            chart.data.datasets[4].data = projectedUncPos;
+            chart.data.datasets[4].backgroundColor = hexToRgba(colors.uncertain, 0.35);
+            chart.data.datasets[5].data = projectedUncNeg;
             chart.data.datasets[5].backgroundColor = hexToRgba(colors.uncertain, 0.35);
-            chart.data.datasets[6].data = projectedNeg;
-            chart.data.datasets[6].backgroundColor = hexToRgba(colors.negative, 0.35);
-            chart.data.datasets[7].data = projectedUncNeg;
-            chart.data.datasets[7].backgroundColor = hexToRgba(colors.uncertain, 0.35);
+            chart.data.datasets[6].data = sampledUncPos;
+            chart.data.datasets[6].backgroundColor = hexToRgba(colors.uncertain, 0.8);
+            chart.data.datasets[7].data = sampledUncNeg;
+            chart.data.datasets[7].backgroundColor = hexToRgba(colors.uncertain, 0.8);
             chart.update();
         }
         
