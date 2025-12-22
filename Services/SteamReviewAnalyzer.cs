@@ -13,7 +13,7 @@ public record SteamReviewAnalyzer(IOptions<SteamReviewAnalyzer.Configuration> Op
         public int MaxBuckets = 50;
     }
 
-    public async IAsyncEnumerable<AnalysisSnapshot> VerdictByPlaytime(
+    public async IAsyncEnumerable<AnalysisSnapshot> Analyze(
         IAsyncEnumerable<SteamReview> source,
         bool streamSnapshots,
         Metadata meta,

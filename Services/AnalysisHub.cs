@@ -1,4 +1,5 @@
 using gamersremorse.Models;
+using Microsoft.EntityFrameworkCore;
 using System.Collections.Concurrent;
 using System.Threading.Channels;
 
@@ -57,13 +58,25 @@ public class AnalysisHub
                 using var scope = _scopeFactory.CreateScope();
                 var repo = scope.ServiceProvider.GetRequiredService<SteamReviewRepository>();
                 var analyzer = scope.ServiceProvider.GetRequiredService<SteamReviewAnalyzer>();
+                var db = scope.ServiceProvider.GetRequiredService<IDbContextFactory<AppDbContext>>()
+                    .CreateDbContext();
 
                 var meta = await repo.GetMetadata(appId);
+                var appInfo = await repo.GetInfo(appId);  // fetch it here
                 var (reviews, isStreaming) = await repo.GetAll(appId, session.Cts.Token);
 
-                await foreach (var snapshot in analyzer.VerdictByPlaytime(reviews, isStreaming, meta, session.Cts.Token)) {
+                AnalysisSnapshot? lastSnapshot = null;
+                await foreach (var snapshot in analyzer.Analyze(reviews, isStreaming, meta, session.Cts.Token)) {
+                    lastSnapshot = snapshot;
                     session.LatestSnapshot = snapshot;
                     Broadcast(session, snapshot);
+                }
+
+                // Build and save fingerprint
+                if (lastSnapshot is { } final) {
+                    var fingerprint = FingerprintBuilder.Build(final, meta, appInfo);
+                    db.Upsert(fingerprint);
+                    await db.SaveChangesAsync();
                 }
             }
             catch (OperationCanceledException) {

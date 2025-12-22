@@ -1,5 +1,6 @@
 using gamersremorse.Services;
 using Microsoft.EntityFrameworkCore;
+using Pgvector.EntityFrameworkCore;
 using System.Net.WebSockets;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -97,5 +98,67 @@ app.Map("/ws/game/{appId}", async (HttpContext ctx, AppId appId, AnalysisHub hub
     await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "done", ctx.RequestAborted);
     return Results.Empty;
 });
+// GET /wall?sort=stockholm&order=desc&limit=50&offset=0
+app.MapGet("/wall", async (
+    AppDbContext db,
+    string? sort,
+    string? order,
+    int limit = 50,
+    int offset = 0) => {
+        var query = db.Fingerprints
+            .Join(db.SteamAppInfos, f => f.AppId, a => a.AppId, (f, a) => new { f, a });
+
+        query = sort switch {
+            "stockholm" => order == "asc"
+                ? query.OrderBy(x => x.f.NegMedian / x.f.PosMedian)
+                : query.OrderByDescending(x => x.f.NegMedian / x.f.PosMedian),
+            "median" => order == "asc"
+                ? query.OrderBy(x => x.f.NegMedian)
+                : query.OrderByDescending(x => x.f.NegMedian),
+            _ => query.OrderByDescending(x => x.f.UpdatedOn)
+        };
+
+        return await query
+            .Skip(offset)
+            .Take(limit)
+            .Select(x => new {
+                x.f.AppId,
+                x.a.Name,
+                x.a.HeaderImage,
+                x.f.PosMedian,
+                x.f.NegMedian,
+                x.f.SteamPositive,
+                x.f.SteamNegative,
+                x.f.ThumbnailPng,
+                x.f.UpdatedOn
+            })
+            .ToListAsync();
+    });
+
+// GET /wall/similar/{appId}?limit=20
+app.MapGet("/wall/similar/{appId}", async (
+    AppDbContext db,
+    AppId appId,
+    int limit = 20) => {
+        var target = await db.Fingerprints.FindAsync(appId);
+        if (target is null) return Results.NotFound();
+
+        // pgvector cosine distance
+        var similar = await db.Fingerprints
+            .OrderBy(f => f.Shape.CosineDistance(target.Shape))
+            .Take(limit + 1) // +1 to exclude self
+            .Where(f => f.AppId != appId)
+            .Join(db.SteamAppInfos, f => f.AppId, a => a.AppId, (f, a) => new { f, a })
+            .Select(x => new {
+                x.f.AppId,
+                x.a.Name,
+                x.a.HeaderImage,
+                x.f.PosMedian,
+                x.f.NegMedian
+            })
+            .ToListAsync();
+
+        return Results.Ok(similar);
+    });
 app.UseStaticFiles();
 app.Run();
