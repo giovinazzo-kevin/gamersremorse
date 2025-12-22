@@ -17,4 +17,7 @@ public record Metadata
     public bool PositiveExhausted { get; set; }
     public bool NegativeExhausted { get; set; }
     public bool IsStreaming { get; set; }
+
+    // Full snapshot for client
+    public byte[] Snapshot { get; set; } = [];
 }

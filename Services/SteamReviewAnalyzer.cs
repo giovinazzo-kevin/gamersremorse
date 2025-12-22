@@ -15,7 +15,6 @@ public record SteamReviewAnalyzer(IOptions<SteamReviewAnalyzer.Configuration> Op
 
     public async IAsyncEnumerable<AnalysisSnapshot> Analyze(
         IAsyncEnumerable<SteamReview> source,
-        bool streamSnapshots,
         Metadata meta,
         [EnumeratorCancellation] CancellationToken stoppingToken)
     {
@@ -26,7 +25,7 @@ public record SteamReviewAnalyzer(IOptions<SteamReviewAnalyzer.Configuration> Op
             if (stoppingToken.IsCancellationRequested) break;
             all.Add(review);
 
-            if (streamSnapshots && ++count % Options.Value.SnapshotEvery == 0)
+            if (++count % Options.Value.SnapshotEvery == 0)
                 yield return BuildSnapshot(all, meta);
         }
 

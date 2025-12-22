@@ -9,12 +9,14 @@ public static class FingerprintBuilder
     private const int Height = 100;
     private const int HistogramHeight = 80;
     private const int TimelineHeight = 20;
+    private const int CurvePoints = 24;
 
     public static Fingerprint Build(AnalysisSnapshot snapshot, Metadata meta)
     {
         var (posMedian, negMedian) = ComputeMedians(snapshot);
         var thumbnail = RenderThumbnail(snapshot, posMedian, negMedian);
         var shape = ExtractShape(thumbnail);
+        var curve = BuildCurve(snapshot);
 
         return new Fingerprint {
             AppId = meta.AppId,
@@ -24,11 +26,109 @@ public static class FingerprintBuilder
             SteamNegative = meta.TotalNegative,
             ThumbnailPng = EncodePng(thumbnail),
             Shape = shape,
-            Snapshot = BinarySnapshotWriter.Write(snapshot),
+            Curve = curve,
             UpdatedOn = EventDate.UtcNow
         };
     }
 
+    public static float[] BuildCurve(AnalysisSnapshot snapshot)
+    {
+        // Gather monthly totals for all 4 bands
+        var allMonths = snapshot.BucketsByReviewTime
+            .SelectMany(b => b.PositiveByMonth.Keys
+                .Concat(b.NegativeByMonth.Keys)
+                .Concat(b.UncertainPositiveByMonth.Keys)
+                .Concat(b.UncertainNegativeByMonth.Keys))
+            .Distinct()
+            .OrderBy(m => m)
+            .ToList();
+
+        if (allMonths.Count == 0)
+            return new float[CurvePoints * 4];
+
+        // Aggregate per month
+        var monthlyData = new Dictionary<string, (int certPos, int certNeg, int uncPos, int uncNeg)>();
+
+        foreach (var month in allMonths)
+            monthlyData[month] = (0, 0, 0, 0);
+
+        foreach (var bucket in snapshot.BucketsByReviewTime) {
+            foreach (var (month, count) in bucket.PositiveByMonth) {
+                var d = monthlyData[month];
+                monthlyData[month] = (d.certPos + count, d.certNeg, d.uncPos, d.uncNeg);
+            }
+            foreach (var (month, count) in bucket.NegativeByMonth) {
+                var d = monthlyData[month];
+                monthlyData[month] = (d.certPos, d.certNeg + count, d.uncPos, d.uncNeg);
+            }
+            foreach (var (month, count) in bucket.UncertainPositiveByMonth) {
+                var d = monthlyData[month];
+                monthlyData[month] = (d.certPos, d.certNeg, d.uncPos + count, d.uncNeg);
+            }
+            foreach (var (month, count) in bucket.UncertainNegativeByMonth) {
+                var d = monthlyData[month];
+                monthlyData[month] = (d.certPos, d.certNeg, d.uncPos, d.uncNeg + count);
+            }
+        }
+
+        // Convert to arrays indexed by normalized position [0, 1]
+        var n = allMonths.Count;
+        var certPos = new float[n];
+        var certNeg = new float[n];
+        var uncPos = new float[n];
+        var uncNeg = new float[n];
+
+        for (int i = 0; i < n; i++) {
+            var d = monthlyData[allMonths[i]];
+            certPos[i] = d.certPos;
+            certNeg[i] = d.certNeg;
+            uncPos[i] = d.uncPos;
+            uncNeg[i] = d.uncNeg;
+        }
+
+        // Resample each band to CurvePoints using linear interpolation
+        var curve = new float[CurvePoints * 4];
+
+        Resample(certPos, curve, 0);
+        Resample(certNeg, curve, CurvePoints);
+        Resample(uncPos, curve, CurvePoints * 2);
+        Resample(uncNeg, curve, CurvePoints * 3);
+
+        // Normalize so total sums to 1 (makes similarity independent of game size)
+        var sum = curve.Sum();
+        if (sum > 0) {
+            for (int i = 0; i < curve.Length; i++)
+                curve[i] /= sum;
+        }
+
+        return curve;
+    }
+
+    private static void Resample(float[] source, float[] dest, int destOffset)
+    {
+        if (source.Length == 0) return;
+        if (source.Length == 1) {
+            for (int i = 0; i < CurvePoints; i++)
+                dest[destOffset + i] = source[0] / CurvePoints;
+            return;
+        }
+
+        for (int i = 0; i < CurvePoints; i++) {
+            // Map destination index to source position
+            var t = i / (float)(CurvePoints - 1); // 0 to 1
+            var srcPos = t * (source.Length - 1);  // 0 to source.Length-1
+
+            var srcIdx = (int)srcPos;
+            var frac = srcPos - srcIdx;
+
+            if (srcIdx >= source.Length - 1) {
+                dest[destOffset + i] = source[source.Length - 1];
+            } else {
+                // Linear interpolation
+                dest[destOffset + i] = source[srcIdx] * (1 - frac) + source[srcIdx + 1] * frac;
+            }
+        }
+    }
     private static byte[] RenderThumbnail(AnalysisSnapshot snapshot, PlayTime posMedian, PlayTime negMedian)
     {
         var pixels = new byte[Width * Height * 4];

@@ -20,9 +20,7 @@ public record Fingerprint
 
     // Vector for similarity (pgvector)
     public Vector Shape { get; set; } = null!;
-
-    // Full snapshot for client
-    public byte[] Snapshot { get; set; } = [];
-
+    // 96 floats: [certPos x 24, certNeg x 24, uncPos x 24, uncNeg x 24]
+    public float[] Curve { get; set; } = [];
     public EventDate UpdatedOn { get; set; }
 }

@@ -20,7 +20,7 @@ public class CursorPool
 
     public class Configuration
     {
-        public int MaxParallel { get; set; } = 3;
+        public int MaxParallel { get; set; } = 4;
         public int MaxStaggerDelayMs { get; set; } = 1500;
         public int BaseBackoffMs { get; set; } = 5000;
         public int MaxBackoffMs { get; set; } = 60000;

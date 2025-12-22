@@ -65,18 +65,27 @@ public class AnalysisHub
                 var appInfo = await repo.GetInfo(appId);  // fetch it here
                 var (reviews, isStreaming) = await repo.GetAll(appId, session.Cts.Token);
 
-                AnalysisSnapshot? lastSnapshot = null;
-                await foreach (var snapshot in analyzer.Analyze(reviews, isStreaming, meta, session.Cts.Token)) {
-                    lastSnapshot = snapshot;
-                    session.LatestSnapshot = snapshot;
-                    Broadcast(session, snapshot);
-                }
+                if (isStreaming) {
+                    AnalysisSnapshot? lastSnapshot = null;
+                    await foreach (var snapshot in analyzer.Analyze(reviews, meta, session.Cts.Token)) {
+                        lastSnapshot = snapshot;
+                        session.LatestSnapshot = snapshot;
+                        Broadcast(session, snapshot);
+                    }
 
-                // Build and save fingerprint
-                if (lastSnapshot is { } final) {
-                    var fingerprint = FingerprintBuilder.Build(final, meta);
-                    db.Upsert(fingerprint);
-                    await db.SaveChangesAsync();
+                    // Build and save fingerprint and update metadata with snapshot
+                    if (lastSnapshot is { } final) {
+                        var fingerprint = FingerprintBuilder.Build(final, meta);
+                        db.Upsert(fingerprint);
+                        var snap = BinarySnapshotWriter.Write(final);
+                        meta.Snapshot = snap;
+                        db.Upsert(meta);
+                        await db.SaveChangesAsync();
+                    }
+                }
+                else {
+                    var snapshot = BinarySnapshotReader.Read(meta.Snapshot);
+                    Broadcast(session, snapshot);
                 }
             }
             catch (OperationCanceledException) {
