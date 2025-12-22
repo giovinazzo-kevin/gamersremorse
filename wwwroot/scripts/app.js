@@ -134,60 +134,163 @@ function getLoadingMessage() {
     return pool[Math.floor(Math.random() * pool.length)];
 }
 
-document.getElementById('hidePrediction')?.addEventListener('change', () => {
-    if (currentSnapshot) {
-        Charts.updateChart(currentSnapshot);
-        updateMetrics(currentSnapshot);
-        // Just use cached tag timeline - no recomputation
-        const hidePrediction = document.getElementById('hidePrediction')?.checked ?? false;
-        const cacheKey = hidePrediction ? 'sampled' : 'predicted';
-        if (tagTimelineCache[cacheKey]) {
-            Timeline.updateTagData(tagTimelineCache[cacheKey]);
-        }
-        Timeline.draw();
+// Checkbox state for restoration across navigation
+let checkboxState = {
+    hidePrediction: false,
+    hideSpikes: false,
+    hideAnnotations: false,
+    showTotalTime: false
+};
+
+function saveCheckboxState() {
+    checkboxState.hidePrediction = document.getElementById('hidePrediction')?.checked ?? false;
+    checkboxState.hideSpikes = document.getElementById('hideSpikes')?.checked ?? false;
+    checkboxState.hideAnnotations = document.getElementById('hideAnnotations')?.checked ?? false;
+    checkboxState.showTotalTime = document.getElementById('showTotalTime')?.checked ?? false;
+}
+
+function restoreCheckboxState() {
+    const hp = document.getElementById('hidePrediction');
+    const hs = document.getElementById('hideSpikes');
+    const ha = document.getElementById('hideAnnotations');
+    const st = document.getElementById('showTotalTime');
+    if (hp) hp.checked = checkboxState.hidePrediction;
+    if (hs) hs.checked = checkboxState.hideSpikes;
+    if (ha) ha.checked = checkboxState.hideAnnotations;
+    if (st) st.checked = checkboxState.showTotalTime;
+}
+
+// Module initialization moved to init_play() for SPA navigation support
+
+function init_play() {
+    // Destroy old chart instances before re-init
+    if (typeof Charts !== 'undefined' && Charts.destroyAll) {
+        Charts.destroyAll();
     }
-});
-document.getElementById('hideSpikes')?.addEventListener('change', () => {
-    if (currentSnapshot) {
+
+    // Re-init modules with fresh DOM
+    Timeline.init({
+        getSnapshot: () => currentSnapshot,
+        getMetrics: () => currentMetrics,
+        onSelectionChange: applyTimelineFilter
+    });
+
+    Charts.init({
+        getSnapshot: () => currentSnapshot,
+        getGameInfo: () => currentGameInfo,
+        getMetrics: () => currentMetrics,
+        getSelectedMonths: () => Timeline.getSelectedMonths(),
+        filterBucket: filterBucketByTime,
+        isStreaming: () => isStreaming
+    });
+
+    Heatmap.init({
+        getSnapshot: () => currentSnapshot,
+        getSelectedMonths: () => Timeline.getSelectedMonths()
+    });
+
+    Opinion.init({
+        isStreaming: () => isStreaming,
+        getConvergenceScore: () => convergenceScore,
+        getSnapshot: () => currentSnapshot
+    });
+
+    // Bind checkbox listeners (fresh DOM elements)
+    document.getElementById('hidePrediction')?.addEventListener('change', () => {
+        if (currentSnapshot) {
+            Charts.updateChart(currentSnapshot);
+            updateMetrics(currentSnapshot);
+            const hidePrediction = document.getElementById('hidePrediction')?.checked ?? false;
+            const cacheKey = hidePrediction ? 'sampled' : 'predicted';
+            if (tagTimelineCache[cacheKey]) {
+                Timeline.updateTagData(tagTimelineCache[cacheKey]);
+            }
+            Timeline.draw();
+        }
+    });
+    document.getElementById('hideSpikes')?.addEventListener('change', () => {
+        if (currentSnapshot) {
+            Charts.updateChart(currentSnapshot);
+            Charts.updateVelocityChart(currentSnapshot);
+            Charts.updateLanguageChart(currentSnapshot);
+            Charts.updateStats(currentSnapshot);
+            Timeline.draw();
+        }
+    });
+    document.getElementById('hideAnnotations')?.addEventListener('change', () => {
+        if (currentSnapshot) Charts.updateChart(currentSnapshot);
+    });
+    document.getElementById('showTotalTime')?.addEventListener('change', () => {
+        if (currentSnapshot) Charts.updateChart(currentSnapshot);
+    });
+
+    // Restore state if we had a game loaded
+    if (currentSnapshot && currentGameInfo) {
+        // Restore checkbox state first (before redrawing)
+        restoreCheckboxState();
+        
+        document.getElementById('game-title').textContent = currentGameInfo.name;
+        document.getElementById('appId').value = currentGameInfo.appId || '';
+        
+        // Redraw everything from cached state
         Charts.updateChart(currentSnapshot);
+        Timeline.updateData(currentSnapshot, true);
         Charts.updateVelocityChart(currentSnapshot);
         Charts.updateLanguageChart(currentSnapshot);
+        Heatmap.update(currentSnapshot);
         Charts.updateStats(currentSnapshot);
+        
+        if (currentMetrics) {
+            renderMetrics();
+            Opinion.update(currentMetrics);
+            
+            // Restore tag timeline
+            const hidePrediction = document.getElementById('hidePrediction')?.checked ?? false;
+            const cacheKey = hidePrediction ? 'sampled' : 'predicted';
+            if (tagTimelineCache[cacheKey]) {
+                Timeline.updateTagData(tagTimelineCache[cacheKey]);
+            }
+        }
+        
         Timeline.draw();
+        
+        // Reconnect WebSocket to resume streaming
+        const appId = currentGameInfo.appId;
+        if (appId) {
+            const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const ws = new WebSocket(`${protocol}//${location.host}/ws/game/${appId}`);
+            currentSocket = ws;
+            
+            let metricsTimeout = null;
+            ws.binaryType = 'arraybuffer';
+            ws.onmessage = (e) => {
+                if (!document.getElementById('chart')) return;
+                
+                isStreaming = true;
+                state.lastInteraction = Date.now();
+                const snapshot = BinarySnapshot.parse(e.data);
+                currentSnapshot = snapshot;
+                Charts.updateChart(snapshot);
+                Timeline.updateData(snapshot, false);
+                Charts.updateVelocityChart(snapshot);
+                Charts.updateLanguageChart(snapshot);
+                Heatmap.update(snapshot);
+                Charts.updateStats(snapshot);
+                
+                if (metricsTimeout) clearTimeout(metricsTimeout);
+                metricsTimeout = setTimeout(() => updateMetrics(snapshot), 200);
+                
+                snapshotCount++;
+                if (setLoading) setLoading(true);
+            };
+            
+            ws.onclose = () => {
+                isStreaming = false;
+                if (setLoading) setLoading(false);
+            };
+        }
     }
-});
-document.getElementById('hideAnnotations')?.addEventListener('change', () => {
-    if (currentSnapshot) Charts.updateChart(currentSnapshot);
-});
-document.getElementById('showTotalTime')?.addEventListener('change', () => {
-    if (currentSnapshot) Charts.updateChart(currentSnapshot);
-});
-
-Timeline.init({
-    getSnapshot: () => currentSnapshot,
-    getMetrics: () => currentMetrics,
-    onSelectionChange: applyTimelineFilter
-});
-
-Charts.init({
-    getSnapshot: () => currentSnapshot,
-    getGameInfo: () => currentGameInfo,
-    getMetrics: () => currentMetrics,
-    getSelectedMonths: () => Timeline.getSelectedMonths(),
-    filterBucket: filterBucketByTime,
-    isStreaming: () => isStreaming
-});
-
-Heatmap.init({
-    getSnapshot: () => currentSnapshot,
-    getSelectedMonths: () => Timeline.getSelectedMonths()
-});
-
-Opinion.init({
-    isStreaming: () => isStreaming,
-    getConvergenceScore: () => convergenceScore,
-    getSnapshot: () => currentSnapshot
-});
+}
 
 async function analyze() {
     const input = document.getElementById('appId').value;
@@ -239,6 +342,9 @@ async function analyze() {
     
     ws.binaryType = 'arraybuffer';
     ws.onmessage = (e) => {
+        // Guard against messages after navigation
+        if (!document.getElementById('chart')) return;
+        
         isStreaming = true;
         state.lastInteraction = Date.now();
         const snapshot = BinarySnapshot.parse(e.data);
@@ -291,10 +397,8 @@ async function analyze() {
                 Timeline.updateTagData(tagTimelineCache[cacheKey]);
             }
             
-            // Fetch controversy context for any detected events
-            if (currentMetrics && currentGameInfo) {
-                Controversy.fetchContext(currentGameInfo.name, currentMetrics, currentSnapshot);
-            }
+            // Controversy context now handled by backend
+            // (commented out - client shouldn't query from partial data)
         }
 
         if (setLoading) setLoading(false);

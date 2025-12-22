@@ -110,11 +110,11 @@ app.MapGet("/wall", async (
 
         query = sort switch {
             "stockholm" => order == "asc"
-                ? query.OrderBy(x => x.f.NegMedian / x.f.PosMedian)
-                : query.OrderByDescending(x => x.f.NegMedian / x.f.PosMedian),
+                ? query.OrderBy(x => x.f.NegMedian.TotalMinutes / x.f.PosMedian.TotalMinutes)
+                : query.OrderByDescending(x => x.f.NegMedian.TotalMinutes / x.f.PosMedian.TotalMinutes),
             "median" => order == "asc"
-                ? query.OrderBy(x => x.f.NegMedian)
-                : query.OrderByDescending(x => x.f.NegMedian),
+                ? query.OrderBy(x => x.f.NegMedian.TotalMinutes)
+                : query.OrderByDescending(x => x.f.NegMedian.TotalMinutes),
             _ => query.OrderByDescending(x => x.f.UpdatedOn)
         };
 
@@ -125,8 +125,8 @@ app.MapGet("/wall", async (
                 x.f.AppId,
                 x.a.Name,
                 x.a.HeaderImage,
-                x.f.PosMedian,
-                x.f.NegMedian,
+                PosMedian = x.f.PosMedian.TotalMinutes,
+                NegMedian = x.f.NegMedian.TotalMinutes,
                 x.f.SteamPositive,
                 x.f.SteamNegative,
                 x.f.ThumbnailPng,
@@ -153,8 +153,8 @@ app.MapGet("/wall/similar/{appId}", async (
                 x.f.AppId,
                 x.a.Name,
                 x.a.HeaderImage,
-                x.f.PosMedian,
-                x.f.NegMedian
+                PosMedian = x.f.PosMedian.TotalMinutes,
+                NegMedian = x.f.NegMedian.TotalMinutes
             })
             .ToListAsync();
 

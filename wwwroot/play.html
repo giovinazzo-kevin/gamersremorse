@@ -1,0 +1,141 @@
+﻿<!-- METHODOLOGY -->
+<div class="col-methodology">
+    <div class="box">
+        <div class="box-header">What Am I Looking At?</div>
+        <div class="box-body">
+            <p>
+                This chart shows <strong>when</strong> players leave reviews.
+                X-axis is playtime (log scale), Y-axis is review count.
+            </p>
+            <p id="color-legend">
+                <strong style="color: var(--color-positive)">Positive</strong> = positive.
+                <strong style="color: var(--color-negative)">Negative</strong> = negative.
+                <strong style="color: var(--color-uncertain)">Uncertain</strong> = edited after a week (fence-sitters).
+            </p>
+
+            <h3>Healthy vs Extractive</h3>
+            <p>
+                <strong>Healthy:</strong> Negative reviews cluster early. People who won't like it figure that out fast.
+            </p>
+            <p>
+                <strong>Extractive:</strong> Negative reviews come <em>after</em> positive ones.
+                Players get burned after investing significant time.
+            </p>
+
+            <h3>The Median Lines</h3>
+            <p>
+                Dashed lines show median playtime for each sentiment.
+                When negative median sits <em>right</em> of positive, that's extraction.
+            </p>
+
+            <h3>Predictions &amp; Uncertainty</h3>
+            <p>
+                The API that <strong style="color: var(--color-uncertain)">Valve</strong> uses to serve reviews has a recency bias, as it
+                is not possible to query for historical data without enumerating all recent items first.
+            </p>
+            <p>
+                The prediction accounts for this bias by tilting the timeline back until the expected volume of reviews per month is reached.
+                Conceptually, it's because games peak at launch and decline as time goes on, so you expect more reviews near launch than a decade after it.
+            </p>
+            <p>
+                That is not to say that the prediction smooths informative spikes; those are represented fairly well in the dataset, but that's hard to see until you turn off the tilt shift.
+            </p>
+            <p>
+                Since it is not possible to know the original verdict of an <strong style="color: var(--color-uncertain)">edited</strong> review,
+                its claim to the verdict is considered lesser than that of an unedited review.
+            </p>
+        </div>
+    </div>
+
+    <div class="box">
+        <div class="box-header">How do the tags work?</div>
+        <div class="box-body">
+            <p>
+                TAGS are inferred from the shape of the charts and from the contents of the examined reviews.
+                They do not (necessarily) represent the opinions of the players, and they are not to be taken or shared as objective statements (unless sourced from reddit and adequately padded with weasel words).
+            </p>
+            <p>
+                The sampling algorithm does not strive to represent the current recommended/not recommended ratio faithfully;
+                it tries to find as many different opinions as possible and then it weighs them against the nominal ratio when it makes sense to do so.
+            </p>
+            <p>
+                Some tags are mutually exclusive, and some tags can level up. For example, PREDATORY is a stronger version of EXTRACTIVE.
+                Gotta match 'em all.
+            </p>
+        </div>
+    </div>
+</div>
+
+<!-- VERDICT: Search + Tags + What Happened -->
+<div class="col-verdict">
+    <div class="box">
+        <div class="box-header">Analyze</div>
+        <div class="box-body">
+            <div class="search-row">
+                <input type="text" id="appId" placeholder="Steam App ID or store URL">
+                <button onclick="analyze()">Analyze</button>
+            </div>
+            <h2 id="game-title"></h2>
+            <div id="stats"></div>
+            <div id="metrics-detail">
+                <p style="color: #999; font-style: italic;">
+                    Enter a Steam App ID or URL to analyze.
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- CHARTS -->
+<div class="col-charts">
+    <div class="box">
+        <div class="box-header light">How idle is their time?</div>
+        <div class="box-body">
+            <div class="chart-controls">
+                <label><input type="checkbox" id="hidePrediction"> Hide prediction</label>
+                <label><input type="checkbox" id="hideSpikes"> Hide bombs/brigades</label>
+                <label><input type="checkbox" id="hideAnnotations"> Hide annotations</label>
+                <label><input type="checkbox" id="showTotalTime"> Show total playtime</label>
+            </div>
+            <div class="chart-container">
+                <div class="chart-wrapper">
+                    <canvas id="chart"></canvas>
+                    <div id="labels-container"></div>
+                </div>
+                <div id="timeline-range"></div>
+                <canvas id="timeline"></canvas>
+            </div>
+            <div class="chart-row">
+                <div class="chart-half">
+                    <div class="box-header light">How weak is their WILL?</div>
+                    <div class="chart-container velocity">
+                        <canvas id="velocity-chart"></canvas>
+                    </div>
+                </div>
+                <div class="chart-half">
+                    <div class="box-header light">How heavy is their SOUL?</div>
+                    <div class="chart-container language">
+                        <canvas id="language-chart"></canvas>
+                    </div>
+                </div>
+            </div>
+            <div class="box-header light">How cheap is their LOYALTY?</div>
+            <div class="chart-container heatmap">
+                <canvas id="edit-heatmap"></canvas>
+                <div id="heatmap-tooltip" class="heatmap-tooltip"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- OPINION -->
+<div class="col-opinion">
+    <div class="box">
+        <div class="box-header">So What?</div>
+        <div class="box-body" id="opinion-content">
+            <p style="color: #999; font-style: italic;">
+                Analyze a game to see the verdict.
+            </p>
+        </div>
+    </div>
+</div>

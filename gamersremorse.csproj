@@ -8,7 +8,7 @@
 
   <ItemGroup>
     <Content Remove="wwwroot\app.js" />
-    <Content Remove="wwwroot\index.html" />
+    <Content Remove="wwwroot\play.html" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.0" />
     <PackageReference Include="Pgvector" Version="0.3.2" />
     <PackageReference Include="Pgvector.EntityFrameworkCore" Version="0.3.0" />
@@ -17,7 +17,7 @@
 
   <ItemGroup>
     <None Include="wwwroot\scripts\app.js" />
-    <None Include="wwwroot\index.html" />
+    <None Include="wwwroot\play.html" />
   </ItemGroup>
 
   <ItemGroup>

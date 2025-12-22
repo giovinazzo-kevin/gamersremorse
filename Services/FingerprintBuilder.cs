@@ -31,27 +31,20 @@ public static class FingerprintBuilder
 
     private static byte[] RenderThumbnail(AnalysisSnapshot snapshot, PlayTime posMedian, PlayTime negMedian)
     {
-        // RGBA: Width * Height * 4 bytes
         var pixels = new byte[Width * Height * 4];
 
-        // Top 80px: histogram
         RenderHistogram(pixels, snapshot.BucketsByReviewTime);
-
-        // Bottom 20px: timeline
         RenderTimeline(pixels, snapshot);
-
-        // Median lines on top
         RenderMedianLines(pixels, snapshot.BucketsByReviewTime, posMedian, negMedian);
 
         return pixels;
     }
-
     private static void RenderHistogram(byte[] pixels, HistogramBucket[] buckets)
     {
         var midY = HistogramHeight / 2;
         var colsPerBucket = Width / (float)buckets.Length;
 
-        // Find max count for normalization
+        // Find max for normalization (certain + uncertain combined, since they stack)
         var maxCount = buckets.Max(b =>
             Math.Max(
                 b.PositiveByMonth.Values.Sum() + b.UncertainPositiveByMonth.Values.Sum(),
@@ -60,34 +53,47 @@ public static class FingerprintBuilder
 
         for (int i = 0; i < buckets.Length; i++) {
             var bucket = buckets[i];
-            var posTotal = bucket.PositiveByMonth.Values.Sum() + bucket.UncertainPositiveByMonth.Values.Sum();
-            var negTotal = bucket.NegativeByMonth.Values.Sum() + bucket.UncertainNegativeByMonth.Values.Sum();
+
+            var posTotal = bucket.PositiveByMonth.Values.Sum();
+            var negTotal = bucket.NegativeByMonth.Values.Sum();
             var uncPosTotal = bucket.UncertainPositiveByMonth.Values.Sum();
             var uncNegTotal = bucket.UncertainNegativeByMonth.Values.Sum();
 
             var posHeight = (int)(posTotal / (float)maxCount * midY);
             var negHeight = (int)(negTotal / (float)maxCount * midY);
+            var uncPosHeight = (int)(uncPosTotal / (float)maxCount * midY);
+            var uncNegHeight = (int)(uncNegTotal / (float)maxCount * midY);
 
-            // Normalize intensities to 0-255
-            var posIntensity = (int)(posTotal / (float)maxCount * 255);
-            var negIntensity = (int)(negTotal / (float)maxCount * 255);
-            var uncPosIntensity = (int)(uncPosTotal / (float)maxCount * 255);
-            var uncNegIntensity = (int)(uncNegTotal / (float)maxCount * 255);
+            var posIntensity = posTotal > 0 ? Math.Max(64, (int)(posTotal / (float)maxCount * 255)) : 0;
+            var negIntensity = negTotal > 0 ? Math.Max(64, (int)(negTotal / (float)maxCount * 255)) : 0;
+            var uncIntensity = 128; // fixed gray intensity
 
             var startCol = (int)(i * colsPerBucket);
             var endCol = (int)((i + 1) * colsPerBucket);
 
             for (int x = startCol; x < endCol && x < Width; x++) {
-                // Positive bars go up from middle - R channel
+                // Certain positive: grows UP from midline (R only)
                 for (int dy = 0; dy < posHeight; dy++) {
                     var y = midY - dy - 1;
-                    if (y >= 0) SetPixel(pixels, x, y, posIntensity, 0, uncPosIntensity, 255);
+                    if (y >= 0) SetPixel(pixels, x, y, posIntensity, 0, 0, 255);
                 }
 
-                // Negative bars go down from middle - G channel
+                // Uncertain positive: stacks above certain positive (R + G = gray)
+                for (int dy = 0; dy < uncPosHeight; dy++) {
+                    var y = midY - posHeight - dy - 1;
+                    if (y >= 0) SetPixel(pixels, x, y, uncIntensity, uncIntensity, 0, 255);
+                }
+
+                // Certain negative: grows DOWN from midline (G only)
                 for (int dy = 0; dy < negHeight; dy++) {
                     var y = midY + dy;
-                    if (y < HistogramHeight) SetPixel(pixels, x, y, 0, negIntensity, uncNegIntensity, 255);
+                    if (y < HistogramHeight) SetPixel(pixels, x, y, 0, negIntensity, 0, 255);
+                }
+
+                // Uncertain negative: stacks below certain negative (R + G = gray)
+                for (int dy = 0; dy < uncNegHeight; dy++) {
+                    var y = midY + negHeight + dy;
+                    if (y < HistogramHeight) SetPixel(pixels, x, y, uncIntensity, uncIntensity, 0, 255);
                 }
             }
         }
@@ -95,7 +101,10 @@ public static class FingerprintBuilder
     private static void RenderTimeline(byte[] pixels, AnalysisSnapshot snapshot)
     {
         var allMonths = snapshot.BucketsByReviewTime
-            .SelectMany(b => b.PositiveByMonth.Keys.Concat(b.NegativeByMonth.Keys))
+            .SelectMany(b => b.PositiveByMonth.Keys
+                .Concat(b.NegativeByMonth.Keys)
+                .Concat(b.UncertainPositiveByMonth.Keys)
+                .Concat(b.UncertainNegativeByMonth.Keys))
             .Distinct()
             .OrderBy(m => m)
             .ToList();
@@ -106,50 +115,75 @@ public static class FingerprintBuilder
 
         var monthlyPos = new Dictionary<string, int>();
         var monthlyNeg = new Dictionary<string, int>();
+        var monthlyUncPos = new Dictionary<string, int>();
+        var monthlyUncNeg = new Dictionary<string, int>();
 
         foreach (var bucket in snapshot.BucketsByReviewTime) {
             foreach (var (month, count) in bucket.PositiveByMonth)
                 monthlyPos[month] = monthlyPos.GetValueOrDefault(month) + count;
             foreach (var (month, count) in bucket.NegativeByMonth)
                 monthlyNeg[month] = monthlyNeg.GetValueOrDefault(month) + count;
+            foreach (var (month, count) in bucket.UncertainPositiveByMonth)
+                monthlyUncPos[month] = monthlyUncPos.GetValueOrDefault(month) + count;
+            foreach (var (month, count) in bucket.UncertainNegativeByMonth)
+                monthlyUncNeg[month] = monthlyUncNeg.GetValueOrDefault(month) + count;
         }
 
-        // Find global max for unified scale (so sentiment ratio is visually accurate)
+        // Max includes stacked totals
         var maxVal = allMonths
-            .SelectMany(m => new[] { monthlyPos.GetValueOrDefault(m), monthlyNeg.GetValueOrDefault(m) })
+            .SelectMany(m => new[] {
+            monthlyPos.GetValueOrDefault(m) + monthlyUncPos.GetValueOrDefault(m),
+            monthlyNeg.GetValueOrDefault(m) + monthlyUncNeg.GetValueOrDefault(m) })
             .DefaultIfEmpty(1)
             .Max();
         if (maxVal == 0) maxVal = 1;
 
         var midY = HistogramHeight + TimelineHeight / 2;
         var halfHeight = TimelineHeight / 2;
+        var uncIntensity = 128;
 
         for (int i = 0; i < allMonths.Count; i++) {
             var month = allMonths[i];
             var pos = monthlyPos.GetValueOrDefault(month);
             var neg = monthlyNeg.GetValueOrDefault(month);
+            var uncPos = monthlyUncPos.GetValueOrDefault(month);
+            var uncNeg = monthlyUncNeg.GetValueOrDefault(month);
 
-            // Sqrt scale for height
             var posHeight = pos > 0 ? (int)(Math.Sqrt(pos / (double)maxVal) * halfHeight) : 0;
             var negHeight = neg > 0 ? (int)(Math.Sqrt(neg / (double)maxVal) * halfHeight) : 0;
+            var uncPosHeight = uncPos > 0 ? (int)(Math.Sqrt(uncPos / (double)maxVal) * halfHeight) : 0;
+            var uncNegHeight = uncNeg > 0 ? (int)(Math.Sqrt(uncNeg / (double)maxVal) * halfHeight) : 0;
 
             var startCol = (int)(i * colsPerMonth);
             var endCol = (int)((i + 1) * colsPerMonth);
 
             for (int x = startCol; x < endCol && x < Width; x++) {
+                // Certain positive
                 for (int dy = 0; dy < posHeight; dy++) {
                     var y = midY - dy - 1;
                     if (y >= HistogramHeight) SetPixel(pixels, x, y, 255, 0, 0, 255);
                 }
 
+                // Uncertain positive stacks above
+                for (int dy = 0; dy < uncPosHeight; dy++) {
+                    var y = midY - posHeight - dy - 1;
+                    if (y >= HistogramHeight) SetPixel(pixels, x, y, uncIntensity, uncIntensity, 0, 255);
+                }
+
+                // Certain negative
                 for (int dy = 0; dy < negHeight; dy++) {
                     var y = midY + dy;
                     if (y < Height) SetPixel(pixels, x, y, 0, 255, 0, 255);
                 }
+
+                // Uncertain negative stacks below
+                for (int dy = 0; dy < uncNegHeight; dy++) {
+                    var y = midY + negHeight + dy;
+                    if (y < Height) SetPixel(pixels, x, y, uncIntensity, uncIntensity, 0, 255);
+                }
             }
         }
     }
-
     private static void RenderMedianLines(byte[] pixels, HistogramBucket[] buckets, PlayTime posMedian, PlayTime negMedian)
     {
         var posCol = FindColumnForPlaytime(buckets, posMedian.TotalMinutes);
@@ -157,17 +191,26 @@ public static class FingerprintBuilder
 
         var midY = HistogramHeight / 2;
 
-        // Positive median line draws in NEGATIVE region (bottom half) - so R stands out against G
-        if (posCol >= 0 && posCol < Width) {
-            for (int y = midY; y < HistogramHeight; y++) {
-                SetPixel(pixels, posCol, y, 255, 0, 0, 255);
+        // Positive median: 2px wide, draws in negative (lower) half for contrast
+        // Align to even pixel for clean 50% downscaling → 1px at half size
+        var posX = (posCol / 2) * 2;
+        for (int dx = 0; dx < 2; dx++) {
+            var x = posX + dx;
+            if (x >= 0 && x < Width) {
+                for (int y = midY; y < HistogramHeight; y++) {
+                    SetPixel(pixels, x, y, 255, 0, 0, 255);
+                }
             }
         }
 
-        // Negative median line draws in POSITIVE region (top half) - so G stands out against R
-        if (negCol >= 0 && negCol < Width) {
-            for (int y = 0; y < midY; y++) {
-                SetPixel(pixels, negCol, y, 0, 255, 0, 255);
+        // Negative median: 2px wide, draws in positive (upper) half for contrast
+        var negX = (negCol / 2) * 2;
+        for (int dx = 0; dx < 2; dx++) {
+            var x = negX + dx;
+            if (x >= 0 && x < Width) {
+                for (int y = 0; y < midY; y++) {
+                    SetPixel(pixels, x, y, 0, 255, 0, 255);
+                }
             }
         }
     }
@@ -192,7 +235,6 @@ public static class FingerprintBuilder
         pixels[idx + 2] = (byte)Math.Clamp(b, 0, 255);
         pixels[idx + 3] = (byte)Math.Clamp(a, 0, 255);
     }
-
     private static Vector ExtractShape(byte[] rgba)
     {
         var values = new float[Width * Height];
@@ -216,8 +258,9 @@ public static class FingerprintBuilder
         foreach (var bucket in snapshot.BucketsByReviewTime) {
             var midpoint = (bucket.MinPlaytime + bucket.MaxPlaytime) / 2;
 
-            var posCount = bucket.PositiveByMonth.Values.Sum() + bucket.UncertainPositiveByMonth.Values.Sum();
-            var negCount = bucket.NegativeByMonth.Values.Sum() + bucket.UncertainNegativeByMonth.Values.Sum();
+            // Keep edits separate for median calculation too
+            var posCount = bucket.PositiveByMonth.Values.Sum();
+            var negCount = bucket.NegativeByMonth.Values.Sum();
 
             for (int i = 0; i < posCount; i++) posTimes.Add(midpoint);
             for (int i = 0; i < negCount; i++) negTimes.Add(midpoint);
@@ -236,7 +279,6 @@ public static class FingerprintBuilder
 
     private static byte[] EncodePng(byte[] rgba)
     {
-        // For now just return raw rgba
         return rgba;
     }
 }
