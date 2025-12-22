@@ -135,13 +135,12 @@ const Timeline = (() => {
         const midY = chartH / 2;
         const barW = w / monthData.length;
 
-        // Find max for sqrt scale normalization
-        let maxPos = 1, maxNeg = 1;
+        // Find global max for unified scale (so 88% pos looks 7x taller than 12% neg)
+        let maxVal = 1;
         for (const m of monthData) {
             const totalPos = hidePrediction ? m.sampledPos : m.projectedPos;
             const totalNeg = hidePrediction ? m.sampledNeg : m.projectedNeg;
-            maxPos = Math.max(maxPos, totalPos);
-            maxNeg = Math.max(maxNeg, totalNeg);
+            maxVal = Math.max(maxVal, totalPos, totalNeg);
         }
 
         // Draw bars - centered, pos up, neg down
@@ -152,8 +151,8 @@ const Timeline = (() => {
 
             if (hidePrediction) {
                 // Just draw sampled data, no ghosts
-                const posH = Math.sqrt(m.sampledPos / maxPos) * midY;
-                const negH = Math.sqrt(m.sampledNeg / maxNeg) * midY;
+                const posH = Math.sqrt(m.sampledPos / maxVal) * midY;
+                const negH = Math.sqrt(m.sampledNeg / maxVal) * midY;
 
                 // Positive (up from midline)
                 if (posH > 0) {
@@ -170,10 +169,10 @@ const Timeline = (() => {
                 }
             } else {
                 // OVERLAY: Draw projected (ghost) first, then observed (solid) on top
-                const projPosH = Math.sqrt(m.projectedPos / maxPos) * midY;
-                const projNegH = Math.sqrt(m.projectedNeg / maxNeg) * midY;
-                const sampPosH = Math.sqrt(m.sampledPos / maxPos) * midY;
-                const sampNegH = Math.sqrt(m.sampledNeg / maxNeg) * midY;
+                const projPosH = Math.sqrt(m.projectedPos / maxVal) * midY;
+                const projNegH = Math.sqrt(m.projectedNeg / maxVal) * midY;
+                const sampPosH = Math.sqrt(m.sampledPos / maxVal) * midY;
+                const sampNegH = Math.sqrt(m.sampledNeg / maxVal) * midY;
 
                 // === POSITIVE (going UP from midline) ===
                 // Ghost layer (projected) at 50% alpha

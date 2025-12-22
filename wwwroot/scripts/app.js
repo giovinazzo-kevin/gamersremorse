@@ -1,4 +1,5 @@
-﻿let currentSnapshot = null;
+﻿let currentSocket = null;
+let currentSnapshot = null;
 let currentGameInfo = null;
 // Timeline state now managed by Timeline module
 let isFirstSnapshot = true;
@@ -230,8 +231,14 @@ async function analyze() {
         window.lastAnalyzedApp = currentGameInfo;
     }
 
+    // Close existing WebSocket if any
+    if (currentSocket && currentSocket.readyState !== WebSocket.CLOSED) {
+        currentSocket.close();
+    }
+
     const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
     const ws = new WebSocket(`${protocol}//${location.host}/ws/game/${appId}`);
+    currentSocket = ws;
 
     let metricsTimeout = null;
     
