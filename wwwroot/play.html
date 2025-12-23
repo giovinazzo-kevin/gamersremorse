@@ -13,7 +13,12 @@
                 <strong style="color: var(--color-uncertain)">Uncertain</strong> = edited after a week (fence-sitters).
             </p>
 
-            <h3>Healthy vs Extractive</h3>
+            <h3>The Median Lines: Healthy vs Extractive</h3>
+            <p>
+                Dashed lines show median playtime for each sentiment.
+                When negative median sits <em>right</em> of positive, that's extraction.
+            </p>
+
             <p>
                 <strong>Healthy:</strong> Negative reviews cluster early. People who won't like it figure that out fast.
             </p>
@@ -22,27 +27,20 @@
                 Players get burned after investing significant time.
             </p>
 
-            <h3>The Median Lines</h3>
+            <h3>Uncertainty</h3>
             <p>
-                Dashed lines show median playtime for each sentiment.
-                When negative median sits <em>right</em> of positive, that's extraction.
+                Since it is not possible to know the original verdict of an <strong style="color: var(--color-uncertain)">edited</strong> review,
+                its claim to the verdict is considered lesser than that of an unedited review.
             </p>
 
-            <h3>Predictions &amp; Uncertainty</h3>
+            <h3>Predictions</h3>
             <p>
                 The API that <strong style="color: var(--color-uncertain)">Valve</strong> uses to serve reviews has a recency bias, as it
                 is not possible to query for historical data without enumerating all recent items first.
             </p>
             <p>
-                The prediction accounts for this bias by tilting the timeline back until the expected volume of reviews per month is reached.
-                Conceptually, it's because games peak at launch and decline as time goes on, so you expect more reviews near launch than a decade after it.
-            </p>
-            <p>
-                That is not to say that the prediction smooths informative spikes; those are represented fairly well in the dataset, but that's hard to see until you turn off the tilt shift.
-            </p>
-            <p>
-                Since it is not possible to know the original verdict of an <strong style="color: var(--color-uncertain)">edited</strong> review,
-                its claim to the verdict is considered lesser than that of an unedited review.
+                The prediction accounts for this bias by extrapolating the expected final curve from a weighted average of the curve of similar games for which we have exhaustive coverage.
+                Two games are considered "similar" when their fingerprints show significant visual overlap.
             </p>
         </div>
     </div>
@@ -83,7 +81,7 @@
                 </p>
             </div>
             <div id="similar-games" class="similar-row" style="display: none;">
-                <span class="similar-label">Similar games by fingerprint:</span>
+                <span class="similar-label">MORE LIKE THIS</span>
                 <div class="similar-thumbnails"></div>
             </div>
         </div>
@@ -93,7 +91,7 @@
 <!-- CHARTS -->
 <div class="col-charts">
     <div class="box">
-        <div class="box-header light">How idle is their time?</div>
+        <div class="box-header light">How idle is their TIME?</div>
         <div class="box-body">
             <div class="chart-controls">
                 <label><input type="checkbox" id="hidePrediction"> Hide prediction</label>
@@ -117,7 +115,7 @@
                     </div>
                 </div>
                 <div class="chart-half">
-                    <div class="box-header light">How tainted is their SOUL?</div>
+                    <div class="box-header light">How dark is their SOUL?</div>
                     <div class="chart-container language">
                         <canvas id="language-chart"></canvas>
                     </div>

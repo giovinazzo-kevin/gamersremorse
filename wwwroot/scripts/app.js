@@ -84,7 +84,7 @@ async function fetchSimilarGames(appId) {
     const thumbs = container.querySelector('.similar-thumbnails');
 
     try {
-        const res = await fetch(`/wall/similar/${appId}?limit=8`);
+        const res = await fetch(`/wall/similar/${appId}?limit=6`);
         if (!res.ok) {
             container.style.display = 'none';
             return;
@@ -131,22 +131,26 @@ function applyMetricsResult(metrics) {
     Opinion.update(currentMetrics);
 
     // End-of-analysis: needs both final snapshot AND metrics ready
-    if (currentSnapshot?.isFinal && !controversyFetched) {
-        controversyFetched = true;
-        setAchievementFlag('analyzedGame');
-        updateEyeFromMetrics(currentMetrics);
-
-        const tags = currentMetrics.verdict?.tags?.map(t => t.id) || [];
-        if (snapshotCount > 1) {
-            const item = Items.rollForDrop(tags, currentMetrics);
-            if (item) {
-                setTimeout(() => Items.showPedestal(item), 1500);
-            }
-        }
-
+    if (currentSnapshot?.isFinal) {
         if (currentGameInfo?.appId) {
-            Controversy.fetchContext(currentGameInfo.appId, currentMetrics, currentSnapshot);
             fetchSimilarGames(currentGameInfo.appId);
+        }
+        if (!controversyFetched) {
+            controversyFetched = true;
+            setAchievementFlag('analyzedGame');
+            updateEyeFromMetrics(currentMetrics);
+
+            const tags = currentMetrics.verdict?.tags?.map(t => t.id) || [];
+            if (snapshotCount > 1) {
+                const item = Items.rollForDrop(tags, currentMetrics);
+                if (item) {
+                    setTimeout(() => Items.showPedestal(item), 1500);
+                }
+            }
+
+            if (currentGameInfo?.appId) {
+                Controversy.fetchContext(currentGameInfo.appId, currentMetrics, currentSnapshot);
+            }
         }
     }
 }
@@ -310,6 +314,8 @@ function init_play() {
         getConvergenceScore: () => convergenceScore,
         getSnapshot: () => currentSnapshot
     });
+
+    updateColorLegend();
 
     // Bind checkbox listeners (fresh DOM elements)
     document.getElementById('hidePrediction')?.addEventListener('change', () => {
@@ -630,13 +636,6 @@ function flashChessboard() {
 
     // Remove after a brief flash
     setTimeout(() => overlay.remove(), 150);
-}
-
-// Update legend on load and expose for color changes
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', updateColorLegend);
-} else {
-    updateColorLegend();
 }
 
 

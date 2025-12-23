@@ -20,7 +20,7 @@ const Metrics = {
         'EXTRACTIVE': ['TROUBLED'],
         'FLOP': ['TROUBLED'],
         'TROUBLED': ['HONEST', 'HEALTHY'],
-        'DEAD': ['HEALTHY'],
+        'DEAD': ['HEALTHY', 'SURGE'],
         'ENSHITTIFIED': ['RETCONNED', 'HONEYMOON'],
     },
     tagDefinitions: [
@@ -237,7 +237,7 @@ const Metrics = {
         },
         {
             id: 'REVIEW_BOMBED',
-            condition: (m) => m.negativeSpikes?.length > 0 && m.negativeSpikes.some(s => {
+            condition: (m) => m.confidence > 0.7 && m.negativeSpikes?.length > 0 && m.negativeSpikes.some(s => {
                 // Volume spike with high neg ratio, OR sentiment spike
                 const hasVolume = s.isVolumeSpike && s.count >= 1000;
                 const hasSentiment = s.isSentimentSpike && s.sentimentZ >= 2;
@@ -287,7 +287,7 @@ const Metrics = {
             condition: (m) => m.recentNegativeEditRatio >= 0.25 && m.oldReviewsEditedRatio >= 0.50 && m.totalEdits >= 1000
                            || m.recentNegativeEditRatio >= 0.50 && m.oldReviewsEditedRatio >= 0.25 && m.totalEdits >= 1000,
             reason: (m) => `${Math.round(m.recentNegativeEditRatio * 100)}% of recent edits negative, ${Math.round(m.oldReviewsEditedRatio * 100)}% of old reviews revised`,
-            severity: 0.1,
+            severity: -0.2,
             color: 'var(--color-tag-retconned)'
         }
     ],
@@ -857,7 +857,7 @@ const Metrics = {
         
         for (let i = 0; i < monthlyData.length; i++) {
             const m = monthlyData[i];
-            if (m.total < 10) continue; // skip months with too little data
+            if (m.total < 1000) continue; // skip months with too little data
             
             // === VOLUME Z-SCORE (existing logic) ===
             const neighbors = [];

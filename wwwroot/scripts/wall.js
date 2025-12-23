@@ -1,4 +1,4 @@
-let wallSort = 'stockholm';
+let wallSort = 'negMedian';
 let wallOrder = 'desc';
 let wallOffset = 0;
 let wallLoading = false;
@@ -20,16 +20,16 @@ async function loadWall(append = false) {
     if (!append) tbody.innerHTML = '';
     
     for (const game of games) {
-        const stockholm = game.posMedian > 0 ? (game.negMedian / game.posMedian).toFixed(2) : '—';
+        const sunkCost = game.posMedian > 0 ? ((game.negMedian * game.steamNegative) / (game.posMedian * game.steamPositive)).toFixed(2) : '—';
         const tr = document.createElement('tr');
         tr.innerHTML = `
             <td class="name-cell">
                 <canvas class="row-thumb" width="120" height="100"></canvas>
                 <span class="game-name">${game.name}</span>
             </td>
+            <td class="sunkCost">${sunkCost}x</td>
             <td class="pos">${formatTime(game.posMedian)}</td>
             <td class="neg">${formatTime(game.negMedian)}</td>
-            <td class="stockholm">${stockholm}x</td>
             <td class="updated">${formatDate(game.updatedOn)}</td>
         `;
         tr.addEventListener('click', () => {
@@ -48,6 +48,16 @@ async function loadWall(append = false) {
             const rgba = decodeFingerprint(game.thumbnailPng);
             renderFingerprint(rgba, canvas);
         }
+
+        // Infinite scroll
+        const scrollHandler = () => {
+            if (currentPage !== 'wall' && currentPage !== 'fame') return;
+            if (window.innerHeight + window.scrollY >= document.body.offsetHeight - 500) {
+                loadWall(true);
+            }
+        };
+        window.removeEventListener('scroll', scrollHandler);
+        window.addEventListener('scroll', scrollHandler);
     }
     
     wallOffset += games.length;
@@ -100,41 +110,32 @@ function initWallTable() {
 function init_wall() {
     wallOffset = 0;
     wallExhausted = false;
-    wallSort = 'stockholm';
+    wallSort = 'sunkCost';
     wallOrder = 'desc';
-    
+
     initWallTable();
-    
+
     // Set initial header state
-    const th = document.querySelector('.wall-table th[data-sort="stockholm"]');
+    const th = document.querySelector('.wall-table th[data-sort="sunkCost"]');
     if (th) {
         document.querySelectorAll('.wall-table th').forEach(h => h.classList.remove('active', 'asc', 'desc'));
-        th.classList.add('active', 'desc');
+        th.classList.add('active', 'asc');
     }
-    
-    // Infinite scroll
-    const scrollHandler = () => {
-        if (currentPage !== 'wall' && currentPage !== 'fame') return;
-        if (window.innerHeight + window.scrollY >= document.body.offsetHeight - 500) {
-            loadWall(true);
-        }
-    };
-    window.removeEventListener('scroll', scrollHandler);
-    window.addEventListener('scroll', scrollHandler);
-    
+
     loadWall();
 }
+
 
 function init_fame() {
     wallOffset = 0;
     wallExhausted = false;
-    wallSort = 'stockholm';
-    wallOrder = 'asc'; // Best first for fame
+    wallSort = 'sunkCost';
+    wallOrder = 'asc';
     
     initWallTable();
     
     // Set initial header state
-    const th = document.querySelector('.wall-table th[data-sort="stockholm"]');
+    const th = document.querySelector('.wall-table th[data-sort="sunkCost"]');
     if (th) {
         document.querySelectorAll('.wall-table th').forEach(h => h.classList.remove('active', 'asc', 'desc'));
         th.classList.add('active', 'asc');

@@ -128,12 +128,15 @@ app.MapGet("/wall", async (
             .Join(db.SteamAppInfos, f => f.AppId, a => a.AppId, (f, a) => new { f, a });
 
         query = sort switch {
-            "stockholm" => order == "asc"
-                ? query.OrderBy(x => x.f.NegMedian.TotalMinutes / x.f.PosMedian.TotalMinutes)
-                : query.OrderByDescending(x => x.f.NegMedian.TotalMinutes / x.f.PosMedian.TotalMinutes),
-            "median" => order == "asc"
+            "sunkCost" => order == "asc"
+                ? query.OrderBy(x => (x.f.NegMedian.TotalMinutes * x.f.SteamNegative) / (x.f.PosMedian.TotalMinutes * x.f.SteamPositive))
+                : query.OrderByDescending(x => (x.f.NegMedian.TotalMinutes * x.f.SteamNegative) / (x.f.PosMedian.TotalMinutes * x.f.SteamPositive)),
+            "negMedian" => order == "asc"
                 ? query.OrderBy(x => x.f.NegMedian.TotalMinutes)
                 : query.OrderByDescending(x => x.f.NegMedian.TotalMinutes),
+            "posMedian" => order == "asc"
+                ? query.OrderBy(x => x.f.PosMedian.TotalMinutes)
+                : query.OrderByDescending(x => x.f.PosMedian.TotalMinutes),
             _ => query.OrderByDescending(x => x.f.UpdatedOn)
         };
 
