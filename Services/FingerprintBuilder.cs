@@ -1,6 +1,7 @@
 using gamersremorse.Entities;
 using gamersremorse.Models;
 using Pgvector;
+using System.Collections;
 namespace gamersremorse.Services;
 
 public static class FingerprintBuilder
@@ -15,7 +16,7 @@ public static class FingerprintBuilder
     {
         var (posMedian, negMedian) = ComputeMedians(snapshot);
         var thumbnail = RenderThumbnail(snapshot, posMedian, negMedian);
-        var shape = ExtractShape(thumbnail);
+        var shape = ExtractBitmask(thumbnail);
         var curve = BuildCurve(snapshot);
 
         return new Fingerprint {
@@ -25,7 +26,7 @@ public static class FingerprintBuilder
             SteamPositive = meta.TotalPositive,
             SteamNegative = meta.TotalNegative,
             ThumbnailPng = EncodePng(thumbnail),
-            Shape = shape,
+            ShapeMask = shape,
             Curve = curve,
             UpdatedOn = EventDate.UtcNow
         };
@@ -335,19 +336,26 @@ public static class FingerprintBuilder
         pixels[idx + 2] = (byte)Math.Clamp(b, 0, 255);
         pixels[idx + 3] = (byte)Math.Clamp(a, 0, 255);
     }
-    private static Vector ExtractShape(byte[] rgba)
+
+    private static BitArray ExtractBitmask(byte[] rgba)
     {
-        var values = new float[Width * Height];
+        var bits = new BitArray(Width * Height * 2);
+
         for (int i = 0; i < Width * Height; i++) {
             var r = rgba[i * 4];
             var g = rgba[i * 4 + 1];
-            var b = rgba[i * 4 + 2];
-            var a = rgba[i * 4 + 3];
 
-            var mag = MathF.Sqrt(r * r + g * g + b * b);
-            values[i] = mag * (a / 255f);
+            bool bit0, bit1;
+            if (r > 128 && g > 128) { bit0 = true; bit1 = true; }       // 11 uncertain
+            else if (r > g && r > 64) { bit0 = true; bit1 = false; }    // 01 positive
+            else if (g > r && g > 64) { bit0 = false; bit1 = true; }    // 10 negative
+            else { bit0 = false; bit1 = false; }                         // 00 empty
+
+            bits[i * 2] = bit0;
+            bits[i * 2 + 1] = bit1;
         }
-        return new Vector(values);
+
+        return bits;
     }
 
     private static (PlayTime pos, PlayTime neg) ComputeMedians(AnalysisSnapshot snapshot)

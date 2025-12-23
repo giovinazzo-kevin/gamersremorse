@@ -1,6 +1,6 @@
 ﻿namespace gamersremorse.Models;
 
-public record struct AnalysisSnapshot(
+public record class AnalysisSnapshot(
     HistogramBucket[] BucketsByReviewTime,
     HistogramBucket[] BucketsByTotalTime,
     VelocityBucket[] VelocityBuckets,
@@ -16,7 +16,8 @@ public record struct AnalysisSnapshot(
     double NegativeSampleRate,
     bool PositiveExhausted,
     bool NegativeExhausted,
-    bool IsStreaming
+    bool IsStreaming,
+    bool IsFinal
 );
 
 // Heatmap of when reviews were posted vs when they were edited

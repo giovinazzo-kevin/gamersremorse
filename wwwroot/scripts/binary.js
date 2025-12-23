@@ -213,6 +213,7 @@ const BinarySnapshot = {
             positiveExhausted: (flags & 1) !== 0,
             negativeExhausted: (flags & 2) !== 0,
             isStreaming: (flags & 4) !== 0,
+            isFinal: (flags & 8) !== 0,
             languageStats,
             editHeatmap: { months: editMonths, cells },
             // Will be populated by projectMonthlyData()

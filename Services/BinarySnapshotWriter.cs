@@ -85,6 +85,7 @@ public static class BinarySnapshotWriter
         if (snapshot.PositiveExhausted) flags |= 1;
         if (snapshot.NegativeExhausted) flags |= 2;
         if (snapshot.IsStreaming) flags |= 4;
+        if (snapshot.IsFinal) flags |= 8;
         w.Write(flags);
 
         // Language stats

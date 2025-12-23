@@ -1,3 +1,4 @@
+using gamersremorse.Models;
 using gamersremorse.Services;
 using Microsoft.EntityFrameworkCore;
 using Pgvector.EntityFrameworkCore;
@@ -161,30 +162,31 @@ app.MapGet("/wall/similar/{appId}", async (
         var target = await db.Fingerprints.FindAsync(appId);
         if (target is null) return Results.NotFound();
 
-        const int k = 50; // floor for ground truth threshold
+        const int k = 50;
 
-        var similar = await db.Fingerprints
-            .Join(db.Metadatas, f => f.AppId, m => m.AppId, (f, m) => new { f, m })
-            .Join(db.SteamAppInfos, x => x.f.AppId, a => a.AppId, (x, a) => new { x.f, x.m, a })
-            .Where(x => x.f.AppId != appId)
-            .Where(x =>
-                ((x.m.TotalPositive - x.m.SampledPositive) +
-                 (x.m.TotalNegative - x.m.SampledNegative)) / 2
-                < Math.Max(k, (x.m.TotalPositive + x.m.TotalNegative) * 0.01m))
-            .OrderBy(x => x.f.Shape.CosineDistance(target.Shape))
-            .Take(limit)
-            .Select(x => new {
-                x.f.AppId,
-                x.a.Name,
-                x.a.HeaderImage,
-                PosMedian = x.f.PosMedian.TotalMinutes,
-                NegMedian = x.f.NegMedian.TotalMinutes,
-                Distance = x.f.Shape.CosineDistance(target.Shape)
-            })
-            .ToListAsync();
+        // Raw SQL for bit XOR + popcount
+        var similar = await db.Database.SqlQuery<SimilarGame>($"""
+            SELECT 
+                f."AppId",
+                a."Name",
+                a."HeaderImage",
+                f."PosMedian" as PosMedianMinutes,
+                f."NegMedian" as NegMedianMinutes,
+                bit_count(f."ShapeMask" # {target.ShapeMask}) as Distance
+            FROM "Fingerprints" f
+            JOIN "Metadatas" m ON f."AppId" = m."AppId"
+            JOIN "SteamAppInfos" a ON f."AppId" = a."AppId"
+            WHERE f."AppId" != {appId}
+              AND ((m."TotalPositive" - m."SampledPositive") + 
+                   (m."TotalNegative" - m."SampledNegative")) / 2
+                  < GREATEST({k}, (m."TotalPositive" + m."TotalNegative") * 0.01)
+            ORDER BY bit_count(f."ShapeMask" # {target.ShapeMask})
+            LIMIT {limit}
+            """).ToListAsync();
 
         return Results.Ok(similar);
     });
+
 app.MapGet("/fingerprint/{appId}", async (int appId, AppDbContext db) => {
     var fp = await db.Fingerprints.FindAsync((AppId)appId);
     if (fp == null) return Results.NotFound();

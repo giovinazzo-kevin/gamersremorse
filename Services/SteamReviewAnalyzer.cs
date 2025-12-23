@@ -18,19 +18,33 @@ public record SteamReviewAnalyzer(IOptions<SteamReviewAnalyzer.Configuration> Op
         Metadata meta,
         [EnumeratorCancellation] CancellationToken stoppingToken)
     {
-        var all = new List<SteamReview>();
-        var count = 0;
+        AnalysisSnapshot? last = null;
 
-        await foreach (var review in source) {
-            if (stoppingToken.IsCancellationRequested) break;
-            all.Add(review);
-
-            if (++count % Options.Value.SnapshotEvery == 0)
-                yield return BuildSnapshot(all, meta);
+        await foreach (var snapshot in Inner()) {
+            if (last is not null)
+                yield return last;
+            last = snapshot;
         }
 
-        if (all.Count > 0)
-            yield return BuildSnapshot(all, meta);
+        if (last is not null)
+            yield return last with { IsFinal = true };
+
+        async IAsyncEnumerable<AnalysisSnapshot> Inner()
+        {
+            var all = new List<SteamReview>();
+            var count = 0;
+
+            await foreach (var review in source) {
+                if (stoppingToken.IsCancellationRequested) break;
+                all.Add(review);
+
+                if (++count % Options.Value.SnapshotEvery == 0)
+                    yield return BuildSnapshot(all, meta);
+            }
+
+            if (all.Count > 0)
+                yield return BuildSnapshot(all, meta);
+        }
     }
 
     private AnalysisSnapshot BuildSnapshot(List<SteamReview> reviews, Metadata meta)
@@ -111,7 +125,8 @@ public record SteamReviewAnalyzer(IOptions<SteamReviewAnalyzer.Configuration> Op
             negativeSampleRate,
             meta.PositiveExhausted,
             meta.NegativeExhausted,
-            meta.IsStreaming
+            meta.IsStreaming,
+            IsFinal: false
         );
     }
 

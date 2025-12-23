@@ -1,14 +1,14 @@
 ﻿using System;
+using System.Collections;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
-using Pgvector;
 
 #nullable disable
 
 namespace gamersremorse.Migrations
 {
     /// <inheritdoc />
-    public partial class InitialPostgres : Migration
+    public partial class InitialCreate : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -40,8 +40,8 @@ namespace gamersremorse.Migrations
                     SteamPositive = table.Column<int>(type: "integer", nullable: false),
                     SteamNegative = table.Column<int>(type: "integer", nullable: false),
                     ThumbnailPng = table.Column<byte[]>(type: "bytea", nullable: false),
-                    Shape = table.Column<Vector>(type: "vector(12000)", nullable: false),
-                    Snapshot = table.Column<byte[]>(type: "bytea", nullable: false),
+                    Curve = table.Column<float[]>(type: "real[]", nullable: false),
+                    ShapeMask = table.Column<BitArray>(type: "bit(24000)", nullable: false),
                     UpdatedOn = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
                 },
                 constraints: table =>
@@ -63,7 +63,8 @@ namespace gamersremorse.Migrations
                     SampledNegative = table.Column<int>(type: "integer", nullable: false),
                     PositiveExhausted = table.Column<bool>(type: "boolean", nullable: false),
                     NegativeExhausted = table.Column<bool>(type: "boolean", nullable: false),
-                    IsStreaming = table.Column<bool>(type: "boolean", nullable: false)
+                    IsStreaming = table.Column<bool>(type: "boolean", nullable: false),
+                    Snapshot = table.Column<byte[]>(type: "bytea", nullable: false)
                 },
                 constraints: table =>
                 {

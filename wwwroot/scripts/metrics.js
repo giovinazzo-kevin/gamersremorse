@@ -239,7 +239,7 @@ const Metrics = {
             id: 'REVIEW_BOMBED',
             condition: (m) => m.negativeSpikes?.length > 0 && m.negativeSpikes.some(s => {
                 // Volume spike with high neg ratio, OR sentiment spike
-                const hasVolume = s.isVolumeSpike && s.count >= 50;
+                const hasVolume = s.isVolumeSpike && s.count >= 1000;
                 const hasSentiment = s.isSentimentSpike && s.sentimentZ >= 2;
                 return hasVolume || hasSentiment;
             }),
@@ -266,7 +266,7 @@ const Metrics = {
         {
             id: 'SURGE',
             condition: (m) => m.positiveSpikes?.length > 0 && m.positiveSpikes.some(s => {
-                const hasVolume = s.isVolumeSpike && s.count >= 100 && s.multiple >= 3;
+                const hasVolume = s.isVolumeSpike && s.count >= 1000 && s.multiple >= 3;
                 const hasSentiment = s.isSentimentSpike && s.sentimentZ <= -2;
                 return hasVolume || hasSentiment;
             }),

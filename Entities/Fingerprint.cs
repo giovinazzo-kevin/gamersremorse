@@ -1,5 +1,6 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Pgvector;
+using System.Collections;
 using System.ComponentModel.DataAnnotations.Schema;
 
 namespace gamersremorse.Entities;
@@ -17,10 +18,10 @@ public record Fingerprint
 
     // Thumbnail mask for client rendering
     public byte[] ThumbnailPng { get; set; } = [];
-
-    // Vector for similarity (pgvector)
-    public Vector Shape { get; set; } = null!;
     // 96 floats: [certPos x 24, certNeg x 24, uncPos x 24, uncNeg x 24]
     public float[] Curve { get; set; } = [];
+    // Mask for XOR similarity search
+    [Column(TypeName ="bit(24000)")]
+    public BitArray ShapeMask { get; set; } = new BitArray(24000);
     public EventDate UpdatedOn { get; set; }
 }

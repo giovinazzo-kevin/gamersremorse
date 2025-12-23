@@ -64,6 +64,7 @@ public static class BinarySnapshotReader
         var positiveExhausted = (flags & 1) != 0;
         var negativeExhausted = (flags & 2) != 0;
         var isStreaming = (flags & 4) != 0;
+        var isFinal = (flags & 8) != 0;
 
         // Language stats
         var languageStats = new LanguageStats {
@@ -77,23 +78,24 @@ public static class BinarySnapshotReader
         // Edit heatmap
         var editHeatmap = ReadEditHeatmap(r);
 
-        return new AnalysisSnapshot {
-            BucketsByReviewTime = bucketsByReviewTime,
-            BucketsByTotalTime = bucketsByTotalTime,
-            VelocityBuckets = velocityBuckets,
-            TotalPositive = totalPositive,
-            TotalNegative = totalNegative,
-            GameTotalPositive = gameTotalPositive,
-            GameTotalNegative = gameTotalNegative,
-            TargetSampleCount = targetSampleCount,
-            PositiveSampleRate = positiveSampleRate,
-            NegativeSampleRate = negativeSampleRate,
-            PositiveExhausted = positiveExhausted,
-            NegativeExhausted = negativeExhausted,
-            IsStreaming = isStreaming,
-            LanguageStats = languageStats,
-            EditHeatmap = editHeatmap
-        };
+        return new AnalysisSnapshot(
+            BucketsByReviewTime: bucketsByReviewTime,
+            BucketsByTotalTime: bucketsByTotalTime,
+            VelocityBuckets: velocityBuckets,
+            TotalPositive: totalPositive,
+            TotalNegative: totalNegative,
+            GameTotalPositive: gameTotalPositive,
+            GameTotalNegative: gameTotalNegative,
+            TargetSampleCount: targetSampleCount,
+            PositiveSampleRate: positiveSampleRate,
+            NegativeSampleRate: negativeSampleRate,
+            PositiveExhausted: positiveExhausted,
+            NegativeExhausted: negativeExhausted,
+            IsStreaming: isStreaming,
+            LanguageStats: languageStats,
+            EditHeatmap: editHeatmap,
+            IsFinal: isFinal
+        );
     }
 
     private static HistogramBucket ReadBucket(BinaryReader r, string[] months)

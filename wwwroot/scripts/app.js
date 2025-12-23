@@ -14,7 +14,6 @@ let tagTimelineData = [];
 let tagTimelineCache = { predicted: null, sampled: null };
 let numReactions = 0;
 let currentBanner = '';
-let hasReactedToGame = false;
 let metricsWorker = null;
 
 // Shared WebSocket message handler
@@ -44,17 +43,11 @@ function handleSnapshotMessage(e, metricsTimeoutRef) {
 function handleAnalysisComplete() {
     isStreaming = false;
     setExpression('neutral');
-    
-    setAchievementFlag('analyzedGame');
-
+    console.log('Analysis complete');
     if (currentSnapshot) {
         const sampled = currentSnapshot.totalPositive + currentSnapshot.totalNegative;
         const gameTotal = currentSnapshot.gameTotalPositive + currentSnapshot.gameTotalNegative;
         const coverage = gameTotal > 0 ? sampled / gameTotal : 1;
-
-        if (coverage > 0.95 || convergenceScore > 0.9) {
-            convergenceScore = 1;
-        }
 
         updateMetrics(currentSnapshot);
 
@@ -69,35 +62,37 @@ function handleAnalysisComplete() {
             const cacheKey = hidePrediction ? 'sampled' : 'predicted';
             Timeline.updateTagData(tagTimelineCache[cacheKey]);
         }
-        
-        // Fetch controversy context (backend validates analysis is complete)
-        if (currentMetrics && currentGameInfo?.appId) {
-            Controversy.fetchContext(currentGameInfo.appId, currentMetrics, currentSnapshot);
+
+        // Trigger end-of-analysis
+        if (currentSnapshot.isFinal) {
+            setAchievementFlag('analyzedGame');
+            if (currentMetrics) {
+                updateEyeFromMetrics(currentMetrics);
+
+                const tags = currentMetrics.verdict?.tags?.map(t => t.id) || [];
+                // Roll for item drop based on analysis tags
+                if (snapshotCount > 1) {
+                    const item = Items.rollForDrop(tags, currentMetrics);
+                    if (item) {
+                        setTimeout(() => Items.showPedestal(item), 1500);
+                    }
+                }
+            }
+
+            // Fetch similar games now that fingerprint exists
+            if (currentGameInfo?.appId) {
+                fetchSimilarGames(currentGameInfo.appId);
+            }
+
+            // Fetch controversy context (backend validates analysis is complete)
+            if (currentMetrics && currentGameInfo?.appId) {
+                Controversy.fetchContext(currentGameInfo.appId, currentMetrics, currentSnapshot);
+            }
         }
     }
 
     if (setLoading) setLoading(false);
     
-    // Final metrics update triggers eye emotion (only once per analysis)
-    if (currentMetrics && !hasReactedToGame) {
-        hasReactedToGame = true;
-        updateEyeFromMetrics(currentMetrics);
-        
-        const tags = currentMetrics.verdict?.tags?.map(t => t.id) || [];
-        
-        // Roll for item drop based on analysis tags
-        if (snapshotCount > 1) {
-            const item = Items.rollForDrop(tags, currentMetrics);
-            if (item) {
-                setTimeout(() => Items.showPedestal(item), 1500);
-            }
-        }
-    }
-    
-    // Fetch similar games now that fingerprint exists
-    if (currentGameInfo?.appId) {
-        fetchSimilarGames(currentGameInfo.appId);
-    }
 }
 
 // Create WebSocket with shared handlers

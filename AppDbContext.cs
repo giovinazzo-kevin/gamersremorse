@@ -21,9 +21,5 @@ public class AppDbContext : DbContext
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.HasPostgresExtension("vector");
-
-        modelBuilder.Entity<Fingerprint>()
-            .Property(f => f.Shape)
-            .HasColumnType("vector(12000)");
     }
 }
