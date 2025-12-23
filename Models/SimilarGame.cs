@@ -6,4 +6,4 @@ public record SimilarGame(
     string HeaderImage,
     double PosMedianMinutes,
     double NegMedianMinutes,
-    int Distance);
+    double Similarity);

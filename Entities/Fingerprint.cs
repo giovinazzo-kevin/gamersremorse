@@ -21,7 +21,9 @@ public record Fingerprint
     // 96 floats: [certPos x 24, certNeg x 24, uncPos x 24, uncNeg x 24]
     public float[] Curve { get; set; } = [];
     // Mask for XOR similarity search
-    [Column(TypeName ="bit(24000)")]
-    public BitArray ShapeMask { get; set; } = new BitArray(24000);
+    [Column(TypeName ="bit(12000)")]
+    public BitArray PosMask { get; set; } = new BitArray(12000);
+    [Column(TypeName ="bit(12000)")]
+    public BitArray NegMask { get; set; } = new BitArray(12000);
     public EventDate UpdatedOn { get; set; }
 }

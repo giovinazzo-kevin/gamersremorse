@@ -51,15 +51,19 @@ namespace gamersremorse.Migrations
                         .IsRequired()
                         .HasColumnType("real[]");
 
+                    b.Property<BitArray>("NegMask")
+                        .IsRequired()
+                        .HasColumnType("bit(12000)");
+
                     b.Property<TimeSpan>("NegMedian")
                         .HasColumnType("interval");
 
+                    b.Property<BitArray>("PosMask")
+                        .IsRequired()
+                        .HasColumnType("bit(12000)");
+
                     b.Property<TimeSpan>("PosMedian")
                         .HasColumnType("interval");
-
-                    b.Property<BitArray>("ShapeMask")
-                        .IsRequired()
-                        .HasColumnType("bit(24000)");
 
                     b.Property<int>("SteamNegative")
                         .HasColumnType("integer");

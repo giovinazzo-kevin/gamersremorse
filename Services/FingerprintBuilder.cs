@@ -16,7 +16,7 @@ public static class FingerprintBuilder
     {
         var (posMedian, negMedian) = ComputeMedians(snapshot);
         var thumbnail = RenderThumbnail(snapshot, posMedian, negMedian);
-        var shape = ExtractBitmask(thumbnail);
+        var (pos, neg) = ExtractBitmasks(thumbnail);
         var curve = BuildCurve(snapshot);
 
         return new Fingerprint {
@@ -26,7 +26,8 @@ public static class FingerprintBuilder
             SteamPositive = meta.TotalPositive,
             SteamNegative = meta.TotalNegative,
             ThumbnailPng = EncodePng(thumbnail),
-            ShapeMask = shape,
+            PosMask = pos,
+            NegMask = neg,
             Curve = curve,
             UpdatedOn = EventDate.UtcNow
         };
@@ -337,25 +338,30 @@ public static class FingerprintBuilder
         pixels[idx + 3] = (byte)Math.Clamp(a, 0, 255);
     }
 
-    private static BitArray ExtractBitmask(byte[] rgba)
+    private static (BitArray pos, BitArray neg) ExtractBitmasks(byte[] rgba)
     {
-        var bits = new BitArray(Width * Height * 2);
+        var pos = new BitArray(Width * Height);
+        var neg = new BitArray(Width * Height);
 
         for (int i = 0; i < Width * Height; i++) {
             var r = rgba[i * 4];
             var g = rgba[i * 4 + 1];
 
-            bool bit0, bit1;
-            if (r > 128 && g > 128) { bit0 = true; bit1 = true; }       // 11 uncertain
-            else if (r > g && r > 64) { bit0 = true; bit1 = false; }    // 01 positive
-            else if (g > r && g > 64) { bit0 = false; bit1 = true; }    // 10 negative
-            else { bit0 = false; bit1 = false; }                         // 00 empty
-
-            bits[i * 2] = bit0;
-            bits[i * 2 + 1] = bit1;
+            if (r > 128 && g > 128) {
+                // uncertain - both set
+                pos[i] = true;
+                neg[i] = true;
+            } else if (r > g && r > 64) {
+                // positive
+                pos[i] = true;
+            } else if (g > r && g > 64) {
+                // negative
+                neg[i] = true;
+            }
+            // else empty - both false
         }
 
-        return bits;
+        return (pos, neg);
     }
 
     private static (PlayTime pos, PlayTime neg) ComputeMedians(AnalysisSnapshot snapshot)

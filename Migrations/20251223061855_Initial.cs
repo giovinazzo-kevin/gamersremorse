@@ -8,7 +8,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace gamersremorse.Migrations
 {
     /// <inheritdoc />
-    public partial class InitialCreate : Migration
+    public partial class Initial : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -41,7 +41,8 @@ namespace gamersremorse.Migrations
                     SteamNegative = table.Column<int>(type: "integer", nullable: false),
                     ThumbnailPng = table.Column<byte[]>(type: "bytea", nullable: false),
                     Curve = table.Column<float[]>(type: "real[]", nullable: false),
-                    ShapeMask = table.Column<BitArray>(type: "bit(24000)", nullable: false),
+                    PosMask = table.Column<BitArray>(type: "bit(12000)", nullable: false),
+                    NegMask = table.Column<BitArray>(type: "bit(12000)", nullable: false),
                     UpdatedOn = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
                 },
                 constraints: table =>

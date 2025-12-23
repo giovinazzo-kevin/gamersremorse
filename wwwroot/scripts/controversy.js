@@ -36,18 +36,20 @@ const Controversy = (function() {
         const types = allEvents.map(e => e.type).join(',');
         const res = await fetch(`/controversies/${appId}?months=${months}&types=${types}`);
         const data = await res.json();
-        const contexts = data
-            .filter(d => d.overview)
-            .map(d => ({
-                event: allEvents.find(e => e.month === d.month) || { type: 'unknown', month: d.month, year: d.month.split('-')[0] },
-                overview: d.overview
-            }));
-        
-        // Remove loading indicator
-        document.getElementById('controversy-loading')?.remove();
-        
-        if (contexts.length > 0) {
-            displayContext(contexts);
+        if (data?.filter) {
+            const contexts = data
+                .filter(d => d.overview)
+                .map(d => ({
+                    event: allEvents.find(e => e.month === d.month) || { type: 'unknown', month: d.month, year: d.month.split('-')[0] },
+                    overview: d.overview
+                }));
+
+            // Remove loading indicator
+            document.getElementById('controversy-loading')?.remove();
+
+            if (contexts.length > 0) {
+                displayContext(contexts);
+            }
         }
     }
 

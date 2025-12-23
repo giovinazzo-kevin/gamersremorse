@@ -12,8 +12,8 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace gamersremorse.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20251223053331_InitialCreate")]
-    partial class InitialCreate
+    [Migration("20251223061855_Initial")]
+    partial class Initial
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -54,15 +54,19 @@ namespace gamersremorse.Migrations
                         .IsRequired()
                         .HasColumnType("real[]");
 
+                    b.Property<BitArray>("NegMask")
+                        .IsRequired()
+                        .HasColumnType("bit(12000)");
+
                     b.Property<TimeSpan>("NegMedian")
                         .HasColumnType("interval");
 
+                    b.Property<BitArray>("PosMask")
+                        .IsRequired()
+                        .HasColumnType("bit(12000)");
+
                     b.Property<TimeSpan>("PosMedian")
                         .HasColumnType("interval");
-
-                    b.Property<BitArray>("ShapeMask")
-                        .IsRequired()
-                        .HasColumnType("bit(24000)");
 
                     b.Property<int>("SteamNegative")
                         .HasColumnType("integer");

@@ -47,7 +47,7 @@ app.MapGet("/controversies/{appId}", async (AppId appId, string months, string? 
     var monthList = months.Split(',', StringSplitOptions.RemoveEmptyEntries);
 
     // Validate month formats: YYYY or YYYY-MM only
-    var monthRegex = new System.Text.RegularExpressions.Regex(@"^\d{4}(-\d{2})?$");
+    var monthRegex = new System.Text.RegularExpressions.Regex(@"^(\d{4}(-\d{2})?( to \d{4}(-\d{2})?)?|launch)$");
     if (!monthList.All(m => monthRegex.IsMatch(m)))
         return Results.BadRequest("Invalid month format. Use YYYY or YYYY-MM");
 
@@ -162,25 +162,23 @@ app.MapGet("/wall/similar/{appId}", async (
         var target = await db.Fingerprints.FindAsync(appId);
         if (target is null) return Results.NotFound();
 
-        const int k = 50;
-
-        // Raw SQL for bit XOR + popcount
         var similar = await db.Database.SqlQuery<SimilarGame>($"""
             SELECT 
                 f."AppId",
                 a."Name",
                 a."HeaderImage",
-                f."PosMedian" as PosMedianMinutes,
-                f."NegMedian" as NegMedianMinutes,
-                bit_count(f."ShapeMask" # {target.ShapeMask}) as Distance
+                EXTRACT(EPOCH FROM f."PosMedian") / 60.0 as PosMedianMinutes,
+                EXTRACT(EPOCH FROM f."NegMedian") / 60.0 as NegMedianMinutes,
+                (bit_count(f."PosMask" & {target.PosMask}) + 
+                 bit_count(f."NegMask" & {target.NegMask}))::float 
+                /
+                NULLIF(bit_count(f."PosMask" | {target.PosMask} | f."NegMask" | {target.NegMask}), 0) 
+                as Similarity
             FROM "Fingerprints" f
             JOIN "Metadatas" m ON f."AppId" = m."AppId"
             JOIN "SteamAppInfos" a ON f."AppId" = a."AppId"
             WHERE f."AppId" != {appId}
-              AND ((m."TotalPositive" - m."SampledPositive") + 
-                   (m."TotalNegative" - m."SampledNegative")) / 2
-                  < GREATEST({k}, (m."TotalPositive" + m."TotalNegative") * 0.01)
-            ORDER BY bit_count(f."ShapeMask" # {target.ShapeMask})
+            ORDER BY Similarity DESC
             LIMIT {limit}
             """).ToListAsync();
 

@@ -15,11 +15,15 @@ let tagTimelineCache = { predicted: null, sampled: null };
 let numReactions = 0;
 let currentBanner = '';
 let metricsWorker = null;
+let metricsTimeoutId = null;
+let controversyFetched = false;
 
 // Shared WebSocket message handler
 function handleSnapshotMessage(e, metricsTimeoutRef) {
     if (!document.getElementById('chart')) return;
-    
+    if (metricsTimeoutId) clearTimeout(metricsTimeoutId);
+    metricsTimeoutId = setTimeout(() => updateMetrics(snapshot), 200);
+
     isStreaming = true;
     state.lastInteraction = Date.now();
     const snapshot = BinarySnapshot.parse(e.data);
@@ -43,56 +47,24 @@ function handleSnapshotMessage(e, metricsTimeoutRef) {
 function handleAnalysisComplete() {
     isStreaming = false;
     setExpression('neutral');
-    console.log('Analysis complete');
+
     if (currentSnapshot) {
-        const sampled = currentSnapshot.totalPositive + currentSnapshot.totalNegative;
-        const gameTotal = currentSnapshot.gameTotalPositive + currentSnapshot.gameTotalNegative;
-        const coverage = gameTotal > 0 ? sampled / gameTotal : 1;
-
-        updateMetrics(currentSnapshot);
-
-        // Compute BOTH tag timelines upfront (predicted + sampled)
+        // Cache tag timelines
         if (Metrics) {
             const isFree = currentGameInfo?.isFree || false;
             const isSexual = currentGameInfo?.flags ? (currentGameInfo.flags & 8) !== 0 : false;
             tagTimelineCache.predicted = Metrics.computeTimeline(currentSnapshot, 3, { isFree, isSexual, hidePrediction: false });
             tagTimelineCache.sampled = Metrics.computeTimeline(currentSnapshot, 3, { isFree, isSexual, hidePrediction: true });
-            
+
             const hidePrediction = document.getElementById('hidePrediction')?.checked ?? false;
-            const cacheKey = hidePrediction ? 'sampled' : 'predicted';
-            Timeline.updateTagData(tagTimelineCache[cacheKey]);
+            Timeline.updateTagData(tagTimelineCache[hidePrediction ? 'sampled' : 'predicted']);
         }
 
-        // Trigger end-of-analysis
-        if (currentSnapshot.isFinal) {
-            setAchievementFlag('analyzedGame');
-            if (currentMetrics) {
-                updateEyeFromMetrics(currentMetrics);
-
-                const tags = currentMetrics.verdict?.tags?.map(t => t.id) || [];
-                // Roll for item drop based on analysis tags
-                if (snapshotCount > 1) {
-                    const item = Items.rollForDrop(tags, currentMetrics);
-                    if (item) {
-                        setTimeout(() => Items.showPedestal(item), 1500);
-                    }
-                }
-            }
-
-            // Fetch similar games now that fingerprint exists
-            if (currentGameInfo?.appId) {
-                fetchSimilarGames(currentGameInfo.appId);
-            }
-
-            // Fetch controversy context (backend validates analysis is complete)
-            if (currentMetrics && currentGameInfo?.appId) {
-                Controversy.fetchContext(currentGameInfo.appId, currentMetrics, currentSnapshot);
-            }
-        }
+        // Trigger final metrics computation (worker will call applyMetricsResult)
+        updateMetrics(currentSnapshot);
     }
 
     if (setLoading) setLoading(false);
-    
 }
 
 // Create WebSocket with shared handlers
@@ -157,6 +129,26 @@ function applyMetricsResult(metrics) {
     currentMetrics = metrics;
     renderMetrics();
     Opinion.update(currentMetrics);
+
+    // End-of-analysis: needs both final snapshot AND metrics ready
+    if (currentSnapshot?.isFinal && !controversyFetched) {
+        controversyFetched = true;
+        setAchievementFlag('analyzedGame');
+        updateEyeFromMetrics(currentMetrics);
+
+        const tags = currentMetrics.verdict?.tags?.map(t => t.id) || [];
+        if (snapshotCount > 1) {
+            const item = Items.rollForDrop(tags, currentMetrics);
+            if (item) {
+                setTimeout(() => Items.showPedestal(item), 1500);
+            }
+        }
+
+        if (currentGameInfo?.appId) {
+            Controversy.fetchContext(currentGameInfo.appId, currentMetrics, currentSnapshot);
+            fetchSimilarGames(currentGameInfo.appId);
+        }
+    }
 }
 
 function renderMetrics() {
@@ -403,10 +395,14 @@ async function analyze() {
     isFirstSnapshot = true;
     snapshotCount = 0;
     hasReactedToGame = false;
+    controversyFetched = false;
     Timeline.reset();
     tagTimelineData = [];
     tagTimelineCache = { predicted: null, sampled: null };
-
+    if (metricsTimeoutId) {
+        clearTimeout(metricsTimeoutId);
+        metricsTimeoutId = null;
+    }
     // clear UI
     Charts.destroyAll();
 
@@ -511,7 +507,7 @@ function updateConvergence(current, last, snapshot) {
 }
 
 function updateMetrics(snapshot) {
-    if (!Metrics) return;
+    if (!Metrics || !snapshot) return;
 
     const filter = getSelectedMonths();
     const isFree = currentGameInfo?.isFree || false;
