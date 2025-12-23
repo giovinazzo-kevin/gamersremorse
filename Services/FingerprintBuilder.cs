@@ -161,14 +161,16 @@ public static class FingerprintBuilder
             var uncPosTotal = bucket.UncertainPositiveByMonth.Values.Sum();
             var uncNegTotal = bucket.UncertainNegativeByMonth.Values.Sum();
 
-            var posHeight = (int)(posTotal / (float)maxCount * midY);
-            var negHeight = (int)(negTotal / (float)maxCount * midY);
-            var uncPosHeight = (int)(uncPosTotal / (float)maxCount * midY);
-            var uncNegHeight = (int)(uncNegTotal / (float)maxCount * midY);
+            // Linear scaling
+            var posHeight = (int)((float)posTotal / maxCount * midY);
+            var negHeight = (int)((float)negTotal / maxCount * midY);
+            var uncPosHeight = (int)((float)uncPosTotal / maxCount * midY);
+            var uncNegHeight = (int)((float)uncNegTotal / maxCount * midY);
 
-            var posIntensity = posTotal > 0 ? Math.Max(64, (int)(posTotal / (float)maxCount * 255)) : 0;
-            var negIntensity = negTotal > 0 ? Math.Max(64, (int)(negTotal / (float)maxCount * 255)) : 0;
-            var uncIntensity = 128; // fixed gray intensity
+            // Binary intensity - pixel is either on or off
+            var posIntensity = posTotal > 0 ? 255 : 0;
+            var negIntensity = negTotal > 0 ? 255 : 0;
+            var uncIntensity = 128;
 
             var startCol = (int)(i * colsPerBucket);
             var endCol = (int)((i + 1) * colsPerBucket);
@@ -234,8 +236,8 @@ public static class FingerprintBuilder
         // Max includes stacked totals
         var maxVal = allMonths
             .SelectMany(m => new[] {
-            monthlyPos.GetValueOrDefault(m) + monthlyUncPos.GetValueOrDefault(m),
-            monthlyNeg.GetValueOrDefault(m) + monthlyUncNeg.GetValueOrDefault(m) })
+        monthlyPos.GetValueOrDefault(m) + monthlyUncPos.GetValueOrDefault(m),
+        monthlyNeg.GetValueOrDefault(m) + monthlyUncNeg.GetValueOrDefault(m) })
             .DefaultIfEmpty(1)
             .Max();
         if (maxVal == 0) maxVal = 1;
@@ -251,10 +253,11 @@ public static class FingerprintBuilder
             var uncPos = monthlyUncPos.GetValueOrDefault(month);
             var uncNeg = monthlyUncNeg.GetValueOrDefault(month);
 
-            var posHeight = pos > 0 ? (int)(Math.Sqrt(pos / (double)maxVal) * halfHeight) : 0;
-            var negHeight = neg > 0 ? (int)(Math.Sqrt(neg / (double)maxVal) * halfHeight) : 0;
-            var uncPosHeight = uncPos > 0 ? (int)(Math.Sqrt(uncPos / (double)maxVal) * halfHeight) : 0;
-            var uncNegHeight = uncNeg > 0 ? (int)(Math.Sqrt(uncNeg / (double)maxVal) * halfHeight) : 0;
+            // Linear scaling
+            var posHeight = pos > 0 ? (int)((float)pos / maxVal * halfHeight) : 0;
+            var negHeight = neg > 0 ? (int)((float)neg / maxVal * halfHeight) : 0;
+            var uncPosHeight = uncPos > 0 ? (int)((float)uncPos / maxVal * halfHeight) : 0;
+            var uncNegHeight = uncNeg > 0 ? (int)((float)uncNeg / maxVal * halfHeight) : 0;
 
             var startCol = (int)(i * colsPerMonth);
             var endCol = (int)((i + 1) * colsPerMonth);
@@ -347,15 +350,13 @@ public static class FingerprintBuilder
             var r = rgba[i * 4];
             var g = rgba[i * 4 + 1];
 
-            if (r > 128 && g > 128) {
-                // uncertain - both set
+            if (r > 0 && g > 0) {
+                // uncertain - both channels present
                 pos[i] = true;
                 neg[i] = true;
-            } else if (r > g && r > 64) {
-                // positive
+            } else if (r > 0) {
                 pos[i] = true;
-            } else if (g > r && g > 64) {
-                // negative
+            } else if (g > 0) {
                 neg[i] = true;
             }
             // else empty - both false

@@ -62,32 +62,40 @@ public class AnalysisHub
                     .CreateDbContext();
 
                 var meta = await repo.GetMetadata(appId);
-                var appInfo = await repo.GetInfo(appId);  // fetch it here
                 var (reviews, isStreaming) = await repo.GetAll(appId, session.Cts.Token);
+                AnalysisSnapshot? lastSnapshot = null;
 
                 if (isStreaming) {
-                    AnalysisSnapshot? lastSnapshot = null;
                     await foreach (var snapshot in analyzer.Analyze(reviews, meta, session.Cts.Token)) {
                         lastSnapshot = snapshot;
                         session.LatestSnapshot = snapshot;
                         Broadcast(session, snapshot);
                     }
 
-                    // Build and save fingerprint and update metadata with snapshot
+                    // FINAL SNAPSHOT WHILE STREAMING: serialize and update metadata
                     if (lastSnapshot is { } final) {
                         meta = await repo.GetMetadata(appId);
-                        var fingerprint = FingerprintBuilder.Build(final, meta);
-                        db.Upsert(fingerprint);
                         var snap = BinarySnapshotWriter.Write(final);
                         meta.Snapshot = snap;
                         db.Upsert(meta);
                         await db.SaveChangesAsync();
                     }
+                } else {
+                    lastSnapshot = BinarySnapshotReader.Read(meta.Snapshot);
+                    Broadcast(session, lastSnapshot);
                 }
-                else {
-                    var snapshot = BinarySnapshotReader.Read(meta.Snapshot);
-                    Broadcast(session, snapshot);
+
+                // FINAL SNAPSHOT ALWAYS: build fingerprint IF missing
+                if (lastSnapshot is { } finalSnapshot) {
+                    var existingFingerprint = await db.Fingerprints.FindAsync(appId);
+                    if (existingFingerprint is null) {
+                        meta = await repo.GetMetadata(appId);
+                        var fingerprint = FingerprintBuilder.Build(finalSnapshot, meta);
+                        db.Upsert(fingerprint);
+                        await db.SaveChangesAsync();
+                    }
                 }
+
             }
             catch (OperationCanceledException) {
                 _logger.LogInformation("Analysis cancelled for {AppId}", appId);

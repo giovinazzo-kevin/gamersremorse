@@ -1,6 +1,18 @@
 @gamersremorse_HostAddress = http://localhost:5221
 
-GET {{gamersremorse_HostAddress}}/weatherforecast/
+###
+
+POST {{gamersremorse_HostAddress}}/fingerprints/regenerate
+Accept: application/json
+
+###
+
+GET {{gamersremorse_HostAddress}}/wall?sort=sunkCost&order=desc&limit=20
+Accept: application/json
+
+###
+
+GET {{gamersremorse_HostAddress}}/wall/similar/2386720
 Accept: application/json
 
 ###

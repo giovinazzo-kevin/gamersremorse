@@ -172,11 +172,10 @@ app.MapGet("/wall/similar/{appId}", async (
                 a."HeaderImage",
                 EXTRACT(EPOCH FROM f."PosMedian") / 60.0 as PosMedianMinutes,
                 EXTRACT(EPOCH FROM f."NegMedian") / 60.0 as NegMedianMinutes,
-                (bit_count(f."PosMask" & {target.PosMask}) + 
-                 bit_count(f."NegMask" & {target.NegMask}))::float 
-                /
-                NULLIF(bit_count(f."PosMask" | {target.PosMask} | f."NegMask" | {target.NegMask}), 0) 
-                as Similarity
+                1.0 - (
+                    (bit_count(f."PosMask" # {target.PosMask}) + bit_count(f."NegMask" # {target.NegMask}))::float 
+                    / NULLIF(bit_count(f."PosMask" | {target.PosMask}) + bit_count(f."NegMask" | {target.NegMask}), 0)
+                ) as Similarity
             FROM "Fingerprints" f
             JOIN "Metadatas" m ON f."AppId" = m."AppId"
             JOIN "SteamAppInfos" a ON f."AppId" = a."AppId"
@@ -187,11 +186,48 @@ app.MapGet("/wall/similar/{appId}", async (
 
         return Results.Ok(similar);
     });
-
 app.MapGet("/fingerprint/{appId}", async (int appId, AppDbContext db) => {
     var fp = await db.Fingerprints.FindAsync((AppId)appId);
     if (fp == null) return Results.NotFound();
     return Results.Ok(new { fp.ThumbnailPng });
+});
+
+// POST /fingerprints/regenerate - rebuild all fingerprints from snapshots
+app.MapPost("/fingerprints/regenerate", async (AppDbContext db) => {
+    // Get AppIds with non-empty snapshots using raw SQL
+    var appIds = await db.Database
+        .SqlQuery<AppId>($"""SELECT "AppId" FROM "Metadatas" WHERE octet_length("Snapshot") > 0""")
+        .ToListAsync();
+    
+    var count = 0;
+    foreach (var appId in appIds) {
+        var meta = await db.Metadatas.FindAsync(appId);
+        if (meta == null || meta.Snapshot.Length == 0) continue;
+        
+        var analysis = BinarySnapshotReader.Read(meta.Snapshot);
+        if (analysis == null) continue;
+        
+        var fingerprint = FingerprintBuilder.Build(analysis, meta);
+        
+        var existing = await db.Fingerprints.FindAsync(meta.AppId);
+        if (existing != null) {
+            existing.PosMedian = fingerprint.PosMedian;
+            existing.NegMedian = fingerprint.NegMedian;
+            existing.SteamPositive = fingerprint.SteamPositive;
+            existing.SteamNegative = fingerprint.SteamNegative;
+            existing.ThumbnailPng = fingerprint.ThumbnailPng;
+            existing.PosMask = fingerprint.PosMask;
+            existing.NegMask = fingerprint.NegMask;
+            existing.Curve = fingerprint.Curve;
+            existing.UpdatedOn = fingerprint.UpdatedOn;
+        } else {
+            db.Fingerprints.Add(fingerprint);
+        }
+        count++;
+    }
+    
+    await db.SaveChangesAsync();
+    return Results.Ok(new { regenerated = count });
 });
 app.UseStaticFiles();
 app.Run();
