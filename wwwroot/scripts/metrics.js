@@ -765,9 +765,14 @@ const Metrics = {
         
         // Bottom 10% of own history
         const isInBottom10 = endActivity <= windowData.p10;
-        
-        // DEAD = was big AND now small (not just always small)
-        const isDead = isInBottom10 && isVelocityCollapse;
+
+        // Find WHEN peak occurred
+        const peakIdx = activity.findIndex(m => m.count === peakActivity);
+        const monthsSincePeak = activity.length - 1 - peakIdx;
+            
+        // Only "dead" if peak was recent-ish (within 24 months) and then collapsed
+        const isRecentCollapse = monthsSincePeak < 24;
+        const isDead = isInBottom10 && isVelocityCollapse && isRecentCollapse;
         
         return { endActivity, startActivity, peakActivity, isInBottom10, isVelocityCollapse, isDead };
     },
