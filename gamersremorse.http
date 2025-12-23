@@ -12,7 +12,7 @@ Accept: application/json
 
 ###
 
-GET {{gamersremorse_HostAddress}}/wall/similar/2386720
+GET {{gamersremorse_HostAddress}}/  wall/similar/2386720
 Accept: application/json
 
 ###

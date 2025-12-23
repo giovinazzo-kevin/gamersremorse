@@ -9,7 +9,6 @@ public record SteamReviewAnalyzer(IOptions<SteamReviewAnalyzer.Configuration> Op
 {
     public class Configuration
     {
-        public int SnapshotEvery { get; set; } = 100;
         public int MaxBuckets = 50;
     }
 
@@ -29,6 +28,7 @@ public record SteamReviewAnalyzer(IOptions<SteamReviewAnalyzer.Configuration> Op
         if (last is not null)
             yield return last with { IsFinal = true };
 
+
         async IAsyncEnumerable<AnalysisSnapshot> Inner()
         {
             var all = new List<SteamReview>();
@@ -38,7 +38,13 @@ public record SteamReviewAnalyzer(IOptions<SteamReviewAnalyzer.Configuration> Op
                 if (stoppingToken.IsCancellationRequested) break;
                 all.Add(review);
 
-                if (++count % Options.Value.SnapshotEvery == 0)
+                var snapshotEvery = count++ switch {
+                    <= 1000 => 100,
+                    <= 200000 => 500,
+                    _ => 1000,
+                };
+
+                if (count % snapshotEvery == 0)
                     yield return BuildSnapshot(all, meta);
             }
 

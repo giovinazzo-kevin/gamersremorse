@@ -95,7 +95,13 @@ const Metrics = {
         },
         {
             id: 'DIVISIVE',
-            condition: (m) => m.negativeRatio > 0.35 && m.negativeRatio < 0.50 && m.posMedianReview > 20 * 60,
+            condition: (m) => {
+                // Always use Steam's actual ratio, not sampled
+                const actualNegRatio = m.counts.sampledNegative !== undefined
+                    ? snapshot.gameTotalNegative / (snapshot.gameTotalPositive + snapshot.gameTotalNegative)
+                    : m.negativeRatio;
+                return actualNegRatio > 0.35 && actualNegRatio < 0.50 && m.posMedianReview > 20 * 60;
+            },
             reason: (m) => `${Math.round(m.positiveRatio * 100)}/${Math.round(m.negativeRatio * 100)} split`,
             severity: 0.05,
             color: 'var(--color-tag-divisive)'

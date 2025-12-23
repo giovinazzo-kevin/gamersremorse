@@ -20,7 +20,7 @@ public class CursorPool
 
     public class Configuration
     {
-        public int MaxParallel { get; set; } = 3;
+        public int MaxParallel { get; set; } = 2;
         public int MaxStaggerDelayMs { get; set; } = 1500;
         public int BaseBackoffMs { get; set; } = 5000;
         public int MaxBackoffMs { get; set; } = 60000;
@@ -63,12 +63,12 @@ public class CursorPool
                 var progress = getProgress();
                 var posRatio = progress.TotalPos > 0 ? (double)progress.SampledPos / progress.TotalPos : 1;
                 var negRatio = progress.TotalNeg > 0 ? (double)progress.SampledNeg / progress.TotalNeg : 1;
-                var preferNegative = negRatio < posRatio;
-                
-                // Check if both pools are effectively exhausted
-                var posExhausted = posCursors.All(c => c.IsExhausted) || posRatio >= 0.95;
-                var negExhausted = negCursors.All(c => c.IsExhausted) || negRatio >= 0.95;
-                
+                var preferNegative = progress.SampledNeg < progress.SampledPos;
+
+                // Check if minority pool is exhausted
+                var negExhausted = negCursors.All(c => c.IsExhausted);
+                var posExhausted = posCursors.All(c => c.IsExhausted);
+
                 if (posExhausted && negExhausted)
                     break;
                 

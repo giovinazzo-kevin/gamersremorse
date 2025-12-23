@@ -64,7 +64,7 @@ public class AnalysisHub
                 var meta = await repo.GetMetadata(appId);
                 var (reviews, isStreaming) = await repo.GetAll(appId, session.Cts.Token);
                 AnalysisSnapshot? lastSnapshot = null;
-
+                welp:
                 if (isStreaming) {
                     await foreach (var snapshot in analyzer.Analyze(reviews, meta, session.Cts.Token)) {
                         lastSnapshot = snapshot;
@@ -81,8 +81,15 @@ public class AnalysisHub
                         await db.SaveChangesAsync();
                     }
                 } else {
-                    lastSnapshot = BinarySnapshotReader.Read(meta.Snapshot);
-                    Broadcast(session, lastSnapshot);
+                    try {
+                        lastSnapshot = BinarySnapshotReader.Read(meta.Snapshot);
+                        Broadcast(session, lastSnapshot);
+                    } catch {
+                        _logger.LogError("Snapshot for {AppId} corrupted, regenerating", appId);
+                        lastSnapshot = null;
+                        isStreaming = true;
+                        goto welp;
+                    }
                 }
 
                 // FINAL SNAPSHOT ALWAYS: build fingerprint IF missing

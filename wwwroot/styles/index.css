@@ -925,8 +925,8 @@ body.dark-mode {
 }
 
 .wall-table .row-thumb {
-    width: 60px;
-    height: 50px;
+    width: 120px;
+    height: 100px;
     background: #1a1a1a;
     image-rendering: pixelated;
     flex-shrink: 0;

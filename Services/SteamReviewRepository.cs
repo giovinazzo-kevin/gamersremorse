@@ -21,7 +21,7 @@ public record SteamReviewRepository(
         public bool AllowLazyRefresh { get; set; } = true;
         public bool AllowLazyRefreshIfStale { get; set; } = true;
         public int LazyRefreshMinItems { get; set; } = 10000;
-        public int LazyRefreshMaxItems { get; set; } = 100000;
+        public int LazyRefreshMaxItems { get; set; } = 20000;
         public double LazyRefreshTargetPercent { get; set; } = 1;
         public int LazyRefreshBatchSize { get; set; } = 100;
     }

@@ -1,347 +1,257 @@
 using gamersremorse.Entities;
 using gamersremorse.Models;
-using Pgvector;
 using System.Collections;
+
 namespace gamersremorse.Services;
 
 public static class FingerprintBuilder
 {
-    private const int Width = 120;
-    private const int Height = 100;
-    private const int HistogramHeight = 80;
-    private const int TimelineHeight = 20;
+    private const int Width = 120, Height = 100;
+    private const int HistW = 80, HistH = 60, VelW = 40, VelH = 60, VelX = 80;
+    private const int TimeW = 80, TimeH = 40, TimeY = 60;
+    private const int EditW = 40, EditH = 40, EditX = 80, EditY = 60;
     private const int CurvePoints = 24;
 
-    public static Fingerprint Build(AnalysisSnapshot snapshot, Metadata meta)
+    public static Fingerprint Build(AnalysisSnapshot snap, Metadata meta)
     {
-        var (posMedian, negMedian) = ComputeMedians(snapshot);
-        var thumbnail = RenderThumbnail(snapshot, posMedian, negMedian);
-        var (pos, neg) = ExtractBitmasks(thumbnail);
-        var curve = BuildCurve(snapshot);
+        var (posMedian, negMedian) = ComputeMedians(snap);
+        var pixels = new byte[Width * Height * 4];
+        
+        RenderHistogram(pixels, snap.BucketsByReviewTime, snap.BucketsByTotalTime);
+        RenderTimeline(pixels, snap);
+        RenderEditMap(pixels, snap.EditHeatmap);
+        RenderDiagonalBars(pixels, meta, posMedian, negMedian, snap.VelocityBuckets, snap.LanguageStats);
 
+        var (pos, neg) = ExtractBitmasks(pixels);
+        
         return new Fingerprint {
             AppId = meta.AppId,
             PosMedian = posMedian,
             NegMedian = negMedian,
             SteamPositive = meta.TotalPositive,
             SteamNegative = meta.TotalNegative,
-            ThumbnailPng = EncodePng(thumbnail),
+            ThumbnailPng = pixels,
             PosMask = pos,
             NegMask = neg,
-            Curve = curve,
+            Curve = BuildCurve(snap),
             UpdatedOn = EventDate.UtcNow
         };
     }
 
-    public static float[] BuildCurve(AnalysisSnapshot snapshot)
+    // log2 height: 1→1px, 2→2px, 4→3px, 8→4px, etc
+    private static int LogHeight(int count) => count > 0 ? (int)Math.Log2(count) + 1 : 0;
+
+    private static void RenderHistogram(byte[] px, HistogramBucket[] review, HistogramBucket[] total)
     {
-        // Gather monthly totals for all 4 bands
-        var allMonths = snapshot.BucketsByReviewTime
-            .SelectMany(b => b.PositiveByMonth.Keys
-                .Concat(b.NegativeByMonth.Keys)
-                .Concat(b.UncertainPositiveByMonth.Keys)
-                .Concat(b.UncertainNegativeByMonth.Keys))
-            .Distinct()
-            .OrderBy(m => m)
-            .ToList();
+        var midY = HistH / 2;
 
-        if (allMonths.Count == 0)
-            return new float[CurvePoints * 4];
+        for (int i = 0; i < review.Length && i < HistW; i++) {
+            var (r, t) = (review[i], total[i]);
+            var x = i; // 1px per bucket
 
-        // Aggregate per month
-        var monthlyData = new Dictionary<string, (int certPos, int certNeg, int uncPos, int uncNeg)>();
-
-        foreach (var month in allMonths)
-            monthlyData[month] = (0, 0, 0, 0);
-
-        foreach (var bucket in snapshot.BucketsByReviewTime) {
-            foreach (var (month, count) in bucket.PositiveByMonth) {
-                var d = monthlyData[month];
-                monthlyData[month] = (d.certPos + count, d.certNeg, d.uncPos, d.uncNeg);
-            }
-            foreach (var (month, count) in bucket.NegativeByMonth) {
-                var d = monthlyData[month];
-                monthlyData[month] = (d.certPos, d.certNeg + count, d.uncPos, d.uncNeg);
-            }
-            foreach (var (month, count) in bucket.UncertainPositiveByMonth) {
-                var d = monthlyData[month];
-                monthlyData[month] = (d.certPos, d.certNeg, d.uncPos + count, d.uncNeg);
-            }
-            foreach (var (month, count) in bucket.UncertainNegativeByMonth) {
-                var d = monthlyData[month];
-                monthlyData[month] = (d.certPos, d.certNeg, d.uncPos, d.uncNeg + count);
-            }
+            var posH = LogHeight(r.PositiveCount);
+            var negH = LogHeight(r.NegativeCount);
+            
+            // 1. Uncertain first (yellow, stacked beyond review)
+            DrawBar(px, x, midY - posH, -1, LogHeight(r.UncertainPositiveCount), 128, 128, 0);
+            DrawBar(px, x, midY + negH, 1, LogHeight(r.UncertainNegativeCount), 128, 128, 0);
+            
+            // 2. Shadow (opposite colors) - overwrites uncertain where it overlaps
+            DrawBar(px, x, midY, -1, LogHeight(t.PositiveCount), 0, 255, 0);
+            DrawBar(px, x, midY, 1, LogHeight(t.NegativeCount), 255, 0, 0);
+            
+            // 3. Review on top (normal colors) - overwrites shadow
+            DrawBar(px, x, midY, -1, posH, 255, 0, 0);
+            DrawBar(px, x, midY, 1, negH, 0, 255, 0);
         }
-
-        // Convert to arrays indexed by normalized position [0, 1]
-        var n = allMonths.Count;
-        var certPos = new float[n];
-        var certNeg = new float[n];
-        var uncPos = new float[n];
-        var uncNeg = new float[n];
-
-        for (int i = 0; i < n; i++) {
-            var d = monthlyData[allMonths[i]];
-            certPos[i] = d.certPos;
-            certNeg[i] = d.certNeg;
-            uncPos[i] = d.uncPos;
-            uncNeg[i] = d.uncNeg;
-        }
-
-        // Resample each band to CurvePoints using linear interpolation
-        var curve = new float[CurvePoints * 4];
-
-        Resample(certPos, curve, 0);
-        Resample(certNeg, curve, CurvePoints);
-        Resample(uncPos, curve, CurvePoints * 2);
-        Resample(uncNeg, curve, CurvePoints * 3);
-
-        // Normalize so total sums to 1 (makes similarity independent of game size)
-        var sum = curve.Sum();
-        if (sum > 0) {
-            for (int i = 0; i < curve.Length; i++)
-                curve[i] /= sum;
-        }
-
-        return curve;
     }
 
-    private static void Resample(float[] source, float[] dest, int destOffset)
+    private static void DrawBar(byte[] px, int x, int baseY, int dir, int len, int r, int g, int b)
     {
-        if (source.Length == 0) return;
-        if (source.Length == 1) {
-            for (int i = 0; i < CurvePoints; i++)
-                dest[destOffset + i] = source[0] / CurvePoints;
-            return;
-        }
-
-        for (int i = 0; i < CurvePoints; i++) {
-            // Map destination index to source position
-            var t = i / (float)(CurvePoints - 1); // 0 to 1
-            var srcPos = t * (source.Length - 1);  // 0 to source.Length-1
-
-            var srcIdx = (int)srcPos;
-            var frac = srcPos - srcIdx;
-
-            if (srcIdx >= source.Length - 1) {
-                dest[destOffset + i] = source[source.Length - 1];
-            } else {
-                // Linear interpolation
-                dest[destOffset + i] = source[srcIdx] * (1 - frac) + source[srcIdx + 1] * frac;
-            }
+        for (int i = 0; i < len; i++) {
+            var y = baseY + (dir < 0 ? -i - 1 : i);
+            if (y >= 0 && y < Height) SetPixel(px, x, y, r, g, b, 255);
         }
     }
-    private static byte[] RenderThumbnail(AnalysisSnapshot snapshot, PlayTime posMedian, PlayTime negMedian)
+
+    private static void RenderTimeline(byte[] px, AnalysisSnapshot snap)
     {
-        var pixels = new byte[Width * Height * 4];
+        var agg = snap.BucketsByReviewTime
+            .SelectMany(b => b.PositiveByMonth.Keys.Concat(b.NegativeByMonth.Keys)
+                .Concat(b.UncertainPositiveByMonth.Keys).Concat(b.UncertainNegativeByMonth.Keys))
+            .Distinct().OrderBy(m => m)
+            .ToDictionary(m => m, m => (
+                pos: snap.BucketsByReviewTime.Sum(b => b.PositiveByMonth.GetValueOrDefault(m)),
+                neg: snap.BucketsByReviewTime.Sum(b => b.NegativeByMonth.GetValueOrDefault(m)),
+                uncPos: snap.BucketsByReviewTime.Sum(b => b.UncertainPositiveByMonth.GetValueOrDefault(m)),
+                uncNeg: snap.BucketsByReviewTime.Sum(b => b.UncertainNegativeByMonth.GetValueOrDefault(m))));
 
-        RenderHistogram(pixels, snapshot.BucketsByReviewTime);
-        RenderTimeline(pixels, snapshot);
-        RenderMedianLines(pixels, snapshot.BucketsByReviewTime, posMedian, negMedian);
+        if (agg.Count == 0) return;
+        
+        var months = agg.Keys.ToList();
+        var firstMonth = months[0];
+        var totalMonths = MonthsBetween(firstMonth, months[^1]) + 1;
+        
+        var needsElision = totalMonths > TimeW;
+        var seamWidth = needsElision ? 1 : 0;
+        var edgeMonths = needsElision ? (TimeW - seamWidth) / 2 : TimeW;
 
-        return pixels;
+        var midY = TimeY + TimeH / 2;
+        var halfH = TimeH / 2;
+
+        foreach (var (month, data) in agg) {
+            var monthIdx = MonthsBetween(firstMonth, month);
+            int x;
+            if (!needsElision) x = monthIdx;
+            else if (monthIdx < edgeMonths) x = monthIdx;
+            else if (monthIdx >= totalMonths - edgeMonths) x = edgeMonths + seamWidth + (monthIdx - (totalMonths - edgeMonths));
+            else continue;
+            
+            if (x < 0 || x >= TimeW) continue;
+
+            var posH = LogHeight(data.pos);
+            var negH = LogHeight(data.neg);
+            DrawBar(px, x, midY, -1, posH, 255, 0, 0);
+            DrawBar(px, x, midY, 1, negH, 0, 255, 0);
+            DrawBar(px, x, midY - posH, -1, LogHeight(data.uncPos), 128, 128, 0);
+            DrawBar(px, x, midY + negH, 1, LogHeight(data.uncNeg), 128, 128, 0);
+        }
+
+        if (needsElision)
+            for (int sx = 0; sx < seamWidth && edgeMonths + sx < TimeW; sx++)
+                for (int dy = 0; dy < halfH; dy++) {
+                    // Both colors = yellow seam
+                    SetPixel(px, edgeMonths + sx, midY - dy - 1, 255, 255, 0, 255);
+                    SetPixel(px, edgeMonths + sx, midY + dy, 255, 255, 0, 255);
+                }
     }
-    private static void RenderHistogram(byte[] pixels, HistogramBucket[] buckets)
+
+    private static void RenderEditMap(byte[] px, EditHeatmap hm)
     {
-        var midY = HistogramHeight / 2;
-        var colsPerBucket = Width / (float)buckets.Length;
+        if (hm.Cells == null) return;
+        
+        // Fixed 20-year scale: 2005-2024, 2px per year = 40x40
+        const int StartYear = 2005;
+        const int Years = 20;
+        const int PxPerYear = 2;
+        
+        // Aggregate to years
+        var cells = hm.Cells
+            .GroupBy(kv => $"{kv.Key.Split('|')[0][..4]}|{kv.Key.Split('|')[1][..4]}")
+            .ToDictionary(g => g.Key, g => new EditCell(g.Sum(x => x.Value.Positive), g.Sum(x => x.Value.Negative)));
+        
+        var max = cells.Values.Select(c => Math.Max(c.Positive, c.Negative)).DefaultIfEmpty(1).Max();
+        if (max == 0) max = 1;
 
-        // Find max for normalization (certain + uncertain combined, since they stack)
-        var maxCount = buckets.Max(b =>
-            Math.Max(
-                b.PositiveByMonth.Values.Sum() + b.UncertainPositiveByMonth.Values.Sum(),
-                b.NegativeByMonth.Values.Sum() + b.UncertainNegativeByMonth.Values.Sum()));
-        if (maxCount == 0) maxCount = 1;
+        for (int py = 0; py < Years; py++)
+            for (int ey = 0; ey < Years; ey++) {
 
-        for (int i = 0; i < buckets.Length; i++) {
-            var bucket = buckets[i];
+                var posted = StartYear + py;
+                var edited = StartYear + ey;
+                var key = $"{posted}|{edited}";
+                
+                if (!cells.TryGetValue(key, out var c) || c.Positive + c.Negative == 0) continue;
+                
+                var (r, g) = c.Positive > c.Negative ? (Math.Clamp(255 * c.Positive / max, 50, 255), 0)
+                    : c.Negative > c.Positive ? (0, Math.Clamp(255 * c.Negative / max, 50, 255))
+                    : (Math.Clamp(255 * c.Positive / max, 50, 255), Math.Clamp(255 * c.Positive / max, 50, 255));
 
-            var posTotal = bucket.PositiveByMonth.Values.Sum();
-            var negTotal = bucket.NegativeByMonth.Values.Sum();
-            var uncPosTotal = bucket.UncertainPositiveByMonth.Values.Sum();
-            var uncNegTotal = bucket.UncertainNegativeByMonth.Values.Sum();
+                // X = posted year (left=new, right=old), Y = edited year (top=old, bottom=new)
+                for (int dx = 0; dx < PxPerYear; dx++)
+                    for (int dy = 0; dy < PxPerYear; dy++) {
+                        var x = EditX + (Years - 1 - py) * PxPerYear + dx;
+                        var y = EditY + ey * PxPerYear + dy;
+                        if (x < EditX + EditW && y < EditY + EditH)
+                            SetPixel(px, x, y, r, g, 0, 255);
+                    }
+            }
+    }
 
-            // Linear scaling
-            var posHeight = (int)((float)posTotal / maxCount * midY);
-            var negHeight = (int)((float)negTotal / maxCount * midY);
-            var uncPosHeight = (int)((float)uncPosTotal / maxCount * midY);
-            var uncNegHeight = (int)((float)uncNegTotal / maxCount * midY);
-
-            // Binary intensity - pixel is either on or off
-            var posIntensity = posTotal > 0 ? 255 : 0;
-            var negIntensity = negTotal > 0 ? 255 : 0;
-            var uncIntensity = 128;
-
-            var startCol = (int)(i * colsPerBucket);
-            var endCol = (int)((i + 1) * colsPerBucket);
-
-            for (int x = startCol; x < endCol && x < Width; x++) {
-                // Certain positive: grows UP from midline (R only)
-                for (int dy = 0; dy < posHeight; dy++) {
-                    var y = midY - dy - 1;
-                    if (y >= 0) SetPixel(pixels, x, y, posIntensity, 0, 0, 255);
+    private static void RenderDiagonalBars(byte[] px, Metadata meta, TimeSpan posMedian, TimeSpan negMedian, VelocityBucket[]? velocity, LanguageStats? lang)
+    {
+        var total = meta.TotalPositive + meta.TotalNegative;
+        if (total == 0) return;
+        
+        int offset = 0;
+        
+        // Bar 0: Steam rating
+        RenderDiagBar(px, offset, 4, (float)meta.TotalPositive / total, false);
+        offset += 4;
+        
+        // Bar 1: Median ratio
+        var medTotal = posMedian.TotalMinutes + negMedian.TotalMinutes;
+        if (medTotal > 0) {
+            RenderDiagBar(px, offset, 4, (float)(posMedian.TotalMinutes / medTotal), true);
+        }
+        offset += 4;
+        
+        // Bars 2-11: Velocity buckets (2px each - certain then uncertain)
+        if (velocity != null) {
+            foreach (var b in velocity) {
+                // First pixel: certain pos/neg ratio
+                var certainTotal = b.PositiveCount + b.NegativeCount;
+                if (certainTotal > 0) {
+                    RenderDiagBar(px, offset, 1, (float)b.PositiveCount / certainTotal, false);
                 }
-
-                // Uncertain positive: stacks above certain positive (R + G = gray)
-                for (int dy = 0; dy < uncPosHeight; dy++) {
-                    var y = midY - posHeight - dy - 1;
-                    if (y >= 0) SetPixel(pixels, x, y, uncIntensity, uncIntensity, 0, 255);
+                offset++;
+                
+                // Second pixel: uncertain pos/neg ratio
+                var uncTotal = b.UncertainPositiveCount + b.UncertainNegativeCount;
+                if (uncTotal > 0) {
+                    RenderDiagBar(px, offset, 1, (float)b.UncertainPositiveCount / uncTotal, false);
                 }
-
-                // Certain negative: grows DOWN from midline (G only)
-                for (int dy = 0; dy < negHeight; dy++) {
-                    var y = midY + dy;
-                    if (y < HistogramHeight) SetPixel(pixels, x, y, 0, negIntensity, 0, 255);
-                }
-
-                // Uncertain negative: stacks below certain negative (R + G = gray)
-                for (int dy = 0; dy < uncNegHeight; dy++) {
-                    var y = midY + negHeight + dy;
-                    if (y < HistogramHeight) SetPixel(pixels, x, y, uncIntensity, uncIntensity, 0, 255);
-                }
+                offset++;
             }
         }
-    }
-    private static void RenderTimeline(byte[] pixels, AnalysisSnapshot snapshot)
-    {
-        var allMonths = snapshot.BucketsByReviewTime
-            .SelectMany(b => b.PositiveByMonth.Keys
-                .Concat(b.NegativeByMonth.Keys)
-                .Concat(b.UncertainPositiveByMonth.Keys)
-                .Concat(b.UncertainNegativeByMonth.Keys))
-            .Distinct()
-            .OrderBy(m => m)
-            .ToList();
-
-        if (allMonths.Count == 0) return;
-
-        var colsPerMonth = Width / (float)allMonths.Count;
-
-        var monthlyPos = new Dictionary<string, int>();
-        var monthlyNeg = new Dictionary<string, int>();
-        var monthlyUncPos = new Dictionary<string, int>();
-        var monthlyUncNeg = new Dictionary<string, int>();
-
-        foreach (var bucket in snapshot.BucketsByReviewTime) {
-            foreach (var (month, count) in bucket.PositiveByMonth)
-                monthlyPos[month] = monthlyPos.GetValueOrDefault(month) + count;
-            foreach (var (month, count) in bucket.NegativeByMonth)
-                monthlyNeg[month] = monthlyNeg.GetValueOrDefault(month) + count;
-            foreach (var (month, count) in bucket.UncertainPositiveByMonth)
-                monthlyUncPos[month] = monthlyUncPos.GetValueOrDefault(month) + count;
-            foreach (var (month, count) in bucket.UncertainNegativeByMonth)
-                monthlyUncNeg[month] = monthlyUncNeg.GetValueOrDefault(month) + count;
-        }
-
-        // Max includes stacked totals
-        var maxVal = allMonths
-            .SelectMany(m => new[] {
-        monthlyPos.GetValueOrDefault(m) + monthlyUncPos.GetValueOrDefault(m),
-        monthlyNeg.GetValueOrDefault(m) + monthlyUncNeg.GetValueOrDefault(m) })
-            .DefaultIfEmpty(1)
-            .Max();
-        if (maxVal == 0) maxVal = 1;
-
-        var midY = HistogramHeight + TimelineHeight / 2;
-        var halfHeight = TimelineHeight / 2;
-        var uncIntensity = 128;
-
-        for (int i = 0; i < allMonths.Count; i++) {
-            var month = allMonths[i];
-            var pos = monthlyPos.GetValueOrDefault(month);
-            var neg = monthlyNeg.GetValueOrDefault(month);
-            var uncPos = monthlyUncPos.GetValueOrDefault(month);
-            var uncNeg = monthlyUncNeg.GetValueOrDefault(month);
-
-            // Linear scaling
-            var posHeight = pos > 0 ? (int)((float)pos / maxVal * halfHeight) : 0;
-            var negHeight = neg > 0 ? (int)((float)neg / maxVal * halfHeight) : 0;
-            var uncPosHeight = uncPos > 0 ? (int)((float)uncPos / maxVal * halfHeight) : 0;
-            var uncNegHeight = uncNeg > 0 ? (int)((float)uncNeg / maxVal * halfHeight) : 0;
-
-            var startCol = (int)(i * colsPerMonth);
-            var endCol = (int)((i + 1) * colsPerMonth);
-
-            for (int x = startCol; x < endCol && x < Width; x++) {
-                // Certain positive
-                for (int dy = 0; dy < posHeight; dy++) {
-                    var y = midY - dy - 1;
-                    if (y >= HistogramHeight) SetPixel(pixels, x, y, 255, 0, 0, 255);
-                }
-
-                // Uncertain positive stacks above
-                for (int dy = 0; dy < uncPosHeight; dy++) {
-                    var y = midY - posHeight - dy - 1;
-                    if (y >= HistogramHeight) SetPixel(pixels, x, y, uncIntensity, uncIntensity, 0, 255);
-                }
-
-                // Certain negative
-                for (int dy = 0; dy < negHeight; dy++) {
-                    var y = midY + dy;
-                    if (y < Height) SetPixel(pixels, x, y, 0, 255, 0, 255);
-                }
-
-                // Uncertain negative stacks below
-                for (int dy = 0; dy < uncNegHeight; dy++) {
-                    var y = midY + negHeight + dy;
-                    if (y < Height) SetPixel(pixels, x, y, uncIntensity, uncIntensity, 0, 255);
-                }
-            }
-        }
-    }
-    private static void RenderMedianLines(byte[] pixels, HistogramBucket[] buckets, PlayTime posMedian, PlayTime negMedian)
-    {
-        var posCol = FindColumnForPlaytime(buckets, posMedian.TotalMinutes);
-        var negCol = FindColumnForPlaytime(buckets, negMedian.TotalMinutes);
-
-        var midY = HistogramHeight / 2;
-
-        // Positive median: 2px wide, draws in negative (lower) half for contrast
-        // Align to even pixel for clean 50% downscaling → 1px at half size
-        var posX = (posCol / 2) * 2;
-        for (int dx = 0; dx < 2; dx++) {
-            var x = posX + dx;
-            if (x >= 0 && x < Width) {
-                for (int y = midY; y < HistogramHeight; y++) {
-                    SetPixel(pixels, x, y, 255, 0, 0, 255);
-                }
-            }
-        }
-
-        // Negative median: 2px wide, draws in positive (upper) half for contrast
-        var negX = (negCol / 2) * 2;
-        for (int dx = 0; dx < 2; dx++) {
-            var x = negX + dx;
-            if (x >= 0 && x < Width) {
-                for (int y = 0; y < midY; y++) {
-                    SetPixel(pixels, x, y, 0, 255, 0, 255);
-                }
+        
+        // Language bars: complaints, banter, profanity, insults, slurs (4px, 3px, 2px, 2px, 1px)
+        if (lang != null) {
+            var complaints = lang.Value.ComplaintsByMonth.Values.Sum();
+            var banter = lang.Value.BanterByMonth.Values.Sum();
+            var profanity = lang.Value.ProfanityByMonth.Values.Sum();
+            var insults = lang.Value.InsultsByMonth.Values.Sum();
+            var slurs = lang.Value.SlursByMonth.Values.Sum();
+            var langTotal = complaints + banter + profanity + insults + slurs;
+            
+            if (langTotal > 0) {
+                // Complaints vs rest
+                RenderDiagBar(px, offset, 4, (float)complaints / langTotal, false);
+                offset += 4;
+                
+                // Banter vs rest  
+                RenderDiagBar(px, offset, 3, (float)banter / langTotal, false);
+                offset += 3;
+                
+                // Profanity vs rest
+                RenderDiagBar(px, offset, 2, (float)profanity / langTotal, false);
+                offset += 2;
+                
+                // Insults vs rest
+                RenderDiagBar(px, offset, 2, (float)insults / langTotal, false);
+                offset += 2;
+                
+                // Slurs vs rest
+                RenderDiagBar(px, offset, 1, (float)slurs / langTotal, false);
+                offset += 1;
             }
         }
     }
 
-    private static int FindColumnForPlaytime(HistogramBucket[] buckets, double minutes)
+    private static void RenderDiagBar(byte[] px, int offset, int thick, float val, bool flip)
     {
-        var colsPerBucket = Width / (float)buckets.Length;
-
-        for (int i = 0; i < buckets.Length; i++) {
-            if (minutes >= buckets[i].MinPlaytime && minutes < buckets[i].MaxPlaytime) {
-                return (int)(i * colsPerBucket + colsPerBucket / 2);
+        for (int i = 0; i < thick; i++) {
+            var band = EditW - 2 - offset - i;
+            if (band < 0) continue;
+            var split = (int)(val * (band + 1));
+            for (int j = 0; j <= band; j++) {
+                var pos = flip ? band - j : j;
+                if (j < EditW && band - j < EditH) 
+                    SetPixel(px, EditX + j, EditY + band - j, pos < split ? 255 : 0, pos < split ? 0 : 255, 0, 255);
             }
         }
-        return -1;
     }
 
-    private static void SetPixel(byte[] pixels, int x, int y, int r, int g, int b, int a)
-    {
-        var idx = (y * Width + x) * 4;
-        pixels[idx] = (byte)Math.Clamp(r, 0, 255);
-        pixels[idx + 1] = (byte)Math.Clamp(g, 0, 255);
-        pixels[idx + 2] = (byte)Math.Clamp(b, 0, 255);
-        pixels[idx + 3] = (byte)Math.Clamp(a, 0, 255);
-    }
-
-    private static (BitArray pos, BitArray neg) ExtractBitmasks(byte[] rgba)
+    private static (BitArray, BitArray) ExtractBitmasks(byte[] rgba)
     {
         var pos = new BitArray(Width * Height);
         var neg = new BitArray(Width * Height);
@@ -349,51 +259,61 @@ public static class FingerprintBuilder
         for (int i = 0; i < Width * Height; i++) {
             var r = rgba[i * 4];
             var g = rgba[i * 4 + 1];
-
-            if (r > 0 && g > 0) {
-                // uncertain - both channels present
-                pos[i] = true;
-                neg[i] = true;
-            } else if (r > 0) {
-                pos[i] = true;
-            } else if (g > 0) {
-                neg[i] = true;
-            }
-            // else empty - both false
+            if (r > 0) pos[i] = true;
+            if (g > 0) neg[i] = true;
         }
-
         return (pos, neg);
     }
 
-    private static (PlayTime pos, PlayTime neg) ComputeMedians(AnalysisSnapshot snapshot)
+    private static (TimeSpan, TimeSpan) ComputeMedians(AnalysisSnapshot snap)
     {
-        var posTimes = new List<double>();
-        var negTimes = new List<double>();
-
-        foreach (var bucket in snapshot.BucketsByReviewTime) {
-            var midpoint = (bucket.MinPlaytime + bucket.MaxPlaytime) / 2;
-
-            // Keep edits separate for median calculation too
-            var posCount = bucket.PositiveByMonth.Values.Sum();
-            var negCount = bucket.NegativeByMonth.Values.Sum();
-
-            for (int i = 0; i < posCount; i++) posTimes.Add(midpoint);
-            for (int i = 0; i < negCount; i++) negTimes.Add(midpoint);
-        }
-
-        var posMedian = posTimes.Count > 0
-            ? TimeSpan.FromMinutes(posTimes.OrderBy(t => t).ElementAt(posTimes.Count / 2))
-            : TimeSpan.Zero;
-
-        var negMedian = negTimes.Count > 0
-            ? TimeSpan.FromMinutes(negTimes.OrderBy(t => t).ElementAt(negTimes.Count / 2))
-            : TimeSpan.Zero;
-
-        return (posMedian, negMedian);
+        var pos = snap.BucketsByReviewTime.SelectMany(b => 
+            Enumerable.Repeat((b.MinPlaytime + b.MaxPlaytime) / 2, b.PositiveCount)).OrderBy(x => x).ToList();
+        var neg = snap.BucketsByReviewTime.SelectMany(b => 
+            Enumerable.Repeat((b.MinPlaytime + b.MaxPlaytime) / 2, b.NegativeCount)).OrderBy(x => x).ToList();
+        return (TimeSpan.FromMinutes(pos.Count > 0 ? pos[pos.Count / 2] : 0),
+                TimeSpan.FromMinutes(neg.Count > 0 ? neg[neg.Count / 2] : 0));
     }
 
-    private static byte[] EncodePng(byte[] rgba)
+    public static float[] BuildCurve(AnalysisSnapshot snap)
     {
-        return rgba;
+        var months = snap.BucketsByReviewTime
+            .SelectMany(b => b.PositiveByMonth.Keys.Concat(b.NegativeByMonth.Keys)
+                .Concat(b.UncertainPositiveByMonth.Keys).Concat(b.UncertainNegativeByMonth.Keys))
+            .Distinct().OrderBy(m => m).ToList();
+
+        if (months.Count == 0) return new float[CurvePoints * 4];
+
+        var data = months.Select(m => (
+            cp: snap.BucketsByReviewTime.Sum(b => b.PositiveByMonth.GetValueOrDefault(m)),
+            cn: snap.BucketsByReviewTime.Sum(b => b.NegativeByMonth.GetValueOrDefault(m)),
+            up: snap.BucketsByReviewTime.Sum(b => b.UncertainPositiveByMonth.GetValueOrDefault(m)),
+            un: snap.BucketsByReviewTime.Sum(b => b.UncertainNegativeByMonth.GetValueOrDefault(m)))).ToArray();
+
+        float[] Resample(Func<(int cp, int cn, int up, int un), int> sel) => 
+            Enumerable.Range(0, CurvePoints).Select(i => {
+                var t = i / (float)(CurvePoints - 1);
+                var srcPos = t * (data.Length - 1);
+                var idx = (int)srcPos;
+                var frac = srcPos - idx;
+                return idx >= data.Length - 1 ? sel(data[^1]) : sel(data[idx]) * (1 - frac) + sel(data[idx + 1]) * frac;
+            }).Select(x => (float)x).ToArray();
+
+        var curve = Resample(d => d.cp).Concat(Resample(d => d.cn)).Concat(Resample(d => d.up)).Concat(Resample(d => d.un)).ToArray();
+        var sum = curve.Sum();
+        return sum > 0 ? curve.Select(x => x / sum).ToArray() : curve;
+    }
+
+    private static int MonthsBetween(string a, string b)
+    {
+        var (ay, am) = (int.Parse(a[..4]), int.Parse(a[5..7]));
+        var (by, bm) = (int.Parse(b[..4]), int.Parse(b[5..7]));
+        return (by - ay) * 12 + (bm - am);
+    }
+
+    private static void SetPixel(byte[] px, int x, int y, int r, int g, int b, int a)
+    {
+        var idx = (y * Width + x) * 4;
+        px[idx] = (byte)r; px[idx + 1] = (byte)g; px[idx + 2] = (byte)b; px[idx + 3] = (byte)a;
     }
 }
